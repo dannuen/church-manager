@@ -1,0 +1,6 @@
+.worktrees/
+*.log
+*.db-journal
+__pycache__/
+node_modules/
+.env
