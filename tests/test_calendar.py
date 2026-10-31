@@ -169,10 +169,30 @@ class ItemTest(CopyTestCase):
         meeting = calendar.add_calendar_item(self.conn, "Meeting", "Họp", "2026-05-03 19:00")[0]
         calendar.add_person_to_item(self.conn, meeting, self.a, "joins")
         planned = care.plan_visit(self.conn, "2026-05-04 10:00", family_id=people.add_family(self.conn, "Gia đình Lê"))
-        calendar.delete_calendar_item(self.conn, meeting)
-        calendar.delete_calendar_item(self.conn, planned)  # a Visit not done yet can go
+        calendar.delete_calendar_item(self.conn, meeting, today="2026-05-01")  # still in the future
+        calendar.delete_calendar_item(self.conn, planned, today="2026-05-01")  # a Visit not done yet can go
         self.assertIsNone(calendar.get_calendar_item(self.conn, meeting))
         self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM calendar_person").fetchone()[0], 0)
+
+    def test_delete_refused_for_past_item_with_people(self):
+        past = calendar.add_calendar_item(self.conn, "Event", "Lễ Tạ Ơn", "2026-04-30 09:00")[0]
+        future = calendar.add_calendar_item(self.conn, "Meeting", "Họp", "2026-05-03 19:00")[0]
+        for iid in (past, future):
+            calendar.add_person_to_item(self.conn, iid, self.a, "serves")
+        with self.assertRaisesRegex(ValueError, "in the past and people joined or served"):
+            calendar.delete_calendar_item(self.conn, past, today="2026-05-01")
+        self.assertEqual([r["person_id"] for r in calendar.item_people(self.conn, past)], [self.a])
+        calendar.delete_calendar_item(self.conn, future, today=dt.date(2026, 5, 1))
+        self.assertIsNone(calendar.get_calendar_item(self.conn, future))
+        same_day = calendar.add_calendar_item(self.conn, "Meeting", "Họp", "2026-05-01 07:00")[0]
+        calendar.add_person_to_item(self.conn, same_day, self.a, "joins")
+        calendar.delete_calendar_item(self.conn, same_day, today="2026-05-01")  # today is not the past
+        self.assertIsNone(calendar.get_calendar_item(self.conn, same_day))
+        empty_past = calendar.add_calendar_item(self.conn, "Meeting", "Họp", "2026-04-01 19:00")[0]
+        calendar.delete_calendar_item(self.conn, empty_past, today="2026-05-01")  # nobody listed: can go
+        self.assertIsNone(calendar.get_calendar_item(self.conn, empty_past))
+        with self.assertRaises(ValueError):
+            calendar.delete_calendar_item(self.conn, past, today="01/05/2026")
 
     def test_people_on_an_item(self):
         sid = self.service()

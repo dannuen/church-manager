@@ -38,6 +38,14 @@ class ParseAmountTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "whole number of dong"):
             money.parse_amount("1,5")
 
+    def test_first_thousands_block_has_no_leading_zero(self):
+        for value in ("000.001", "0.100", "000,001", "0,100", "01.000"):
+            with self.assertRaises(ValueError, msg=repr(value)):
+                money.parse_amount(value)
+        self.assertEqual(money.parse_amount("1.250.000"), 1250000)
+        self.assertEqual(money.parse_amount("1,250,000"), 1250000)
+        self.assertEqual(money.parse_amount("100.000"), 100000)
+
     def test_format_vnd(self):
         self.assertEqual(money.format_vnd(1250000), "1.250.000 ₫")
         self.assertEqual(money.format_vnd(999), "999 ₫")

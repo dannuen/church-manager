@@ -226,11 +226,14 @@ def _has_head_count(conn, item_id):
     return conn.execute("SELECT 1 FROM head_count WHERE calendar_item_id = ?", (item_id,)).fetchone() is not None
 
 
-def delete_calendar_item(conn, item_id):
+def delete_calendar_item(conn, item_id, today=None):
     """Delete one Calendar item (and its list of people).
 
     Refused when it has a Head count, a Document, or is a done Visit: that is history.
+    Also refused when it is before ``today`` and people joined or served it, so the
+    Person story keeps them. ``today`` (a date or ``YYYY-MM-DD``) defaults to the local date.
     """
+    day = text.today_text() if today is None else text.check_date(today, "Today")
     with transaction(conn):
         row = _require_item(conn, item_id)
         if _has_head_count(conn, row["id"]):
@@ -239,6 +242,10 @@ def delete_calendar_item(conn, item_id):
             raise ValueError("This Calendar item has a Document, so it is kept.")
         if row["kind"] == "Visit" and row["visit_done"]:
             raise ValueError("This Visit is done and is part of the Care log, so it is kept.")
+        if row["starts_at"][:10] < day and conn.execute(
+            "SELECT 1 FROM calendar_person WHERE calendar_item_id = ?", (row["id"],)
+        ).fetchone():
+            raise ValueError("This Calendar item is in the past and people joined or served it, so it is kept.")
         conn.execute("DELETE FROM calendar_item WHERE id = ?", (row["id"],))
 
 

@@ -15,7 +15,8 @@ MAX_AMOUNT = 999_999_999_999_999  # dong; far below the SQLite INTEGER limit
 _SPACES = re.compile(r"\s+")
 _CURRENCY = re.compile(r"^(?:vnđ|vnd|₫|đ)|(?:vnđ|vnd|₫|đ)$", re.IGNORECASE)  # only at the start or end
 _PLAIN = re.compile(r"[0-9]+")
-_GROUPED = re.compile(r"[0-9]{1,3}(?:\.[0-9]{3})+|[0-9]{1,3}(?:,[0-9]{3})+")
+# Thousands split by "." or ",". The first block has no leading zero, so "000.001" is refused.
+_THOUSANDS = re.compile(r"[1-9][0-9]{0,2}(?:\.[0-9]{3})+|[1-9][0-9]{0,2}(?:,[0-9]{3})+")
 _AMOUNT_HELP = "Write a whole number of dong above 0, for example 1250000 or 1.250.000."
 
 
@@ -25,9 +26,9 @@ def parse_amount(value):
     """Read an amount typed by a person and return whole dong.
 
     Spaces are dropped, and one mark ₫, đ, VND or VNĐ at the start or end. What is left must be plain
-    digits ("1250000") or digits in groups of 3 split by ``.`` or ``,``
-    ("1.250.000", "1,250,000"). "1,5", "1.5", "12.34", "-100", "abc", "0" and ""
-    are refused with ``ValueError``.
+    digits ("1250000") or thousands split by ``.`` or ``,`` ("1.250.000",
+    "1,250,000"; the first block has no leading zero). "1,5", "1.5", "12.34",
+    "-100", "abc", "0", "000.001" and "" are refused with ``ValueError``.
     """
     if type(value) is int:
         return check_amount(value)
@@ -39,7 +40,7 @@ def parse_amount(value):
         raise ValueError(f"Amount is empty. {_AMOUNT_HELP}")
     if _PLAIN.fullmatch(s):
         digits = s
-    elif _GROUPED.fullmatch(s):
+    elif _THOUSANDS.fullmatch(s):
         digits = s.replace(".", "").replace(",", "")
     else:
         raise ValueError(f'Amount "{value.strip()}" not understood. No decimals, no minus sign. {_AMOUNT_HELP}')
@@ -58,7 +59,7 @@ def check_amount(amount):
 
 
 def format_vnd(n):
-    """Whole dong as text with dots between groups: ``1250000 -> "1.250.000 ₫"``."""
+    """Whole dong as text with dots between thousands: ``1250000 -> "1.250.000 ₫"``."""
     if type(n) is not int:
         raise ValueError("Only a whole number of dong can be shown as money.")
     sign = "-" if n < 0 else ""

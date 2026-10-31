@@ -344,6 +344,8 @@ class CodeRulesTest(unittest.TestCase):
              "receipt", "tax letter", "cost", "payment", "pastoral call", "home visit", "mass")
 
     TESTS = pathlib.Path(_support.ROOT) / "tests"
+    # Names from outside this project that hold an Avoid word. They cannot be renamed.
+    OUTSIDE_NAMES = ("user_version",)  # SQLite: PRAGMA user_version
 
     def package_sources(self):
         return {p.name: p.read_text(encoding="utf-8") for p in sorted(self.PACKAGE.glob("*.py"))}
@@ -354,13 +356,30 @@ class CodeRulesTest(unittest.TestCase):
         here = pathlib.Path(__file__).resolve()
         return {f"{p.parent.name}/{p.name}": p.read_text(encoding="utf-8") for p in files if p.resolve() != here}
 
+    @classmethod
+    def avoid_hits(cls, source):
+        """Avoid words in ``source``. A word counts when no letter is next to it, so snake_case
+        names like ``team_worship`` are found and ``steam`` is not. A space in an entry
+        matches a space or ``_``."""
+        for name in cls.OUTSIDE_NAMES:
+            source = re.sub(rf"(?<![a-z]){name}(?![a-z])", " ", source, flags=re.IGNORECASE)
+        hits = []
+        for word in cls.AVOID:
+            pattern = r"(?<![a-z])" + word.replace(" ", "[ _]") + r"s?(?![a-z])"
+            hits += [m.group(0) for m in re.finditer(pattern, source, re.IGNORECASE)]
+        return hits
+
     def test_no_avoid_words_in_code(self):
         found = []
         for name, source in self.sources().items():
-            for word in self.AVOID:
-                for m in re.finditer(rf"\b{word}s?\b", source, re.IGNORECASE):
-                    found.append((name, m.group(0)))
+            found += [(name, hit) for hit in self.avoid_hits(source)]
         self.assertEqual(found, [])
+
+    def test_avoid_matcher_sees_snake_case(self):
+        for code in ("team_worship = []", "self.worship_team", "cell_group = 1", "TEAMS", "user_id"):
+            self.assertNotEqual(self.avoid_hits(code), [], code)
+        for code in ("steam = 1", "m.group(0)", 'conn.execute("PRAGMA user_version")'):
+            self.assertEqual(self.avoid_hits(code), [], code)
 
     def test_only_paths_knows_localappdata(self):
         others = [n for n, s in self.package_sources().items() if "LOCALAPPDATA" in s.upper() and n != "paths.py"]

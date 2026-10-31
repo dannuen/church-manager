@@ -176,15 +176,15 @@ class _Fake:
         others = [pid for pid in ids if pid not in heads]
         rng.shuffle(others)
         n_left = max(1, self.n // 16)
-        groups = {
+        by_status = {
             "left": others[:n_left],
             "passed_away": others[n_left:n_left + 1],
             "visitor": others[n_left + 1:n_left + 1 + self.n // 10],
             "attender": others[n_left + 1 + self.n // 10:n_left + 1 + 2 * (self.n // 10)],
         }
-        special = {pid for group in groups.values() for pid in group}
+        special = {pid for pids in by_status.values() for pid in pids}
         members = [first] + [pid for pid in ids if pid != first and pid not in special]
-        self.inactive = set(groups["left"]) | set(groups["passed_away"])
+        self.inactive = set(by_status["left"]) | set(by_status["passed_away"])
         changed = 0
         for pid in members:
             if pid == first or rng.random() < 0.25:  # visitor -> attender -> member
@@ -196,12 +196,12 @@ class _Fake:
             else:
                 people_data.set_status(self.conn, pid, st["member"], self.ago(rng.randint(400, 4000)))
         for code in ("left", "passed_away"):
-            for pid in groups[code]:
+            for pid in by_status[code]:
                 people_data.set_status(self.conn, pid, st["member"], self.ago(rng.randint(900, 3000)))
                 people_data.set_status(self.conn, pid, st[code], self.ago(rng.randint(30, 700)))
                 changed += 1
         for code in ("visitor", "attender"):
-            for pid in groups[code]:
+            for pid in by_status[code]:
                 people_data.set_status(self.conn, pid, st[code], self.ago(rng.randint(10, 300)))
         self.active = [pid for pid in ids if pid not in self.inactive]
         self.add_count("status_changes", changed)
@@ -235,27 +235,27 @@ class _Fake:
         first = self.people[0]["id"]
         pool = [pid for pid in adults if pid != first]
         rng.shuffle(pool)
-        team_worship = [first] + pool[:5]
+        worship_people = [first] + pool[:5]
         # Worship: Nguyễn Hải Đăng led, then handed over to another Person 300 days ago.
-        people_data.set_ministry(self.conn, team_worship[0], worship, "Leader", self.ago(1500))
-        people_data.set_ministry(self.conn, team_worship[1], worship, "Member", self.ago(1200))
-        people_data.set_ministry(self.conn, team_worship[0], worship, "Member", self.ago(300))
-        people_data.set_ministry(self.conn, team_worship[1], worship, "Leader", self.ago(300))
-        for pid in team_worship[2:]:
+        people_data.set_ministry(self.conn, worship_people[0], worship, "Leader", self.ago(1500))
+        people_data.set_ministry(self.conn, worship_people[1], worship, "Member", self.ago(1200))
+        people_data.set_ministry(self.conn, worship_people[0], worship, "Member", self.ago(300))
+        people_data.set_ministry(self.conn, worship_people[1], worship, "Leader", self.ago(300))
+        for pid in worship_people[2:]:
             people_data.set_ministry(self.conn, pid, worship, "Member", self.ago(rng.randint(100, 1000)))
-        young_pool = [pid for pid in young if pid not in team_worship] or pool[5:10]
-        group_youth = young_pool[:5]
-        for k, pid in enumerate(group_youth):
+        young_pool = [pid for pid in young if pid not in worship_people] or pool[5:10]
+        youth_people = young_pool[:5]
+        for k, pid in enumerate(youth_people):
             people_data.set_ministry(self.conn, pid, youth, "Leader" if k == 0 else "Member",
                                      self.ago(rng.randint(200, 900)))
-        if len(group_youth) > 2:  # one stopped serving
-            people_data.set_ministry(self.conn, group_youth[-1], youth, None, self.ago(90))
-        group_children = [pid for pid in pool[5:] if pid not in group_youth][:4]
-        for k, pid in enumerate(group_children):
+        if len(youth_people) > 2:  # one stopped serving
+            people_data.set_ministry(self.conn, youth_people[-1], youth, None, self.ago(90))
+        children_people = [pid for pid in pool[5:] if pid not in youth_people][:4]
+        for k, pid in enumerate(children_people):
             people_data.set_ministry(self.conn, pid, children, "Leader" if k == 0 else "Member",
                                      self.ago(rng.randint(200, 1500)))
-        self.worship_team = team_worship
-        self.add_count("ministry_people", len(team_worship) + len(group_youth) + len(group_children))
+        self.worship_people = worship_people
+        self.add_count("ministry_people", len(worship_people) + len(youth_people) + len(children_people))
 
     def make_calendar(self):
         rng, conn, today = self.rng, self.conn, self.today
@@ -270,7 +270,7 @@ class _Fake:
         self.sundays = [first + _dt.timedelta(weeks=k) for k in range(len(ids))]
         notes = (None, None, "Mưa lớn, nhiều gia đình vắng.", "Một số em đi trại.", None)
         for k, iid in enumerate(ids):
-            serving = rng.sample(self.worship_team, 2)
+            serving = rng.sample(self.worship_people, 2)
             for pid in serving:
                 calendar.add_person_to_item(conn, iid, pid, "serves")
             for pid in rng.sample([p for p in self.active if p not in serving], 3):
@@ -280,12 +280,12 @@ class _Fake:
         self.add_count("head_counts", 12)
         meeting = calendar.add_calendar_item(conn, "Meeting", "Họp Ban Chấp Sự", f"{self.ahead(1)} 19:00",
                                              ends_at=f"{self.ahead(1)} 21:00", place="Phòng họp")[0]
-        for pid in self.worship_team[:4]:
+        for pid in self.worship_people[:4]:
             calendar.add_person_to_item(conn, meeting, pid, "joins")
         self.event = calendar.add_calendar_item(conn, "Event", "Ngày Gia Đình Hội Thánh", f"{self.ahead(3)} 16:00",
                                                 ends_at=f"{self.ahead(3)} 20:00", place="Sân nhà thờ",
                                                 note="Mỗi gia đình mang một món ăn.")[0]
-        calendar.add_person_to_item(conn, self.event, self.worship_team[1], "serves")
+        calendar.add_person_to_item(conn, self.event, self.worship_people[1], "serves")
         start_month = today - _dt.timedelta(days=90)
         monthly = calendar.add_calendar_item(conn, "Meeting", "Họp Trưởng Chi phái", f"{start_month} 19:30",
                                              repeat="monthly", repeat_until=self.ahead(150))
