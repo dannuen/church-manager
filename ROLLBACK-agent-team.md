@@ -21,3 +21,12 @@ Backups of old config: C:/Users/danng/AppData/Local/hermes/backups/agent-team-20
 | profile tester | hermes profile delete tester |
 | board church-manager | hermes kanban boards rm church-manager (check `boards --help`) |
 | researcher: only kanban toolset turned ON | hermes -p researcher tools disable kanban |
+
+## Actual result (done)
+- `--clone-from default` failed on Windows (WinError 5 on plugins/superpowers). Profiles were made with `--no-skills` (blank), then configured by hand.
+- Profiles: orchestrator(high), coder(xhigh), reviewer(medium), tester(high), all claude-opus-5-5. Effort key: `agent.reasoning_effort` in each profile's config.yaml (the CLI warns it is "not recognized"; the value is saved).
+- Tools per role: kanban ON everywhere. delegation, cronjob, image_gen, tts, computer_use OFF. code_execution OFF for orchestrator and reviewer. tester: browser.backend=off.
+- researcher: unchanged except `kanban` toolset ON.
+- Board `church-manager` (workdir = this repo). Active board switched to it (old: `default`; undo: `hermes kanban boards switch default`).
+- kanban.orchestrator_profile/default_assignee/max_in_progress were already these values.
+- SOUL.md written for the 4 new profiles. No old SOUL.md was overwritten.
