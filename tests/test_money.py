@@ -1,0 +1,199 @@
+import ast
+import pathlib
+import re
+import unittest
+
+import _support
+from _support import CopyTestCase
+from churchmgr import money, people
+
+
+class ParseAmountTest(unittest.TestCase):
+    def test_good_amounts(self):
+        good = {
+            "1.250.000": 1250000, "1,250,000": 1250000, "1250000": 1250000, " 1.250.000 ₫": 1250000,
+            "1.250.000đ": 1250000, "1.250.000 VND": 1250000, "500.000 vnđ": 500000, "₫ 50.000": 50000,
+            "1 250 000": 1250000, "1\u00a0250\u00a0000": 1250000, "999": 999, "1.000": 1000, "12,345": 12345,
+            "1.000.000.000": 1000000000, "007": 7,
+        }
+        for value, want in good.items():
+            got = money.parse_amount(value)
+            self.assertEqual(got, want, value)
+            self.assertIs(type(got), int, value)
+
+    def test_bad_amounts(self):
+        bad = ("1,5", "1.5", "12.34", "-100", "abc", "0", "", "   ", "000", "1.2345", "1..250", ".250", "250.",
+               "1.250,000", "1,250.000", "1.250.000,00", "1250.000", "1e6", "+100", "١٢٣", "1đ250", "đ", "1/2")
+        for value in bad:
+            with self.assertRaises(ValueError, msg=repr(value)):
+                money.parse_amount(value)
+        for value in (None, 1.5, 2.0, True, b"100", 0, -5):
+            with self.assertRaises(ValueError, msg=repr(value)):
+                money.parse_amount(value)
+        self.assertEqual(money.parse_amount(1250000), 1250000)  # a whole int passes
+        with self.assertRaises(ValueError):
+            money.parse_amount("9" * 16)  # too large
+
+    def test_error_message_is_plain(self):
+        with self.assertRaisesRegex(ValueError, "whole number of dong"):
+            money.parse_amount("1,5")
+
+    def test_format_vnd(self):
+        self.assertEqual(money.format_vnd(1250000), "1.250.000 ₫")
+        self.assertEqual(money.format_vnd(999), "999 ₫")
+        self.assertEqual(money.format_vnd(0), "0 ₫")
+        self.assertEqual(money.format_vnd(-5000), "-5.000 ₫")
+        for bad in (1.5, True, "100"):
+            with self.assertRaises(ValueError):
+                money.format_vnd(bad)
+        for n in (1, 12, 123, 1234, 1250000, 987654321012):
+            self.assertEqual(money.parse_amount(money.format_vnd(n)), n)  # round trip
+
+
+class MoneyCodeTest(unittest.TestCase):
+    def test_money_code_has_no_decimals(self):
+        src = (pathlib.Path(_support.ROOT) / "churchmgr" / "money.py").read_text(encoding="utf-8")
+        found = []
+        for node in ast.walk(ast.parse(src)):
+            if isinstance(node, (ast.BinOp, ast.AugAssign)) and isinstance(node.op, ast.Div):
+                found.append(("division", node.lineno))
+            elif isinstance(node, ast.Constant) and type(node.value) is float:
+                found.append(("float constant", node.lineno))
+            elif isinstance(node, ast.Name) and node.id in ("float", "Decimal", "round"):
+                found.append((node.id, node.lineno))
+        self.assertEqual(found, [])
+        self.assertIsNone(re.search(r"\b(TOTAL|AVG)\s*\(", src, re.IGNORECASE))
+        self.assertIn("SUM(amount)", src)
+
+
+class MoneyTest(CopyTestCase):
+    def setUp(self):
+        super().setUp()
+        self.general = self.item("fund", name="General")
+        self.building = self.item("fund", name="Building")
+        self.rent = self.item("spending_category", name="Rent")
+        self.p = people.add_person(self.conn, "Lê Văn An")
+        self.f = people.add_family(self.conn, "Gia đình Lê")
+
+    def count(self, table):
+        return self.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+
+    def test_offering_checks(self):
+        money.add_offering(self.conn, "2026-05-03", 500000, self.general)  # no-name offering
+        money.add_offering(self.conn, "2026-05-03", 100000, self.general, giver_person_id=self.p)
+        money.add_offering(self.conn, "2026-05-03", 200000, self.building, giver_family_id=self.f, note="Xây dựng")
+        bad = [
+            dict(amount=1.5), dict(amount=True), dict(amount="100"), dict(amount=0), dict(amount=-1),
+            dict(fund_id=self.rent), dict(fund_id=9999), dict(date="03/05/2026"),
+            dict(giver_person_id=self.p, giver_family_id=self.f), dict(giver_person_id=9999),
+            dict(giver_family_id=9999), dict(amount=10 ** 16),
+        ]
+        for kwargs in bad:
+            args = dict(date="2026-05-03", amount=1000, fund_id=self.general)
+            args.update(kwargs)
+            with self.assertRaises(ValueError, msg=kwargs):
+                money.add_offering(self.conn, **args)
+        self.assertEqual(self.count("offering"), 3)
+        rows = money.list_offerings(self.conn, "2026-05-01", "2026-05-31")
+        self.assertEqual([r["giver_name"] for r in rows], [None, "Lê Văn An", "Gia đình Lê"])
+        self.assertEqual(rows[2]["fund_name"], "Building")
+
+    def test_expense_checks(self):
+        money.add_expense(self.conn, "2026-05-01", 6000000, self.rent, note="Thuê hội trường")
+        for kwargs in (dict(amount=2.5), dict(amount=False), dict(spending_category_id=self.general)):
+            args = dict(date="2026-05-01", amount=1000, spending_category_id=self.rent)
+            args.update(kwargs)
+            with self.assertRaises(ValueError, msg=kwargs):
+                money.add_expense(self.conn, **args)
+        rows = money.list_expenses(self.conn, "2026-05-01", "2026-05-01")
+        self.assertEqual([(r["amount"], r["spending_category_name"]) for r in rows], [(6000000, "Rent")])
+        with self.assertRaises(ValueError):
+            money.list_expenses(self.conn, "2026-05-31", "2026-05-01")
+
+    def test_month_totals(self):
+        for day, amount in (("2026-04-30", 1), ("2026-05-01", 1250000), ("2026-05-31", 750000), ("2026-06-01", 7)):
+            money.add_offering(self.conn, day, amount, self.general)
+        money.add_expense(self.conn, "2026-05-15", 2600000, self.rent)
+        totals = money.month_totals(self.conn, 2026, 5)
+        self.assertEqual(totals, {"offerings": 2000000, "expenses": 2600000, "balance": -600000})
+        for v in totals.values():
+            self.assertIs(type(v), int)
+        self.assertEqual(money.month_totals(self.conn, 2026, 7), {"offerings": 0, "expenses": 0, "balance": 0})
+        self.assertEqual(money.month_totals(self.conn, "2026", "6")["offerings"], 7)
+        money.add_offering(self.conn, "2026-12-31", 5, self.general)
+        self.assertEqual(money.month_totals(self.conn, 2026, 12)["offerings"], 5)
+        for y, m in ((2026, 13), (2026, 0), (1.5, 1), (2026, True)):
+            with self.assertRaises(ValueError):
+                money.month_totals(self.conn, y, m)
+
+
+class GivingStatementTest(CopyTestCase):
+    """Person P is in Family X until 2026-06-01, then in Family Y."""
+
+    def setUp(self):
+        super().setUp()
+        c = self.conn
+        self.general = self.item("fund", name="General")
+        self.missions = self.item("fund", name="Missions")
+        self.p = people.add_person(c, "Nguyễn Hải Đăng")
+        self.q = people.add_person(c, "Trần Thị Mai")
+        self.x = people.add_family(c, "Gia đình Nguyễn")
+        self.y = people.add_family(c, "Gia đình Đăng")
+        people.set_family(c, self.p, self.x, "Child", "2025-01-01")
+        people.set_family(c, self.q, self.x, "Head", "2025-01-01")
+        people.set_family(c, self.p, self.y, "Head", "2026-06-01")
+        add = money.add_offering
+        add(c, "2025-12-31", 900000, self.general, giver_person_id=self.p)   # other year
+        add(c, "2026-03-01", 100000, self.general, giver_person_id=self.p, note="ghi chú thường")
+        add(c, "2026-04-01", 200000, self.missions, giver_family_id=self.x)
+        add(c, "2026-05-01", 300000, self.general, giver_person_id=self.q)
+        add(c, "2026-06-01", 400000, self.general, giver_person_id=self.p)   # first day in Family Y
+        add(c, "2026-07-01", 500000, self.general, giver_family_id=self.y)
+        add(c, "2026-07-02", 600000, self.general)                           # no-name
+        people.add_private_note(c, self.p, "PRIVATE-NOTE-MARKER-1 rất riêng tư")
+
+    def rows(self, st):
+        return [(r["date"], r["fund"], r["amount"], r["given_by"]) for r in st["rows"]]
+
+    def test_person_statement(self):
+        st = money.giving_statement(self.conn, 2026, person_id=self.p)
+        self.assertEqual((st["kind"], st["giver_name"], st["year"], st["church_name"]),
+                         ("person", "Nguyễn Hải Đăng", 2026, "Hội Thánh Thử"))
+        self.assertEqual(self.rows(st), [("2026-03-01", "General", 100000, "Nguyễn Hải Đăng"),
+                                         ("2026-06-01", "General", 400000, "Nguyễn Hải Đăng")])
+        self.assertEqual(st["total"], 500000)
+        self.assertIs(type(st["total"]), int)
+        self.assertEqual(money.giving_statement(self.conn, 2025, person_id=self.p)["total"], 900000)
+
+    def test_family_statement_follows_the_family_change(self):
+        x = money.giving_statement(self.conn, 2026, family_id=self.x)
+        self.assertEqual(self.rows(x), [("2026-03-01", "General", 100000, "Nguyễn Hải Đăng"),
+                                        ("2026-04-01", "Missions", 200000, "Gia đình Nguyễn"),
+                                        ("2026-05-01", "General", 300000, "Trần Thị Mai")])
+        self.assertEqual(x["total"], 600000)
+        y = money.giving_statement(self.conn, 2026, family_id=self.y)
+        self.assertEqual(self.rows(y), [("2026-06-01", "General", 400000, "Nguyễn Hải Đăng"),
+                                        ("2026-07-01", "General", 500000, "Gia đình Đăng")])
+        self.assertEqual(y["total"], 900000)
+        self.assertEqual(money.giving_statement(self.conn, 2025, family_id=self.x)["rows"][0]["amount"], 900000)
+
+    def test_no_private_note_and_no_offering_note(self):
+        for st in (money.giving_statement(self.conn, 2026, person_id=self.p),
+                   money.giving_statement(self.conn, 2026, family_id=self.x)):
+            flat = repr(st)
+            self.assertNotIn("PRIVATE-NOTE-MARKER", flat)
+            self.assertNotIn("ghi chú thường", flat)
+            self.assertEqual(set(st["rows"][0]), {"date", "fund", "amount", "given_by"})
+
+    def test_bad_requests(self):
+        for kwargs in ({}, {"person_id": self.p, "family_id": self.x}, {"person_id": 9999}, {"family_id": 9999}):
+            with self.assertRaises(ValueError, msg=kwargs):
+                money.giving_statement(self.conn, 2026, **kwargs)
+        with self.assertRaises(ValueError):
+            money.giving_statement(self.conn, 26.0, person_id=self.p)
+        empty = money.giving_statement(self.conn, 2024, person_id=self.q)
+        self.assertEqual((empty["rows"], empty["total"]), ([], 0))
+
+
+if __name__ == "__main__":
+    unittest.main()
