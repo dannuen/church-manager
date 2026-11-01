@@ -1,5 +1,6 @@
 import hashlib
 import sqlite3
+import unicodedata
 import unittest
 import zipfile
 from unittest import mock
@@ -115,6 +116,54 @@ class HandoverTest(CopyTestCase):
         handover.check_no_private_text(b"abc", [(1, "Cầu nguyện".encode("utf-8"))])
         with self.assertRaises(handover.HandoverError):
             handover.check_no_private_text(b"xx " + "Cầu nguyện".encode("utf-8"), [(1, "Cầu nguyện".encode("utf-8"))])
+
+    # ---- B2: the text of a Private note inside a Document file
+
+    def refused_by_document(self, form):
+        """Add a .txt Document holding a Private note's text in Unicode ``form``; the Handover must refuse."""
+        note = "PRIVATE-NOTE-MARKER tư vấn hôn nhân của chị Tuyết"
+        people.add_private_note(self.conn, self.p, note)
+        data = ("Ghi chú:\n" + unicodedata.normalize(form, note) + "\n").encode("utf-8")
+        doc = documents.add_document(self.conn, self.folder, data, "ghichu.txt", person_id=self.p)
+        file = documents.document_path(self.conn, self.folder, doc)
+        before = sha(self.db_file)
+        with self.assertRaises(handover.HandoverError) as ctx:
+            self.make()
+        self.assertTrue(ctx.exception.private_text_found)  # the Copies page then lists where
+        self.assertIn("Document", str(ctx.exception))
+        self.assertNotIn("tư vấn", unicodedata.normalize("NFC", str(ctx.exception)))  # never the note words
+        self.assertEqual(list(self.out.iterdir()), [])  # no zip, no .partial file, no work folder
+        self.assertEqual(sha(self.db_file), before)  # the source church copy is not changed
+        self.assertEqual(file.read_bytes(), data)
+        self.assertEqual(len(people.list_private_notes(self.conn, self.p)), 5)
+
+    def test_document_with_the_note_text_nfc_is_refused(self):
+        self.refused_by_document("NFC")
+
+    def test_document_with_the_note_text_nfd_is_refused(self):
+        self.refused_by_document("NFD")
+
+    def test_document_without_the_note_text_is_kept_in_the_zip(self):
+        people.add_private_note(self.conn, self.p, "PRIVATE-NOTE-MARKER tư vấn hôn nhân của chị Tuyết")
+        data = "Tư vấn hôn nhân: lịch họp tháng 11.\n".encode("utf-8")  # same words in part, not the note
+        doc = documents.add_document(self.conn, self.folder, data, "ghichu.txt", person_id=self.p)
+        stored = documents.get_document(self.conn, doc)["stored_name"]
+        with zipfile.ZipFile(self.make()) as zf:
+            self.assertEqual(zf.read(f"documents/{stored}"), data)
+
+    def test_private_text_files(self):
+        folder = self.tmp / "files"
+        folder.mkdir()
+        note = "Cầu nguyện cho chị Tuyết"
+        files = []
+        for name, content in (("nfc.txt", note), ("nfd.txt", unicodedata.normalize("NFD", note)),
+                              ("other.txt", "Cầu nguyện chung")):
+            files.append(folder / name)
+            files[-1].write_bytes(("x " + content + " y").encode("utf-8"))
+        found = handover.private_text_files(files, [(7, note.encode("utf-8")), (8, "không có ở đâu")])
+        self.assertEqual(found, [(files[0], 7), (files[1], 7)])
+        self.assertEqual(handover.private_text_files(files, [(7, unicodedata.normalize("NFD", note))]),
+                         [(files[0], 7), (files[1], 7)])  # an NFD note text finds both forms too
 
     def test_zip_check_failure_leaves_no_zip(self):
         with mock.patch.object(handover, "_check_zip", side_effect=handover.HandoverError("zip check")):

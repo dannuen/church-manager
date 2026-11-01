@@ -5,7 +5,8 @@ Steps (any failed check raises ``HandoverError`` and leaves no zip):
    is opened read-only and never changed).
 2. On the copy: ``PRAGMA secure_delete=ON``, ``DELETE FROM private_note``, ``VACUUM``.
 3. Check: no Private note row is left, the database is whole, and no Private
-   note text (4+ characters) is found in the bytes of the file.
+   note text (4+ characters) is found in the bytes of the file, nor in the bytes of any
+   Document file (as UTF-8, NFC and NFD; text inside Word or PDF files is not read).
 4. Zip ``church.db`` and every file in ``documents/``, check the zip again, then
    give it its final name ``handover-<slug>-<YYYY-MM-DD>.zip`` (``-2``, ``-3`` if taken).
 """
@@ -14,6 +15,7 @@ import os
 import shutil
 import sqlite3
 import tempfile
+import unicodedata
 import zipfile
 from pathlib import Path
 
@@ -26,8 +28,8 @@ class HandoverError(Exception):
     """The Handover was stopped. No zip was made.
 
     ``private_text_found`` is True only when the text of a Private note was found in the
-    handover database (it is also written somewhere else in the church copy). The Copies page
-    then lists where, instead of showing the message.
+    handover database or in a Document file (it is also written somewhere else in the church
+    copy). The Copies page then lists where, instead of showing the message.
     """
 
     def __init__(self, message, private_text_found=False):
@@ -115,6 +117,24 @@ def check_no_private_text(data, bodies):
             )
 
 
+def private_text_files(files, notes):
+    """Which files hold the text of a Private note: ``[(file, key), ...]`` in file order.
+
+    ``notes`` is ``[(key, text as str or UTF-8 bytes), ...]``. A file is read as plain bytes and
+    searched for the UTF-8 bytes of the text in NFC and in NFD (an editor may save either).
+    shortcut: text inside Word or PDF files (zipped or encoded) is not read; add a reader if needed.
+    """
+    forms = []
+    for key, body in notes:
+        body = body.decode("utf-8") if isinstance(body, bytes) else body
+        forms.append((key, {unicodedata.normalize(f, body).encode("utf-8") for f in ("NFC", "NFD")}))
+    found = []
+    for f in files:
+        data = Path(f).read_bytes()
+        found.extend((f, key) for key, needles in forms if any(n in data for n in needles))
+    return found
+
+
 def _free_name(out_dir, slug, day):
     base = f"handover-{slug}-{day}"
     name = f"{base}.zip"
@@ -177,8 +197,11 @@ def make_handover(copy_folder, out_dir, today=None):
         bodies = sorted(set(bodies) | set(_backup(db_path, work_db)))
         _strip_private(work_db)
         _check_db_file(work_db, bodies)
-        partial = out / (_free_name(out, slug, day) + ".partial")
         doc_files = documents.documents_on_disk(folder)
+        if private_text_files(doc_files, bodies):
+            raise HandoverError("The text of a Private note is also written in a Document file, "
+                                "so it would go to the next pastor. No handover was made.", private_text_found=True)
+        partial = out / (_free_name(out, slug, day) + ".partial")
         _write_zip(partial, work_db, doc_files)
         _check_zip(partial, bodies, work, doc_files)
         final = out / _free_name(out, slug, day)

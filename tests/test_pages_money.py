@@ -93,6 +93,22 @@ class MoneyPagesTest(PagesTestBase):
                                                      "spending_category_id": cat}, expect=400)
         self.assertIn("Date cannot be after today", page)
 
+    def test_a_bad_fund_or_spending_category_says_choose_one_from_the_list(self):
+        """B5: an id that is not in the list gets the glossary word next to its field, never "Item 99999"."""
+        count = len(self.offering_rows())
+        form = {"date": TODAY.isoformat(), "amount": "100.000", "fund_id": "99999", "giver": ""}
+        _h, page = self.post("/money/offerings/new", form, expect=400)
+        self.assertIn('<p class="error" id="f-fund_id-error">Fund: choose one from the list.</p>', page)
+        self.assertNotIn("Item 99999", page)
+        self.assertEqual(len(self.offering_rows()), count)
+        n_exp = self.db().execute("SELECT COUNT(*) FROM expense").fetchone()[0]
+        form = {"date": TODAY.isoformat(), "amount": "100.000", "spending_category_id": "99999", "note": ""}
+        _h, page = self.post("/money/expenses/new", form, expect=400)
+        self.assertIn('<p class="error" id="f-spending_category_id-error">Spending category: choose one from the list.</p>',
+                      page)
+        self.assertNotIn("Item 99999", page)
+        self.assertEqual(self.db().execute("SELECT COUNT(*) FROM expense").fetchone()[0], n_exp)
+
     def test_giving_statement_for_a_person_and_a_family(self):
         pid = self.first_person_id()
         private_text = "C2-PRIVATE-Cầu nguyện riêng cho gia đình"

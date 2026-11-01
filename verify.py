@@ -40,6 +40,7 @@ ROOT = Path(__file__).resolve().parent
 MARKER = b"PRIVATE-NOTE-MARKER"  # every Private note of the fake church starts with it
 PANELS = ("this-week", "needs-visit", "services", "money-month", "sent-documents", "search")
 DATA_PANELS = PANELS[:-1]  # the search panel is a form; its rows come live from /api/search
+TEST_TIMEOUT = 600  # seconds; tests that hang longer are a FAIL (Checks.run), not a stuck window
 
 
 class Checks:
@@ -140,7 +141,7 @@ def run_tests():
     env = {k: v for k, v in os.environ.items() if k not in (paths.ENV_COPY, paths.ENV_HOME)}
     proc = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests"], cwd=ROOT,
                           capture_output=True, text=True, encoding="utf-8", errors="replace",
-                          env={**env, "PYTHONIOENCODING": "utf-8"})
+                          env={**env, "PYTHONIOENCODING": "utf-8"}, timeout=TEST_TIMEOUT)
     out = (proc.stdout + proc.stderr).strip()
     lines = out.splitlines() or ["(no output)"]
     ran = [line for line in lines if re.fullmatch(r"Ran \d+ tests? in \S+", line)]

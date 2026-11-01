@@ -139,7 +139,9 @@ def _this_week(items, today, span):
         )
     body = f'<ul class="rows">{"".join(rows)}</ul>' if rows else _empty("Nothing this week.")
     more = f"View all {len(items)} in Calendar" if len(items) > WEEK_ROWS else "Open Calendar"
-    return _panel(name, title, body, meta=meta, foot=_link(more, "/calendar"), span=span)
+    # the same 7 days on the Calendar (not its Monday-to-Sunday week), so the count matches
+    href = ui.url("/calendar", **{"from": today.isoformat()})
+    return _panel(name, title, body, meta=meta, foot=_link(more, href), span=span)
 
 
 def _needs_visit(people, months, span):

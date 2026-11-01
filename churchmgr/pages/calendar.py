@@ -1,4 +1,5 @@
-"""Calendar pages (card C2): ``/calendar`` (one week or one month), ``/calendar/new``, and
+"""Calendar pages (card C2): ``/calendar`` (one week, one month, or the 7 days from ``?from=``),
+``/calendar/new``, and
 ``/calendar/<id>`` (details, edit, delete, the people who join or serve, the Head count).
 
 Rules kept here:
@@ -44,6 +45,11 @@ def parse_week(value, today):
     if not (value or "").strip():
         return week_start(today)
     return week_start(_dt.date.fromisoformat(text.check_date(value, "Week")))
+
+
+def parse_from(value):
+    """``?from=YYYY-MM-DD`` -> that date (the first of 7 days). A bad date raises ``ValueError``."""
+    return _dt.date.fromisoformat(text.check_date(value, "First day"))
 
 
 def parse_month(value):
@@ -181,6 +187,15 @@ def _toolbar(mode, first, today):
                  + _chip("Next week ›", ui.url("/calendar", week=(first + _dt.timedelta(days=7)).isoformat()))
                  + _chip("Month", ui.url("/calendar", month=month_text(shown_month.year, shown_month.month))))
         month_value = month_text(shown_month.year, shown_month.month)
+    elif mode == "days":  # 7 days from ?from= (the Dashboard's "This week": today and the 6 days after)
+        def days_from(day):
+            return ui.url("/calendar", **{"from": day.isoformat()})
+        links = (_chip("‹ Previous 7 days", days_from(first - _dt.timedelta(days=7)))
+                 + _chip("From today", days_from(today), first == today)
+                 + _chip("Next 7 days ›", days_from(first + _dt.timedelta(days=7)))
+                 + _chip("Week", ui.url("/calendar", week=first.isoformat()))
+                 + _chip("Month", ui.url("/calendar", month=month_text(first.year, first.month))))
+        month_value = month_text(first.year, first.month)
     else:
         prev_m, next_m = shift_month(first.year, first.month, -1), shift_month(first.year, first.month, 1)
         this_month = (first.year, first.month) == (today.year, today.month)
@@ -193,7 +208,7 @@ def _toolbar(mode, first, today):
               '<label for="cal-month">Go to a month</label><div class="search-line">'
               f'<input class="input" id="cal-month" name="month" type="month" value="{h(month_value)}" required>'
               '<button class="btn secondary" type="submit">Show</button></div></form>')
-    label = "Calendar weeks" if mode == "week" else "Calendar months"
+    label = {"week": "Calendar weeks", "days": "Calendar 7 days"}.get(mode, "Calendar months")
     return (f'<div class="list-toolbar"><nav class="chips" aria-label="{label}">{links}</nav>{picker}</div>')
 
 
@@ -223,6 +238,10 @@ def calendar_page(req):
         mode, first = "month", _dt.date(year, month, 1)
         last = first.replace(day=cal.month_days(year, month))
         scope = ui.fmt_month(year, month)
+    elif (req.query.get("from") or "").strip():
+        mode, first = "days", parse_from(req.query["from"])
+        last = first + _dt.timedelta(days=6)
+        scope = f"{first.strftime('%d/%m')} – {last.strftime('%d/%m/%Y')}"
     else:
         mode, first = "week", parse_week(req.query.get("week"), today)
         last = first + _dt.timedelta(days=6)
@@ -231,7 +250,7 @@ def calendar_page(req):
     services = sum(1 for it in items if it["kind"] == "Service")
     finding = h(" · ".join((scope, ui.plural(len(items), "Calendar item", "Calendar items"),
                             ui.plural(services, "Service", "Services"))))
-    agenda = _agenda(items, first, last, today, every_day=mode == "week")
+    agenda = _agenda(items, first, last, today, every_day=mode != "month")
     if not agenda:
         agenda = empty(f"Nothing on the Calendar in {scope}.")
     main = (f'<section class="panel list-panel agenda" data-panel="calendar-list" aria-label="{h(scope)}">'
