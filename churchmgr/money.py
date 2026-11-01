@@ -9,6 +9,7 @@ import re
 
 from . import lists, settings, text
 from .calendar import check_year as _check_year
+from .calendar import month_days as _month_days
 from .db import transaction
 
 MAX_AMOUNT = 999_999_999_999_999  # dong; far below the SQLite INTEGER limit
@@ -238,15 +239,16 @@ def list_expenses(conn, start, end):
 
 
 def month_totals(conn, year, month):
-    """Totals of one month: ``{'offerings': int, 'expenses': int, 'balance': int}`` in dong."""
+    """Totals of one month: ``{'offerings': int, 'expenses': int, 'balance': int}`` in dong.
+    The month runs from its first to its last day, so 9999-12 needs no date in the year 10000."""
     year = _check_year(year)
     month = _check_month(month)
     first = _dt.date(year, month, 1).isoformat()
-    nxt = (_dt.date(year + 1, 1, 1) if month == 12 else _dt.date(year, month + 1, 1)).isoformat()
-    offerings = _sum(conn, "SELECT COALESCE(SUM(amount), 0) FROM offering WHERE date >= ? AND date < ?",
-                     (first, nxt))
-    expenses = _sum(conn, "SELECT COALESCE(SUM(amount), 0) FROM expense WHERE date >= ? AND date < ?",
-                    (first, nxt))
+    last = _dt.date(year, month, _month_days(year, month)).isoformat()
+    offerings = _sum(conn, "SELECT COALESCE(SUM(amount), 0) FROM offering WHERE date >= ? AND date <= ?",
+                     (first, last))
+    expenses = _sum(conn, "SELECT COALESCE(SUM(amount), 0) FROM expense WHERE date >= ? AND date <= ?",
+                    (first, last))
     return {"offerings": offerings, "expenses": expenses, "balance": offerings - expenses}
 
 

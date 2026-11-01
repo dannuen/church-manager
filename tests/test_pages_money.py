@@ -188,6 +188,33 @@ class MoneyPagesTest(PagesTestBase):
         self.assertIn(f'value="{TODAY.isoformat()}"', form)  # the date is today by default
         self.assertIn(shown(TODAY.isoformat()), self.page("/money"))
 
+    def test_month_links_stop_at_1900_01_and_9999_12(self):
+        """B21: no chip links to a month the app refuses. 1900-01 has no previous month; 9999-12 opens
+        (no date in the year 10000) and has no next month. Plain sentences only, never Python text."""
+        money.add_offering(self.db(), "1900-01-01", 1_900_001, self.fund())
+        page = self.page("/money?month=1900-01")
+        self.assertNotIn("December 1899", page)
+        self.assertNotIn("month=1899-12", page)
+        self.assertIn('href="/money?month=1900-02">February 1900 ›</a>', page)
+        self.assertIn("This month", page)
+        self.assertIn("1.900.001 ₫", section(page, "money-totals"))
+        money.add_offering(self.db(), "9999-12-31", 9_999_001, self.fund())  # the data layer takes a far date
+        page = self.page("/money?month=9999-12")
+        self.assertNotIn("January 10000", page)
+        self.assertNotIn("month=10000-01", page)
+        self.assertIn('href="/money?month=9999-11">‹ November 9999</a>', page)
+        self.assertIn("This month", page)
+        self.assertIn("9.999.001 ₫", section(page, "money-totals"))
+        self.assertIn(shown("9999-12-31"), section(page, "offerings"))
+        for bad in ("1899-12", "0000-01"):
+            self.assertIn("Month: use a year from 1900 to 9999.", self.page(f"/money?month={bad}", expect=400))
+        page = self.page("/money?month=10000-01", expect=400)  # a 5-digit year: the form sentence
+        self.assertIn("Month must be written YYYY-MM, for example 2026-11.", page)
+        self.assertNotIn("year must be in", page)
+        for path in ("/money", "/money?month=1900-01", "/money?month=9999-12"):
+            self.assertRegex(self.page(path), r'id="money-month" name="month" type="month" value="[0-9]{4}-[0-9]{2}" '
+                                              r'min="1900-01" max="9999-12" required>')
+
     def test_print_css_rules(self):
         css = (ROOT / "web" / "print.css").read_text(encoding="utf-8")
         for rule in ("@media print", "size: A4", "display: table-header-group", "break-inside: avoid",
