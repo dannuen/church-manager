@@ -459,3 +459,18 @@ table.money th.category { white-space: normal; line-height: 16px; }
    (each keeps align-self: start from B11, no stretched blank).
    B19: a file name (a Handover zip) shows whole: it wraps, and may break inside the name; no "…". */
 .row .what .file-name { overflow-wrap: anywhere; }
+
+/* ---------- FIX-T 3b ----------
+   B22: each row of the Documents list ends with its Delete text action, in ink like the Money Edit link
+   (not a button); it opens the one question. On a phone it sits at the right of line 1, beside the name.
+   The one question names the Document whole: a long name wraps, and may break inside the name. */
+table.documents td:last-child { width: 1%; white-space: nowrap; text-align: right; }
+table.documents td:last-child a { color: var(--text); font-weight: 600; }
+.confirm-name { overflow-wrap: anywhere; }
+[data-panel="confirm"] .kv + .hint { margin-top: 12px; }
+@media (max-width: 640px) {
+  table.documents tr[data-row] > td:first-child { flex: 1 0 calc(100% - 72px); }
+  table.documents tr[data-row] > td:not(:first-child):not(:last-child) { order: 2; }
+  table.documents tr[data-row] > td:last-child { flex: 0 0 auto; width: auto; order: 1; margin-left: auto; }
+  table.documents td:last-child a { display: inline-block; padding: 12px 0 12px 8px; margin: -12px 0 -12px -8px; }   /* a 44px tap */
+}

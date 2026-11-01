@@ -3,7 +3,7 @@ import unittest
 from unittest import mock
 
 from _support import CopyTestCase
-from churchmgr import calendar, documents, people
+from churchmgr import calendar, documents, lists, people, sent
 
 
 class FileNameTest(unittest.TestCase):
@@ -132,6 +132,66 @@ class DocumentTest(CopyTestCase):
         with self.assertRaises(ValueError):
             documents.add_document(self.conn, self.tmp / "OneDrive" / "copy", b"x", "a.txt")
         self.assertFalse((self.tmp / "OneDrive").exists())
+
+
+class DeleteDocumentTest(CopyTestCase):
+    """FIX-T 3b (B22): Delete a Document. The row and the file go; a Sent document stays with no file."""
+
+    def setUp(self):
+        super().setUp()
+        self.p = people.add_person(self.conn, "Lê Văn An")
+        self.keep = documents.add_document(self.conn, self.folder, b"keep B22", "giữ lại.txt", person_id=self.p)
+
+    def count(self):
+        return self.conn.execute("SELECT COUNT(*) FROM document").fetchone()[0]
+
+    def test_delete_removes_the_row_and_the_file_and_the_sent_document_keeps_its_row(self):
+        did = documents.add_document(self.conn, self.folder, b"B22 old private words", "Giấy mời.txt")
+        path = documents.document_path(self.conn, self.folder, did)
+        r = lists.find_item(self.conn, "recipient", name="Giáo hội")["id"]
+        pu = lists.find_item(self.conn, "purpose", name="Invitation")["id"]
+        sid, number = sent.add_sent_document(self.conn, "2026-05-03", r, pu, "Mời dự lễ", document_id=did)
+        self.assertEqual(self.count(), 2)
+
+        self.assertIsNone(documents.delete_document(self.conn, self.folder, did))
+        self.assertIsNone(documents.get_document(self.conn, did))
+        self.assertFalse(path.exists())
+        row = self.conn.execute("SELECT * FROM sent_document WHERE id = ?", (sid,)).fetchone()
+        self.assertIsNone(row["document_id"])  # the Sent document stays, with no file
+        self.assertEqual((number, row["date"], row["recipient_id"], row["purpose_id"], row["subject"]),
+                         ("01/2026", "2026-05-03", r, pu, "Mời dự lễ"))
+        kept = documents.document_path(self.conn, self.folder, self.keep)
+        self.assertEqual(documents.documents_on_disk(self.folder), [kept])  # the other Document is not touched
+        self.assertEqual(kept.read_bytes(), b"keep B22")
+        with self.assertRaises(ValueError):  # gone: an unknown id
+            documents.delete_document(self.conn, self.folder, did)
+
+    def test_a_missing_file_still_deletes_the_row(self):
+        did = documents.add_document(self.conn, self.folder, b"x", "mất.txt")
+        documents.document_path(self.conn, self.folder, did).unlink()
+        self.assertIsNone(documents.delete_document(self.conn, self.folder, did))
+        self.assertEqual(self.count(), 1)
+
+    def test_a_file_that_cannot_be_removed_is_given_back_and_the_row_is_gone(self):
+        did = documents.add_document(self.conn, self.folder, b"x", "đang mở.txt")
+        path = documents.document_path(self.conn, self.folder, did)
+        with mock.patch.object(type(path), "unlink", side_effect=PermissionError("in use")):
+            left = documents.delete_document(self.conn, self.folder, did)
+        self.assertEqual(left, path)
+        self.assertTrue(path.is_file())  # the file stays (no Document row names it now)
+        self.assertIsNone(documents.get_document(self.conn, did))
+
+    def test_unknown_id_or_bad_stored_name_changes_nothing(self):
+        files = sorted(p.name for p in (self.folder / "documents").iterdir())
+        for bad in (9999, 0, "x"):
+            with self.assertRaises(ValueError, msg=bad):
+                documents.delete_document(self.conn, self.folder, bad)
+        self.conn.execute("UPDATE document SET stored_name = '../church.db' WHERE id = ?", (self.keep,))
+        with self.assertRaises(ValueError):
+            documents.delete_document(self.conn, self.folder, self.keep)
+        self.assertEqual(self.count(), 1)
+        self.assertTrue((self.folder / "church.db").is_file())
+        self.assertEqual(sorted(p.name for p in (self.folder / "documents").iterdir()), files)
 
 
 if __name__ == "__main__":

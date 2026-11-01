@@ -53,11 +53,15 @@ def parse_from(value):
 
 
 def parse_month(value):
-    """``"2026-11"`` -> ``(2026, 11)``. Anything else raises ``ValueError``."""
+    """``"2026-11"`` -> ``(2026, 11)``. Anything else raises ``ValueError``: the form sentence, or the
+    years sentence for the right form with a year outside :data:`FIRST_MONTH` to :data:`LAST_MONTH`."""
     m = _MONTH.fullmatch((value or "").strip())
-    if m is None or not 1 <= int(m.group(2)) <= 12 or int(m.group(1)) < 1900:
+    if m is None or not 1 <= int(m.group(2)) <= 12:
         raise ValueError("Month must be written YYYY-MM, for example 2026-11.")
-    return int(m.group(1)), int(m.group(2))
+    year, month = int(m.group(1)), int(m.group(2))
+    if month_step(year, month) is None:
+        raise ValueError("Month: use a year from 1900 to 9999.")
+    return year, month
 
 
 def month_text(year, month):
@@ -69,6 +73,35 @@ def shift_month(year, month, k):
     """``shift_month(2026, 12, 1)`` -> ``(2027, 1)``."""
     total = year * 12 + month - 1 + k
     return total // 12, total % 12 + 1
+
+
+# A Money month and a Calendar month go from 1900-01 to 9999-12: the years of an Offering or Expense date.
+FIRST_MONTH, LAST_MONTH = (1900, 1), (9999, 12)
+
+
+def month_step(year, month, k=0):
+    """The month ``k`` months from ``(year, month)``, or ``None`` when it is outside 1900-01 to 9999-12.
+    Every month chip (Money and Calendar) uses it, so no chip links to a month the app refuses."""
+    shifted = shift_month(year, month, k)
+    return shifted if FIRST_MONTH <= shifted <= LAST_MONTH else None
+
+
+def day_step(day, k):
+    """``day`` plus ``k`` days, or ``None`` before 0001-01-01 or after 9999-12-31 (Python has no such
+    date). The week and 7-day links use it, so they leave that link out instead of failing."""
+    try:
+        return day + _dt.timedelta(days=k)
+    except OverflowError:
+        return None
+
+
+def month_picker(action, input_id, value):
+    """The "Go to a month" form of the Money and Calendar pages, limited to 1900-01 to 9999-12."""
+    return (f'<form class="month-picker" action="{action}" method="get">'
+            f'<label for="{input_id}">Go to a month</label><div class="search-line">'
+            f'<input class="input" id="{input_id}" name="month" type="month" value="{h(value)}" '
+            f'min="{month_text(*FIRST_MONTH)}" max="{month_text(*LAST_MONTH)}" required>'
+            '<button class="btn secondary" type="submit">Show</button></div></form>')
 
 
 def form_datetime(value, what):
@@ -165,11 +198,10 @@ def _agenda(items, first, last, today, every_day):
     for it in items:
         by_day.setdefault(_dt.date.fromisoformat(it["starts_at"][:10]), []).append(it)
     days = []
-    day = first
-    while day <= last:
+    for n in range((last - first).days + 1):  # never a day past ``last`` (9999-12-31 has no next day)
+        day = first + _dt.timedelta(days=n)
         if every_day or day in by_day:
             days.append(_day_block(day, by_day.get(day, []), today))
-        day += _dt.timedelta(days=1)
     return "".join(days)
 
 
@@ -178,38 +210,43 @@ def _chip(label, href, current=False):
     return f'<a class="chip" href="{h(href)}"{mark}>{h(label)}</a>'
 
 
+def month_chip(label, path, month):
+    """A chip to ``month`` (``(year, month)`` from :func:`month_step`) on the page ``path``, or nothing
+    when ``month`` is ``None``. ``{}`` in ``label`` becomes the month name."""
+    return "" if month is None else _chip(label.format(ui.fmt_month(*month)), ui.url(path, month=month_text(*month)))
+
+
+def _day_chip(label, day, key):
+    """A chip to the week (``key="week"``) or the 7 days (``key="from"``) of ``day``; nothing when ``None``."""
+    return "" if day is None else _chip(label, ui.url("/calendar", **{key: day.isoformat()}))
+
+
 def _toolbar(mode, first, today):
     if mode == "week":
         this = week_start(today)
         shown_month = today if first == this else first  # the month picker starts at the month in view
-        links = (_chip("‹ Previous week", ui.url("/calendar", week=(first - _dt.timedelta(days=7)).isoformat()))
+        links = (_day_chip("‹ Previous week", day_step(first, -7), "week")
                  + _chip("This week", "/calendar", first == this)
-                 + _chip("Next week ›", ui.url("/calendar", week=(first + _dt.timedelta(days=7)).isoformat()))
-                 + _chip("Month", ui.url("/calendar", month=month_text(shown_month.year, shown_month.month))))
+                 + _day_chip("Next week ›", day_step(first, 7), "week")
+                 + month_chip("Month", "/calendar", month_step(shown_month.year, shown_month.month)))
         month_value = month_text(shown_month.year, shown_month.month)
     elif mode == "days":  # 7 days from ?from= (the Dashboard's "This week": today and the 6 days after)
-        def days_from(day):
-            return ui.url("/calendar", **{"from": day.isoformat()})
-        links = (_chip("‹ Previous 7 days", days_from(first - _dt.timedelta(days=7)))
-                 + _chip("From today", days_from(today), first == today)
-                 + _chip("Next 7 days ›", days_from(first + _dt.timedelta(days=7)))
-                 + _chip("Week", ui.url("/calendar", week=first.isoformat()))
-                 + _chip("Month", ui.url("/calendar", month=month_text(first.year, first.month))))
+        links = (_day_chip("‹ Previous 7 days", day_step(first, -7), "from")
+                 + _chip("From today", ui.url("/calendar", **{"from": today.isoformat()}), first == today)
+                 + _day_chip("Next 7 days ›", day_step(first, 7), "from")
+                 + _day_chip("Week", first, "week")
+                 + month_chip("Month", "/calendar", month_step(first.year, first.month)))
         month_value = month_text(first.year, first.month)
     else:
-        prev_m, next_m = shift_month(first.year, first.month, -1), shift_month(first.year, first.month, 1)
         this_month = (first.year, first.month) == (today.year, today.month)
-        links = (_chip(f"‹ {ui.fmt_month(*prev_m)}", ui.url("/calendar", month=month_text(*prev_m)))
+        links = (month_chip("‹ {}", "/calendar", month_step(first.year, first.month, -1))
                  + _chip("This month", ui.url("/calendar", month=month_text(today.year, today.month)), this_month)
-                 + _chip(f"{ui.fmt_month(*next_m)} ›", ui.url("/calendar", month=month_text(*next_m)))
+                 + month_chip("{} ›", "/calendar", month_step(first.year, first.month, 1))
                  + _chip("Week", "/calendar" if this_month else ui.url("/calendar", week=first.isoformat())))
         month_value = month_text(first.year, first.month)
-    picker = ('<form class="month-picker" action="/calendar" method="get">'
-              '<label for="cal-month">Go to a month</label><div class="search-line">'
-              f'<input class="input" id="cal-month" name="month" type="month" value="{h(month_value)}" required>'
-              '<button class="btn secondary" type="submit">Show</button></div></form>')
     label = {"week": "Calendar weeks", "days": "Calendar 7 days"}.get(mode, "Calendar months")
-    return (f'<div class="list-toolbar"><nav class="chips" aria-label="{label}">{links}</nav>{picker}</div>')
+    return (f'<div class="list-toolbar"><nav class="chips" aria-label="{label}">{links}</nav>'
+            f'{month_picker("/calendar", "cal-month", month_value)}</div>')
 
 
 def _to_record_panel(conn, today):
@@ -240,11 +277,11 @@ def calendar_page(req):
         scope = ui.fmt_month(year, month)
     elif (req.query.get("from") or "").strip():
         mode, first = "days", parse_from(req.query["from"])
-        last = first + _dt.timedelta(days=6)
+        last = day_step(first, 6) or _dt.date.max  # the last 7 days stop at 9999-12-31
         scope = f"{first.strftime('%d/%m')} – {last.strftime('%d/%m/%Y')}"
     else:
         mode, first = "week", parse_week(req.query.get("week"), today)
-        last = first + _dt.timedelta(days=6)
+        last = day_step(first, 6) or _dt.date.max  # the last week stops on Friday 9999-12-31
         scope = f"Week {first.strftime('%d/%m')} – {last.strftime('%d/%m/%Y')}"
     items = cal.items_between(conn, first, last)
     services = sum(1 for it in items if it["kind"] == "Service")

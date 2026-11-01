@@ -251,6 +251,60 @@ class CalendarPagesTest(PagesTestBase):
         # the week mode is not changed: Monday to Sunday, so that Sunday's week holds only 2 of them
         self.assertIn("Week 26/05 – 01/06/2031 · 2 Calendar items", self.page(f"/calendar?week={sunday}"))
 
+    def test_month_links_stop_at_1900_01_and_9999_12(self):
+        """B21: no chip links to a month the app refuses. 1900-01 has no previous month; 9999-12 opens
+        with its last day and has no next month. Plain sentences only, never Python text."""
+        page = self.page("/calendar?month=1900-01")
+        self.assertNotIn("December 1899", page)
+        self.assertNotIn("month=1899-12", page)
+        self.assertIn('href="/calendar?month=1900-02">February 1900 ›</a>', page)
+        self.assertIn("This month", page)
+        cal.add_calendar_item(self.db(), "Event", "B21 Lễ ngày cuối", "9999-12-31 23:59")  # the very last minute
+        page = self.page("/calendar?month=9999-12")
+        self.assertNotIn("January 10000", page)
+        self.assertNotIn("month=10000-01", page)
+        self.assertIn('href="/calendar?month=9999-11">‹ November 9999</a>', page)
+        self.assertIn("This month", page)
+        self.assertIn("B21 Lễ ngày cuối", section(page, "calendar-list"))  # the last day of 9999 is listed
+        for bad in ("1899-12", "0000-01"):
+            self.assertIn("Month: use a year from 1900 to 9999.", self.page(f"/calendar?month={bad}", expect=400))
+        page = self.page("/calendar?month=10000-01", expect=400)  # a 5-digit year: the form sentence
+        self.assertIn("Month must be written YYYY-MM, for example 2026-11.", page)
+        self.assertNotIn("year must be in", page)
+        for path in ("/calendar", "/calendar?month=1900-01", "/calendar?month=9999-12", f"/calendar?from={TODAY}"):
+            self.assertRegex(self.page(path), r'id="cal-month" name="month" type="month" value="[0-9]{4}-[0-9]{2}" '
+                                              r'min="1900-01" max="9999-12" required>')
+
+    def test_week_and_7_days_stop_at_the_first_and_the_last_day(self):
+        """B21: the week of Monday 9999-12-27 and the 7 days from it end on Friday 9999-12-31 with no next
+        link (no 500 from a date past 9999-12-31). The week of Monday 0001-01-01 and the 7 days from it have
+        no previous link, and no Month chip to a month the app refuses."""
+        cal.add_calendar_item(self.db(), "Event", "B21 Lễ thứ Sáu cuối", "9999-12-31 08:00")
+        for path, next_chip in (("/calendar?week=9999-12-27", "Next week ›"), ("/calendar?from=9999-12-27",
+                                                                                "Next 7 days ›")):
+            page = self.page(path)
+            listing = section(page, "calendar-list")
+            self.assertEqual(listing.count('class="cal-day'), 5, path)  # Monday 27 to Friday 31
+            self.assertIn("B21 Lễ thứ Sáu cuối", listing)
+            self.assertIn("27/12 – 31/12/9999", page)  # the finding line ends on the last day
+            self.assertNotIn(next_chip, page)
+            self.assertNotIn("10000", page)
+            self.assertIn('href="/calendar?month=9999-12">Month</a>', page)
+        self.assertIn('href="/calendar?week=9999-12-20">‹ Previous week</a>', self.page("/calendar?week=9999-12-27"))
+        page = self.page("/calendar?from=9999-12-24")  # its next 7 days start on the last day
+        self.assertIn('href="/calendar?from=9999-12-31">Next 7 days ›</a>', page)
+        last = self.page("/calendar?from=9999-12-31")
+        self.assertEqual(section(last, "calendar-list").count('class="cal-day'), 1)
+        self.assertIn('href="/calendar?from=9999-12-24">‹ Previous 7 days</a>', last)
+        for path, prev_chip, next_href in (
+                ("/calendar?week=0001-01-01", "‹ Previous week", "/calendar?week=0001-01-08"),
+                ("/calendar?from=0001-01-01", "‹ Previous 7 days", "/calendar?from=0001-01-08")):
+            page = self.page(path)
+            self.assertEqual(section(page, "calendar-list").count('class="cal-day'), 7, path)
+            self.assertNotIn(prev_chip, page)
+            self.assertIn(f'href="{next_href}"', page)
+            self.assertNotIn("month=0001-01", page)  # the month 0001-01 is refused, so no Month chip
+
 
 class SmallLogicTest(unittest.TestCase):
     def test_weeks_and_months(self):
@@ -265,6 +319,35 @@ class SmallLogicTest(unittest.TestCase):
         self.assertEqual(cal_pages.shift_month(2026, 12, 1), (2027, 1))
         self.assertEqual(cal_pages.shift_month(2026, 1, -1), (2025, 12))
         self.assertEqual(cal_pages.month_text(2026, 3), "2026-03")
+
+    def test_parse_month_says_which_years(self):
+        """B21: the right form with a year outside 1900 to 9999 gets its own sentence."""
+        for value in ("1899-12", "0000-01", "0001-06"):
+            with self.assertRaises(ValueError) as ctx:
+                cal_pages.parse_month(value)
+            self.assertEqual(str(ctx.exception), "Month: use a year from 1900 to 9999.", value)
+        for value in ("10000-01", "1899-13", "2026-1"):
+            with self.assertRaises(ValueError) as ctx:
+                cal_pages.parse_month(value)
+            self.assertEqual(str(ctx.exception), "Month must be written YYYY-MM, for example 2026-11.", value)
+        self.assertEqual(cal_pages.parse_month("1900-01"), (1900, 1))
+        self.assertEqual(cal_pages.parse_month("9999-12"), (9999, 12))
+
+    def test_month_step_and_day_step_stop_at_the_edges(self):
+        """B21: one rule for every month chip (1900-01 to 9999-12) and every week or 7-day link
+        (no date before 0001-01-01 or after 9999-12-31)."""
+        self.assertEqual(cal_pages.month_step(1900, 1, 1), (1900, 2))
+        self.assertIsNone(cal_pages.month_step(1900, 1, -1))
+        self.assertEqual(cal_pages.month_step(9999, 12, -1), (9999, 11))
+        self.assertIsNone(cal_pages.month_step(9999, 12, 1))
+        self.assertEqual(cal_pages.month_step(2026, 12, 1), (2027, 1))
+        self.assertEqual(cal_pages.month_step(1900, 1), (1900, 1))  # k = 0: the month itself
+        self.assertIsNone(cal_pages.month_step(1899, 12))
+        self.assertIsNone(cal_pages.month_step(1, 1))
+        self.assertEqual(cal_pages.day_step(dt.date(9999, 12, 24), 7), dt.date(9999, 12, 31))
+        self.assertIsNone(cal_pages.day_step(dt.date(9999, 12, 25), 7))
+        self.assertEqual(cal_pages.day_step(dt.date(1, 1, 8), -7), dt.date(1, 1, 1))
+        self.assertIsNone(cal_pages.day_step(dt.date(1, 1, 7), -7))
 
     def test_form_datetime_and_time_span(self):
         self.assertEqual(cal_pages.form_datetime("2026-11-08T08:00", "Starts at"), "2026-11-08 08:00")

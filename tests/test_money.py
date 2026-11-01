@@ -134,6 +134,22 @@ class MoneyTest(CopyTestCase):
             with self.assertRaises(ValueError):
                 money.month_totals(self.conn, y, m)
 
+    def test_month_totals_of_the_first_and_the_last_month(self):
+        """B21: 9999-12 ends on 9999-12-31 (no date in the year 10000) and 1900-01 starts on 1900-01-01.
+        The totals stay whole dong."""
+        for day, amount in (("9999-11-30", 1), ("9999-12-01", 20), ("9999-12-31", 9_999_000),
+                            ("1900-01-01", 1_900_000), ("1900-01-31", 300), ("1900-02-01", 7)):
+            money.add_offering(self.conn, day, amount, self.general)
+        money.add_expense(self.conn, "9999-12-31", 4_000, self.rent)
+        totals = money.month_totals(self.conn, 9999, 12)
+        self.assertEqual(totals, {"offerings": 9_999_020, "expenses": 4_000, "balance": 9_995_020})
+        for v in totals.values():
+            self.assertIs(type(v), int)
+        self.assertEqual(money.month_totals(self.conn, 9999, 11), {"offerings": 1, "expenses": 0, "balance": 1})
+        self.assertEqual(money.month_totals(self.conn, 1900, 1),
+                         {"offerings": 1_900_300, "expenses": 0, "balance": 1_900_300})
+        self.assertEqual(money.month_totals(self.conn, 1900, 2)["offerings"], 7)
+
 
 class GivingStatementTest(CopyTestCase):
     """Person P is in Family X until 2026-06-01, then in Family Y."""

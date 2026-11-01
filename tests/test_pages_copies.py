@@ -7,6 +7,7 @@ import pathlib
 import shutil
 import sqlite3
 import tempfile
+import unicodedata
 import unittest
 import urllib.parse
 import zipfile
@@ -16,7 +17,7 @@ import _support  # noqa: F401 - puts the repo root on sys.path
 from churchmgr import care, db, documents, fake, handover, paths, people, schema, settings
 from churchmgr.pages import copies as copy_pages
 from churchmgr.pages import settings as settings_pages
-from test_pages_people import PagesTestBase, section
+from test_pages_people import ROOT, PagesTestBase, section
 from test_server import LiveServer
 
 MARKER = b"PRIVATE-NOTE-MARKER"
@@ -36,48 +37,28 @@ class HandoverPagesTest(PagesTestBase):
     def note_count(self):
         return self.db().execute("SELECT COUNT(*) FROM private_note").fetchone()[0]
 
-    def test_a_refused_handover_is_made_after_the_private_note_is_changed(self):
-        """B13: a Private note and a .txt Document hold the same words -> refused. The page sends the
-        pastor to the Private note; Edit changes it in the app; then Make Handover works."""
+    def test_a_file_with_no_document_row_is_removed_in_file_explorer(self):
+        """B22: a file of the documents folder that no Document names cannot be deleted in the app. The
+        refusal names the file and the folder, says to remove it in File Explorer, and has no Delete link."""
         conn = self.db()
-        owner = people.list_persons(conn)[4]["id"]
-        words = "B13 lời cầu nguyện riêng 9154"
+        owner = people.list_persons(conn)[3]["id"]
+        words = "B22 tệp lạc riêng tư 6630"
         note_id = people.add_private_note(conn, owner, words)
-        documents.add_document(conn, self.copy, f"Ghi chép: {words}\n".encode("utf-8"), "b13.txt", person_id=owner)
+        self.addCleanup(conn.execute, "DELETE FROM private_note WHERE id = ?", (note_id,))  # the next tests hand over
+        folder = db.documents_folder(self.copy.resolve())
+        stray = folder / ("ab" * 16 + ".txt")
+        stray.write_bytes(f"Ghi: {words}\n".encode("utf-8"))
+        self.addCleanup(stray.unlink)
         status, _h, data = self.request("POST", "/copies/handover", {})
         page = data.decode("utf-8")
         self.assertEqual(status, 400)
-        refusal = section(page, "handover")
-        self.assertIn(f'<li>The Private note of <a href="/people/{owner}#private-note">', refusal)
-        self.assertIn("A Document file cannot be changed in the app, so for a Document change the Private note. "
-                      "Then press Make Handover again. Nothing was changed and no zip was saved.", refusal)
+        refusal = section(page, "handover").replace("<wbr>", "")
+        self.assertIn(f'is also written in the file <span class="path">{stray.name}</span> of the documents folder. '
+                      "No Document in the app has this file: remove it from the folder "
+                      f'<span class="path">{folder}</span> in File Explorer.</li>', refusal)
+        self.assertNotIn("/delete", refusal)
         self.assertNotIn(words, page)
-        self.assertNotIn("9154", page)
-        # the link opens the Person page at the Private note panel; Edit next to the note opens its form
-        person_page = self.page(f"/people/{owner}")
-        self.assertIn('<div id="private-note" class="no-print">', person_page)
-        self.assertIn(f'href="/people/{owner}?edit_note={note_id}#private-note"', section(person_page, "private-note"))
-        self.assertIn(f'action="/people/{owner}/private-notes/{note_id}"',
-                      section(self.page(f"/people/{owner}?edit_note={note_id}"), "private-note"))
-        new = "B13 đã đổi lời ghi riêng 2207"
-        headers = self.post(f"/people/{owner}/private-notes/{note_id}", {"body": new})[0]
-        self.assertNotIn("2207", urllib.parse.unquote_plus(headers["location"]))
-        # Make Handover again: it is made, and its zip has no Private note
-        before = set(self.handovers())
-        headers = self.post("/copies/handover", {})[0]
-        name = urllib.parse.parse_qs(urllib.parse.urlsplit(headers["location"]).query)["made"][0]
-        self.assertNotIn(name, before)
-        check = self.root / "check-b13.db"
-        with zipfile.ZipFile(self.root / "handovers" / name) as zf:
-            check.write_bytes(zf.read(db.DB_NAME))
-            for member in zf.namelist():
-                self.assertNotIn(new.encode("utf-8"), zf.read(member), member)
-        conn = sqlite3.connect(check)
-        try:
-            self.assertEqual(conn.execute("SELECT COUNT(*) FROM private_note").fetchone()[0], 0)
-        finally:
-            conn.close()
-        self.assertEqual(people.list_private_notes(self.db(), owner)[0]["body"], new)  # the copy keeps it
+        self.assertNotIn("tệp lạc", page)
 
     def test_copies_page_says_where_everything_is(self):
         page = self.page("/copies")
@@ -110,8 +91,8 @@ class HandoverPagesTest(PagesTestBase):
         self.assertIn("The words of a Private note are also written somewhere else", refusal)
         self.assertIn(f'href="/people/{owner}#private-note"', refusal)  # whose Private note: its Edit link is there
         self.assertIn(f'the note of the Person <a href="/people/{other}"', refusal)  # where it was found
-        self.assertIn("Change the Private note so it is not the same (open the Person, then Edit next to the note)",
-                      refusal)
+        self.assertIn("To fix it, take the private words out of each place above.", refusal)
+        self.assertIn("For other text, open it and change it.", refusal)
         self.assertNotIn(words, page)  # the Private note text is never shown
         self.assertNotIn("trùng lặp", page)
         self.assertEqual(self.handovers(), before)  # no zip, no work folder left
@@ -124,8 +105,9 @@ class HandoverPagesTest(PagesTestBase):
         words = "B2 tư vấn hôn nhân của chị Tuyết 5307"
         note_id = people.add_private_note(conn, owner["id"], words)
         self.addCleanup(conn.execute, "DELETE FROM private_note WHERE id = ?", (note_id,))  # the next tests hand over
-        documents.add_document(conn, self.copy, f"Ghi chú: {words}\n".encode("utf-8"), "ghichu.txt",
-                               person_id=owner["id"])
+        doc_id = documents.add_document(conn, self.copy, f"Ghi chú: {words}\n".encode("utf-8"), "ghichu.txt",
+                                        person_id=owner["id"])
+        self.addCleanup(documents.delete_document, conn, self.copy, doc_id)  # its words leave the shared church
         before, notes, source_hash = self.handovers(), self.note_count(), sha(self.copy / db.DB_NAME)
 
         status, _h, data = self.request("POST", "/copies/handover", {})
@@ -135,7 +117,9 @@ class HandoverPagesTest(PagesTestBase):
         self.assertIn("Handover not made.", refusal)
         self.assertRegex(refusal, rf'<li>The Private note of <a href="/people/{owner["id"]}#private-note">.*?</a> is '
                                   rf'also written in the Document <span lang="vi">ghichu.txt</span> of '
-                                  rf'<a href="/people/{owner["id"]}" lang="vi">.*?</a>\.</li>')
+                                  rf'<a href="/people/{owner["id"]}" lang="vi">.*?</a>\. '
+                                  rf'<a href="/documents/{doc_id}/delete" aria-label="Delete the Document ghichu.txt">'
+                                  rf'Delete</a></li>')
         self.assertNotIn(words, page)  # the Private note text is never shown
         self.assertNotIn("tư vấn", page)
         self.assertEqual(self.handovers(), before)  # no zip, no .partial file, no work folder
@@ -204,6 +188,74 @@ class HandoverPagesTest(PagesTestBase):
         self.assertEqual(status, 400)
         self.assertIn("The words of a Private note are also written somewhere else", box)
         self.assertNotIn("Stopped.", box)
+
+
+class PrivateWordsInDocumentTest(PagesTestBase):
+    """B13 + B22 on a fresh church copy of their own, so no other Handover test shares its state."""
+
+    def test_a_refused_handover_is_made_after_the_document_is_deleted(self):
+        """B22: a Private note and a .txt Document hold the same words -> refused. The page has a Delete link
+        for the Document and says that changing the Private note does not change the file. B13: the note can
+        be changed in the app, but the file keeps the ORIGINAL words. Delete the Document -> Make Handover
+        works, and no file in the zip holds the original words or the new ones."""
+        conn = self.db()
+        owner = people.list_persons(conn)[4]["id"]
+        words = "B13 lời cầu nguyện riêng 9154"
+        note_id = people.add_private_note(conn, owner, words)
+        doc_id = documents.add_document(conn, self.copy, f"Ghi chép: {words}\n".encode("utf-8"), "b13.txt",
+                                        person_id=owner)
+        doc_file = documents.document_path(conn, self.copy, doc_id)
+        status, _h, data = self.request("POST", "/copies/handover", {})
+        page = data.decode("utf-8")
+        self.assertEqual(status, 400)
+        refusal = section(page, "handover")
+        self.assertIn(f'<li>The Private note of <a href="/people/{owner}#private-note">', refusal)
+        self.assertIn(f'<a href="/documents/{doc_id}/delete" aria-label="Delete the Document b13.txt">Delete</a></li>',
+                      refusal)
+        self.assertIn("For a Document, press Delete: changing the Private note does not change a Document file, "
+                      "and the file still goes to the next pastor.", refusal)
+        self.assertNotIn("for a Document change the Private note", refusal)  # the old advice is gone
+        self.assertNotIn(words, page)
+        self.assertNotIn("9154", page)
+
+        # B13: Edit next to the note changes the Private note in the app ...
+        person_page = self.page(f"/people/{owner}")
+        self.assertIn('<div id="private-note" class="no-print">', person_page)
+        self.assertIn(f'href="/people/{owner}?edit_note={note_id}#private-note"', section(person_page, "private-note"))
+        self.assertIn(f'action="/people/{owner}/private-notes/{note_id}"',
+                      section(self.page(f"/people/{owner}?edit_note={note_id}"), "private-note"))
+        new = "B13 đã đổi lời ghi riêng 2207"
+        headers = self.post(f"/people/{owner}/private-notes/{note_id}", {"body": new})[0]
+        self.assertNotIn("2207", urllib.parse.unquote_plus(headers["location"]))
+        # ... but the Document file still holds the original words, as the page says
+        self.assertIn(words.encode("utf-8"), doc_file.read_bytes())
+
+        # B22: follow the Delete link of the refusal: one question, then the Document and its file go
+        self.assertIn("Yes, delete it", section(self.page(f"/documents/{doc_id}/delete"), "confirm"))
+        headers = self.post(f"/documents/{doc_id}/delete", {"confirm": "yes"})[0]
+        self.assertIn("Document deleted: b13.txt.", self.page(headers["location"]))
+        self.assertFalse(doc_file.exists())
+
+        # Make Handover again: it is made, and no file in the zip holds the original words or the new ones
+        headers = self.post("/copies/handover", {})[0]
+        name = urllib.parse.parse_qs(urllib.parse.urlsplit(headers["location"]).query)["made"][0]
+        check = self.root / "check-b22.db"
+        with zipfile.ZipFile(self.root / "handovers" / name) as zf:
+            in_zip = zf.namelist()
+            self.assertNotIn(f"documents/{doc_file.name}", in_zip)
+            self.assertGreater(len([n for n in in_zip if n.startswith("documents/") and not n.endswith("/")]), 0)
+            check.write_bytes(zf.read(db.DB_NAME))
+            for entry in in_zip:
+                data = zf.read(entry)
+                for said in (words, new):
+                    for form in ("NFC", "NFD"):
+                        self.assertNotIn(unicodedata.normalize(form, said).encode("utf-8"), data, entry)
+        conn = sqlite3.connect(check)
+        try:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM private_note").fetchone()[0], 0)
+        finally:
+            conn.close()
+        self.assertEqual(people.list_private_notes(self.db(), owner)[0]["body"], new)  # the copy keeps it
 
 
 class CopySwitchTest(LiveServer, unittest.TestCase):
@@ -368,6 +420,14 @@ class SmallLogicTest(unittest.TestCase):
         self.assertNotIn("BÍ MẬT", repr(places))
         self.assertEqual(copy_pages._safe_label("Lê Văn B", ["BÍ MẬT C3"], "Person 2"), "Lê Văn B")
         self.assertEqual(copy_pages._safe_label("x BÍ MẬT C3", ["BÍ MẬT C3"], "Person 2"), "Person 2")
+
+    def test_readme_tells_the_same_as_the_refusal_page(self):
+        """B22: the README Handover advice no longer sends the pastor to the Private note for a Document."""
+        readme = " ".join((ROOT / "README.md").read_text(encoding="utf-8").split())
+        self.assertNotIn("for a Document change the Private note", readme)
+        self.assertNotIn("cannot be changed in the app", readme)
+        self.assertIn("press **Delete** next to a Document", readme)
+        self.assertIn("Changing the Private note does not change a Document file", readme)
 
 
 if __name__ == "__main__":

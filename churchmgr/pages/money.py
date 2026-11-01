@@ -18,7 +18,7 @@ from .. import lists, people, text, ui
 from .. import money as money_data
 from ..server import Response
 from ..ui import h, vi
-from .calendar import month_text, parse_month, shift_month
+from .calendar import month_chip, month_picker, month_step, month_text, parse_month
 from .people import (card_link, empty, family_link, field_errors, form_error, not_found, num, panel,
                      past_or_today, person_link, today_text)
 
@@ -94,20 +94,14 @@ def _table(name, headers, rows, total_label, total, edits=None):
 # ---------------------------------------------------------------- /money
 
 def _month_toolbar(year, month, today):
-    prev_m, next_m = shift_month(year, month, -1), shift_month(year, month, 1)
+    """The month chips and the month picker. At 1900-01 there is no previous chip and at 9999-12 no next
+    chip (``month_step`` gives ``None``): no link to a month the app refuses."""
     this = (year, month) == (today.year, today.month)
-
-    def chip(label, href, current=False):
-        mark = ' aria-current="true"' if current else ""
-        return f'<a class="chip" href="{h(href)}"{mark}>{h(label)}</a>'
-
-    links = (chip(f"‹ {ui.fmt_month(*prev_m)}", ui.url("/money", month=month_text(*prev_m)))
-             + chip("This month", "/money", this)
-             + chip(f"{ui.fmt_month(*next_m)} ›", ui.url("/money", month=month_text(*next_m))))
-    picker = ('<form class="month-picker" action="/money" method="get">'
-              '<label for="money-month">Go to a month</label><div class="search-line">'
-              f'<input class="input" id="money-month" name="month" type="month" value="{month_text(year, month)}" '
-              'required><button class="btn secondary" type="submit">Show</button></div></form>')
+    current = ' aria-current="true"' if this else ""
+    links = (month_chip("‹ {}", "/money", month_step(year, month, -1))
+             + f'<a class="chip" href="/money"{current}>This month</a>'
+             + month_chip("{} ›", "/money", month_step(year, month, 1)))
+    picker = month_picker("/money", "money-month", month_text(year, month))
     return f'<div class="list-toolbar"><nav class="chips" aria-label="Money months">{links}</nav>{picker}</div>'
 
 

@@ -55,10 +55,6 @@ def _to_datetime(value, what):
     return _dt.datetime.strptime(text.check_datetime(value, what), _FMT)
 
 
-def _next_day(day_text):
-    return (_dt.date.fromisoformat(day_text) + _dt.timedelta(days=1)).isoformat()
-
-
 # ---------------------------------------------------------------- helpers
 
 def _require_item(conn, item_id):
@@ -276,9 +272,9 @@ def items_between(conn, start_date, end_date):
         "LEFT JOIN head_count hc ON hc.calendar_item_id = ci.id "
         "LEFT JOIN person vp ON vp.id = ci.visit_person_id "
         "LEFT JOIN family vf ON vf.id = ci.visit_family_id "
-        "WHERE ci.starts_at >= ? AND ci.starts_at < ? "
+        "WHERE ci.starts_at >= ? AND ci.starts_at <= ? "
         "ORDER BY ci.starts_at, ci.id",
-        (start + " 00:00", _next_day(end) + " 00:00"),
+        (start + " 00:00", end + " 23:59"),  # starts_at is always YYYY-MM-DD HH:MM (schema GLOB)
     ).fetchall()
 
 

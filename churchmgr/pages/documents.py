@@ -1,10 +1,11 @@
 """Documents (card C3): ``/documents`` (every Document, newest first), ``/documents/new`` (the Add
-document form for one Person, Family or Calendar item) and ``/documents/<id>/file`` (the download).
+document form for one Person, Family or Calendar item), ``/documents/<id>/file`` (the download) and
+``/documents/<id>/delete`` (Delete, after one question; FIX-T 3b).
 
 Rules kept here:
-- A file goes in only through ``documents.add_document`` and comes out only through
-  ``documents.document_path``. The file on disk has a random name; no name or path from the
-  request is ever joined to a folder.
+- A file goes in only through ``documents.add_document``, comes out only through
+  ``documents.document_path`` and goes away only through ``documents.delete_document``. The file on
+  disk has a random name; no name or path from the request is ever joined to a folder.
 - The download is ``application/octet-stream`` with the ``Content-Disposition`` of
   ``server.content_disposition`` (an ASCII name plus the UTF-8 NFC name); the server adds ``nosniff``.
 - :func:`documents_panel` is the shared Documents block of the Person, Family and Calendar item pages.
@@ -101,7 +102,7 @@ def documents_panel(conn, **link):
 
 # ---------------------------------------------------------------- /documents
 
-_ALL_SQL = (
+_SELECT = (
     "SELECT d.id, d.original_name, d.size, d.added_at, d.person_id, p.full_name AS person_name, "
     "d.family_id, f.name AS family_name, d.calendar_item_id, c.title AS item_title, c.starts_at AS item_starts, "
     "(SELECT printf('%02d/%d', s.seq, s.year) FROM sent_document s WHERE s.document_id = d.id "
@@ -109,8 +110,9 @@ _ALL_SQL = (
     "(SELECT s.year FROM sent_document s WHERE s.document_id = d.id ORDER BY s.id LIMIT 1) AS sent_year "
     "FROM document d LEFT JOIN person p ON p.id = d.person_id LEFT JOIN family f ON f.id = d.family_id "
     "LEFT JOIN calendar_item c ON c.id = d.calendar_item_id "
-    "ORDER BY d.added_at DESC, d.id DESC"
 )
+_ALL_SQL = _SELECT + "ORDER BY d.added_at DESC, d.id DESC"
+_ONE_SQL = _SELECT + "WHERE d.id = ?"
 
 
 def _linked(r):
@@ -127,14 +129,20 @@ def _linked(r):
     return ui.DASH
 
 
+def _delete_link(r):
+    """The quiet Delete text action that ends a row of the list: it opens the one question."""
+    return (f'<a href="/documents/{int(r["id"])}/delete" aria-label="Delete the Document {h(r["original_name"])}">'
+            "Delete</a>")
+
+
 def list_page(req):
     rows = req.conn.execute(_ALL_SQL).fetchall()
     lines = [[f'<a href="/documents/{int(r["id"])}/file">{vi(r["original_name"])}</a>', _linked(r),
-              person_pages.num(fmt_size(r["size"])), person_pages.num(ui.fmt_date(r["added_at"]))]
+              person_pages.num(fmt_size(r["size"])), person_pages.num(ui.fmt_date(r["added_at"])), _delete_link(r)]
              for r in rows]
     if lines:
-        body = person_pages.table([("Document", False), ("Linked to", False), ("Size", True), ("Added", True)],
-                                  lines, "documents")
+        body = person_pages.table([("Document", False), ("Linked to", False), ("Size", True), ("Added", True),
+                                   ("", False)], lines, "documents")
     else:
         body = person_pages.empty("No Document yet.")
     hint = ('<p class="hint list-foot">To add a Document, open its Person, Family or Calendar item '
@@ -192,9 +200,71 @@ def file_page(req):
     return Response.file(path, row["original_name"])
 
 
+# ---------------------------------------------------------------- /documents/<id>/delete
+
+def _sent_numbers(conn, doc_id):
+    """The numbers of the Sent documents that use this Document's file, like ``["05/2026"]``."""
+    return [r[0] for r in conn.execute("SELECT printf('%02d/%d', seq, year) FROM sent_document "
+                                       "WHERE document_id = ? ORDER BY year, seq", (doc_id,))]
+
+
+def _confirm_delete(conn, row):
+    """The one question before a Delete: the Document's name, size, date, what it is linked to and
+    what stays (a Sent document keeps its row, with no file). One danger button, and Cancel."""
+    did = int(row["id"])
+    facts = [("Size", person_pages.num(fmt_size(row["size"]))),
+             ("Added", person_pages.num(ui.fmt_date(row["added_at"]))), ("Linked to", _linked(row))]
+    kv = '<dl class="kv">' + "".join(f"<div><dt>{h(k)}</dt><dd>{v}</dd></div>" for k, v in facts) + "</dl>"
+    numbers = _sent_numbers(conn, did)
+    if len(numbers) == 1:
+        keeps = f"The Sent document {numbers[0]} stays, with its number, date, Recipient and Purpose, but no file."
+    elif numbers:
+        keeps = (f"The Sent documents {', '.join(numbers)} stay, with their numbers, dates, Recipients and Purposes, "
+                 "but no file.")
+    else:
+        keeps = ""
+    form = ui.form(f"/documents/{did}/delete", ui.hidden("confirm", "yes") + ui.button("Yes, delete it", "danger"))
+    body = (f'<section class="panel narrow" data-panel="confirm"><p class="lead">Delete the Document '
+            f'<strong class="confirm-name" lang="vi">{h(row["original_name"])}</strong>?</p>{kv}'
+            + (f'<p class="hint">{h(keeps)}</p>' if keeps else "")
+            + '<p class="hint">The file is removed from this church copy. This cannot be undone.</p>'
+            f'<div class="confirm-actions">{form}{ui.link_button("Cancel", "/documents")}</div></section>')
+    return Response.html(ui.page("Delete this Document?", body, "documents"))
+
+
+def _row_or_none(req):
+    row = docs.get_document(req.conn, req.params["id"])
+    return None if row is None else req.conn.execute(_ONE_SQL, (row["id"],)).fetchone()
+
+
+def delete_page(req):
+    row = _row_or_none(req)
+    if row is None:
+        return person_pages.not_found("Document", "/documents", "Go to Documents")
+    return _confirm_delete(req.conn, row)
+
+
+def delete_post(req):
+    """Delete only with ``confirm=yes``; without it, the question again. The row goes in one
+    transaction, then the file (``docs.delete_document``)."""
+    row = _row_or_none(req)
+    if row is None:
+        return person_pages.not_found("Document", "/documents", "Go to Documents")
+    if req.form.get("confirm") != "yes":
+        return _confirm_delete(req.conn, row)
+    left = docs.delete_document(req.conn, req.state.copy_folder, row["id"])
+    msg = f"Document deleted: {row['original_name']}."
+    if left is not None:  # the row is gone, but the file stays (for example it is open in another program)
+        msg += (f" Its file {left.name} could not be removed from the documents folder. Close any program "
+                "that has it open, then remove that file in File Explorer.")
+    return Response.redirect(ui.url("/documents", msg=msg))
+
+
 ROUTES = [
     ("GET", "/documents", list_page),
     ("GET", "/documents/new", new_page),
     ("POST", "/documents/new", new_post),
     ("GET", "/documents/<int:id>/file", file_page),
+    ("GET", "/documents/<int:id>/delete", delete_page),
+    ("POST", "/documents/<int:id>/delete", delete_post),
 ]
