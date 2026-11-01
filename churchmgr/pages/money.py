@@ -158,8 +158,9 @@ def _statement_picker(conn, year, values=None, error=None):
         + (f'<p class="error" role="alert">{h(error)}</p>' if error else "")
         + ui.button("Open Giving statement", "secondary")
     )
+    # a form only: on paper (print.css hides .no-print) it would be a heading over nothing
     return panel("statement-picker", "Giving statement", ui.form("/money/statement", inner, method="get"),
-                 meta="A yearly list of one Giver's Offerings, ready to print")
+                 meta="A yearly list of one Giver's Offerings, ready to print", cls="no-print")
 
 
 def money_page(req):

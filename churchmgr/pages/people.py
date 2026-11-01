@@ -17,7 +17,7 @@ from .. import care, lists, people, story, text, ui
 from .. import search as person_search
 from ..schema import FAMILY_ROLES, MINISTRY_ROLES
 from ..server import Response
-from ..ui import h, vi
+from ..ui import clamp2, h, vi
 from . import documents as document_pages  # card C3 (a module import: pages/documents.py imports this one)
 
 GENDERS = (("", "—"), ("M", "Male"), ("F", "Female"))
@@ -74,15 +74,18 @@ def date_field(label, name, fid, value=None, error=None, min_date=None, hint=Non
 
 
 def table(headers, rows, cls=""):
-    """A table. ``headers``: ``[(text, numeric), ...]``; ``rows``: lists of trusted cell HTML.
+    """A table. ``headers``: ``[(text, numeric), ...]`` or ``[(text, numeric, column class), ...]``;
+    ``rows``: lists of trusted cell HTML. The column class is on the header and on every cell of that
+    column (``act``: a column of text actions only, which print.css leaves off paper).
     Every body row has ``data-row``. On a phone each row becomes two lines (style.css)."""
-    def cell(tag, content, numeric, extra=""):
-        cls = ' class="n"' if numeric else ""
+    def cell(tag, content, header, extra=""):
+        names = (["n"] if header[1] else []) + list(header[2:3])
+        cls = f' class="{" ".join(names)}"' if names else ""
         return f"<{tag}{extra}{cls}>{content}</{tag}>"
 
-    head = "".join(cell("th", h(t), is_num, ' scope="col"') for t, is_num in headers)
+    head = "".join(cell("th", h(c[0]), c, ' scope="col"') for c in headers)
     body = "".join(
-        "<tr data-row>" + "".join(cell("td", c, headers[i][1]) for i, c in enumerate(r)) + "</tr>"
+        "<tr data-row>" + "".join(cell("td", c, headers[i]) for i, c in enumerate(r)) + "</tr>"
         for r in rows
     )
     return (f'<div class="table-wrap"><table class="list {h(cls)}"><thead><tr>{head}</tr></thead>'
@@ -129,13 +132,6 @@ def empty(sentence):
 
 def card_link(text_, href):
     return f'<a class="card-link" href="{h(href)}">{h(text_)}</a>'
-
-
-def clamp2(inner_html, full_text, lang=None, cls=""):
-    """Text that wraps to 2 lines at most and then ends with "…" (``.clamp-2`` in style.css), never
-    one cut line. The full text is in the ``title``. ``inner_html`` is trusted HTML (escape its values)."""
-    lang_attr = f' lang="{h(lang)}"' if lang else ""
-    return f'<span class="clamp-2{" " + cls if cls else ""}"{lang_attr} title="{h(full_text)}">{inner_html}</span>'
 
 
 def not_found(what, back_href, back_text):

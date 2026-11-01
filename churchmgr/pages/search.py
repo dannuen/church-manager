@@ -7,7 +7,7 @@
 from .. import search as person_search
 from .. import ui
 from ..server import Response
-from ..ui import h, vi
+from ..ui import h
 
 LIMIT = 20
 
@@ -33,8 +33,9 @@ def search_page(req):
         result = f'<p class="empty">No Person found for “{h(q)}”.</p>'
     else:
         items = "".join(
-            f'<li class="row" data-row><span class="what"><a href="/people/{r["id"]}">{vi(r["full_name"])}</a>'
-            f'<span class="sub">{h(r["status_name"]) if r["status_name"] else ui.DASH}</span></span></li>'
+            '<li class="row" data-row><span class="what wrap">'
+            + ui.clamp2(f'<a href="/people/{r["id"]}">{h(r["full_name"])}</a>', r["full_name"], lang="vi")
+            + f'<span class="sub">{h(r["status_name"]) if r["status_name"] else ui.DASH}</span></span></li>'
             for r in rows
         )
         more = f'<p class="hint">Showing the first {LIMIT}. Type more of the name to narrow it.</p>' \

@@ -6,18 +6,20 @@ column keeps about 16ch and dates stay on one line. B10 a Sent document subject 
 wrap to 2 lines (full text in the title) instead of one cut line. B11 the Dashboard panels under the
 first row keep their own height. B12 one filled primary button on the Person page and on a Calendar item.
 FIX-T 2b (class UiMinorsRound2Test): B15 B16 B17 B19.
+FIX-T 4b (class UiMinorsRound4Test): B25 no action words on paper, B26 row titles wrap to 2 lines.
 """
 
 import datetime as dt
 import re
 import unittest
 import urllib.parse
+from html.parser import HTMLParser
 
 import _support  # noqa: F401 - puts the repo root on sys.path
 from churchmgr import calendar as cal
 from churchmgr import care, documents, lists, money, people, sent, ui
 from churchmgr.pages import dashboard
-from test_pages_people import ROOT, TODAY, PagesTestBase, section
+from test_pages_people import ROOT, TODAY, VOID, PagesTestBase, section
 from test_server import PANELS, parse_panels
 
 PRIMARY = 'class="btn primary"'
@@ -216,6 +218,196 @@ class UiMinorsRound2Test(PagesTestBase):
                       f'href="/copies/handovers/{name}">{name}</a></span><span class="side num">', panel)
         self.assertIn("overflow-wrap: anywhere", declarations(".row .what .file-name"))
         self.assertIn("white-space: normal", declarations(".row .what.wrap"))  # no one-line "…" cut
+
+
+# ---------------------------------------------------------------- FIX-T 4b helpers
+
+def print_hide_selectors():
+    """The selectors of the hide rule of ``web/print.css``: the first rule inside ``@media print`` that
+    says ``display: none !important``. Each selector is a list of ``(tag or None, {classes})`` parts,
+    read left to right with a space between them (a descendant)."""
+    css = re.sub(r"/\*.*?\*/", "", (ROOT / "web" / "print.css").read_text(encoding="utf-8"), flags=re.S)
+    media = css[css.index("@media print"):]
+    selector_list = next(sel for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", media[media.index("{") + 1:])
+                         if re.search(r"display:\s*none\s*!important", body))
+    out = []
+    for selector in (s.strip() for s in selector_list.split(",")):
+        parts = []
+        for part in selector.split():
+            m = re.fullmatch(r"([a-z][a-z0-9]*)?((?:\.[a-zA-Z0-9_-]+)*)", part)
+            assert m and part, f"the test cannot read the print selector {selector!r}"
+            parts.append((m.group(1), set(m.group(2).split(".")) - {""}))
+        out.append((selector, parts))
+    return out
+
+
+def _part_matches(part, element):
+    tag, classes = part
+    return (tag is None or tag == element[0]) and classes <= element[1]
+
+
+def selector_matches(parts, chain):
+    """Does the selector (``parts``) match the last element of ``chain`` (root first)?"""
+    if not _part_matches(parts[-1], chain[-1]):
+        return False
+    i = len(chain) - 2
+    for part in reversed(parts[:-1]):
+        while i >= 0 and not _part_matches(part, chain[i]):
+            i -= 1
+        if i < 0:
+            return False
+        i -= 1
+    return True
+
+
+class OnPaper(HTMLParser):
+    """Every link, button and summary of a page with its text and its href, and whether print.css
+    hides it (a hide selector matches it or one of the elements around it)."""
+
+    def __init__(self, selectors):
+        super().__init__(convert_charrefs=True)
+        self.selectors, self.stack, self.found, self.open = selectors, [], [], []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in VOID:
+            return
+        a = dict(attrs)
+        chain = [(t, c) for t, c, _hidden in self.stack] + [(tag, set((a.get("class") or "").split()))]
+        hidden = bool(self.stack and self.stack[-1][2]) or any(
+            selector_matches(parts, chain) for _sel, parts in self.selectors)
+        self.stack.append((tag, chain[-1][1], hidden))
+        if tag in ("a", "button", "summary"):
+            item = {"tag": tag, "href": a.get("href") or "", "hidden": hidden, "text": "", "depth": len(self.stack)}
+            self.found.append(item)
+            self.open.append(item)
+
+    def handle_endtag(self, tag):
+        for i in range(len(self.stack) - 1, -1, -1):
+            if self.stack[i][0] == tag:
+                del self.stack[i:]
+                break
+        self.open = [item for item in self.open if item["depth"] <= len(self.stack)]
+
+    def handle_data(self, data):
+        for item in self.open:
+            item["text"] += data
+
+
+def on_paper(page):
+    parser = OnPaper(print_hide_selectors())
+    parser.feed(page)
+    for item in parser.found:
+        item["text"] = " ".join(item["text"].split())
+    return parser.found
+
+
+ACTION_WORDS = {"Delete", "Edit", "Plan", "Record", "Edit details", "Plan a Visit", "Add a Family",
+                "Record Offering", "Record Expense", "Rename", "Cancel", "Retry", "Calendar"}
+ACTION_STARTS = ("View all ", "Open ", "Show all ", "Mark it done")
+
+
+def is_action(text_):
+    return text_ in ACTION_WORDS or text_.startswith(ACTION_STARTS)
+
+
+def row_items(html_text):
+    """The inner HTML of each ``<li class="row ..." data-row>`` (rows are never nested)."""
+    return re.findall(r'<li class="row[^"]*" data-row>(.*?)</li>', html_text, re.S)
+
+
+CLAMPED_TITLE = re.compile(r'<span class="what wrap"><span class="clamp-2"(?: lang="vi")? title="([^"]+)">')
+
+
+class UiMinorsRound4Test(PagesTestBase):
+    """FIX-T 4b. B25 no action words on paper: the hide rule of print.css covers every text action.
+    B26 the title of every row list wraps to 2 lines (full text in its title); the grey side text gets
+    at most 30% of the row, one line, full text in its title."""
+
+    def test_b25_no_action_words_on_paper(self):
+        conn = self.db()
+        pid = people.list_persons(conn)[0]["id"]
+        money.add_offering(conn, TODAY.isoformat(), 100_000, lists.find_item(conn, "fund", name="General")["id"])
+        cal.add_calendar_item(conn, "Service", "FIX-T B25 Thờ phượng", f"{YESTERDAY} 08:00")  # Record
+        people.add_private_note(conn, pid, "FIX-T B25 ghi chú")  # its Edit link
+        selectors = [sel for sel, _parts in print_hide_selectors()]
+        for sel in (".card-link", ".row-action", ".note-edit", ".form-actions", "td.edit", "th.edit",
+                    "td.act", "th.act"):
+            self.assertIn(sel, selectors)
+        paths = ("/documents", "/care", f"/people/{pid}", "/", "/money", "/calendar", "/lists")
+        hidden_words, data_links = set(), {}
+        for path in paths:
+            found = on_paper(self.page(path))
+            for item in found:
+                if is_action(item["text"]):
+                    self.assertTrue(item["hidden"], f"{path}: {item['tag']} {item['text']!r} shows on paper")
+                    hidden_words.add(item["text"])
+            data_links[path] = [i["href"] for i in found if not i["hidden"] and not is_action(i["text"])]
+        for word in ("Delete", "Edit", "Plan", "Record", "Edit details", "Plan a Visit", "Add a Family",
+                     "Record Offering", "Record Expense", "Rename"):
+            self.assertIn(word, hidden_words)  # each one was on a page, and is hidden
+        for start in ("View all ", "Open "):
+            self.assertTrue(any(w.startswith(start) for w in hidden_words), start)
+        # links that are data stay on paper (as ink text)
+        self.assertTrue(any(re.fullmatch(r"/documents/\d+/file", href) for href in data_links["/documents"]))
+        self.assertTrue(any(re.fullmatch(r"/people/\d+", href) for href in data_links["/care"]))
+        self.assertTrue(any(re.fullmatch(r"/calendar/\d+", href) for href in data_links["/"]))
+        # the Documents Delete column goes whole: its header and every cell have the class act
+        docs = section(self.page("/documents"), "documents-list")
+        self.assertEqual(docs.count('<th scope="col" class="act"></th>'), 1)
+        self.assertEqual(docs.count('<td class="act"><a href="/documents/'), docs.count("<tr data-row>"))
+        self.assertIn(".list-head .spacer", selectors)  # Care: no empty Plan column in the list head
+        # a panel that is only a form is not a heading over nothing on paper
+        self.assertIn('<section class="panel no-print" data-panel="plan"', self.page("/care"))
+        self.assertIn('<section class="panel no-print" data-panel="statement-picker"', self.page("/money"))
+        self.assertIn('<p class="hint list-foot no-print">To add a Document', self.page("/documents"))
+
+    def test_b26_row_titles_wrap_to_two_lines_and_the_side_gets_30_percent(self):
+        conn = self.db()
+        title, place = "Lễ Tạ Ơn – Thờ phượng Chúa Nhật", "Sân nhà thờ lớn phía sau hội trường"
+        today_id = cal.add_calendar_item(conn, "Service", title, f"{TODAY.isoformat()} 06:00", place=place)[0]
+        to_record = "Thờ phượng Chúa Nhật vòng 3"
+        record_id = cal.add_calendar_item(conn, "Service", to_record, f"{YESTERDAY} 09:00")[0]
+        week = section(self.page("/"), "this-week")
+        self.assertIn(f'<span class="what wrap"><span class="clamp-2" lang="vi" title="{title}">'
+                      f'<a href="/calendar/{today_id}">{title}</a></span></span>'
+                      f'<span class="side" title="Service · {place}">Service · <span lang="vi">{place}</span></span>',
+                      week)
+        record = section(self.page("/calendar"), "to-record")
+        self.assertIn(f'<span class="what wrap"><span class="clamp-2" lang="vi" title="{to_record}">'
+                      f'<a href="/calendar/{record_id}#head-count">{to_record}</a></span>', record)
+        side = declarations(".row .side")
+        self.assertIn("max-width: 30%", side)
+        self.assertIn("flex: 0 1 auto", side)
+        self.assertIn("text-overflow: ellipsis", side)
+        # long names (120 characters at most): every row list puts its title in .clamp-2, whole in the title
+        long_title = ("FIX-T B26 Hội nghị Chấp sự và Trưởng Chi phái toàn Hội Thánh bàn kế hoạch thăm viếng "
+                      "các gia đình mới về Hội Thánh dịp cuối năm")[:120].rstrip()
+        long_name = ("FIX-T B26 Nguyễn Trần Lê Phạm Hoàng Huỳnh Phan Vũ Võ Đặng Bùi Đỗ Hồ Ngô Dương Lý "
+                     "Thị Minh Khai Phương Thảo Ngọc Bích Hồng Nhung Kim")[:120].rstrip()
+        self.assertGreaterEqual(min(len(long_title), len(long_name)), 115)
+        item = cal.add_calendar_item(conn, "Meeting", long_title, f"{TODAY.isoformat()} 19:00", place=place)[0]
+        member = lists.find_item(conn, "status", code="member")["id"]
+        person = people.add_person(conn, long_name, status_id=member, start_date=YESTERDAY)
+        cal.add_person_to_item(conn, item, person, "serves")
+        lists_by_page = (("/", "this-week"), ("/", "needs-visit"), ("/calendar", "calendar-list"),
+                         ("/calendar", "to-record"), ("/care", "needs-visit"), ("/care", "care-log"),
+                         (f"/calendar/{item}", "people"), ("/search?q=FIX-T+B26", None))
+        for path, name in lists_by_page:
+            page = self.page(path)
+            html_text = section(page, name) if name else page
+            rows = row_items(html_text)
+            self.assertTrue(rows, (path, name))
+            for row in rows:
+                m = CLAMPED_TITLE.search(row)
+                self.assertIsNotNone(m, (path, name, row[:300]))
+                for side_span in re.findall(r'<span class="side"[^>]*>', row):
+                    self.assertIn(' title="', side_span, (path, name))
+        joined = "".join(self.page(p) for p in ("/calendar", "/care", f"/calendar/{item}", "/search?q=FIX-T+B26"))
+        self.assertIn(f'title="{long_title}"', joined)
+        self.assertIn(f'title="{long_name}"', joined)
+        # one row height rule for every list: each part sits on the first line of the title
+        self.assertIn("align-items: baseline", declarations(".row:has(> .what.wrap)"))
+        self.assertIn("white-space: nowrap", declarations(".row .time"))
 
 
 if __name__ == "__main__":

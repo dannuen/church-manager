@@ -70,12 +70,13 @@ class CalendarPagesTest(PagesTestBase):
         self.assertEqual([s["starts_at"] for s in series],
                          [f"{days(n).isoformat()} 19:00" for n in (-22, -15, -8, -1, 6)])
         self.assertTrue(all(s["ends_at"][11:] == "20:30" and s["place"] == "Nhà thờ" for s in series))
-        # all 5 are listed: once by week, once by month
+        # all 5 are listed: once by week, once by month (the link text; the title attribute holds it too)
         weeks = sorted({cal_pages.week_start(days(n)) for n in (-22, -15, -8, -1, 6)})
-        by_week = sum(section(self.page(f"/calendar?week={w.isoformat()}"), "calendar-list").count(title)
+        by_week = sum(section(self.page(f"/calendar?week={w.isoformat()}"), "calendar-list").count(f">{title}</a>")
                       for w in weeks)
         months = sorted({s["starts_at"][:7] for s in series})
-        by_month = sum(section(self.page(f"/calendar?month={m}"), "calendar-list").count(title) for m in months)
+        by_month = sum(section(self.page(f"/calendar?month={m}"), "calendar-list").count(f">{title}</a>")
+                       for m in months)
         self.assertEqual((by_week, by_month), (5, 5))
         week_page = self.page(f"/calendar?week={days(-1).isoformat()}")
         self.assertIn("19:00–20:30", section(week_page, "calendar-list"))
@@ -240,7 +241,7 @@ class CalendarPagesTest(PagesTestBase):
             self.assertEqual(listing.count('class="row cal-row"'), count)
             self.assertEqual(listing.count('class="cal-day'), 7)  # every day is listed
             first = (today - sunday).days
-            self.assertEqual(sorted(int(n) for n in re.findall(r"B1 Họp ngày (-?\d+)", listing)),
+            self.assertEqual(sorted(int(n) for n in re.findall(r">B1 Họp ngày (-?\d+)</a>", listing)),
                              list(range(first, first + 7)))
             self.assertEqual(count, 7)
             # Previous and Next move 7 days and keep ?from=

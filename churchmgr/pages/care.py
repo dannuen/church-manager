@@ -53,11 +53,15 @@ def visit_start(value):
 # ---------------------------------------------------------------- blocks
 
 def _needs_panel(conn, needs, months):
+    def sub(p):
+        status = p["status_name"] or "—"
+        text_ = f'{status} · {p["family_name"]}' if p["family_name"] else status
+        family = f' · {vi(p["family_name"])}' if p["family_name"] else ""
+        return f'<span class="sub" title="{h(text_)}">{h(status)}{family}</span>'
+
     rows = "".join(
-        '<li class="row" data-row><span class="what">'
-        f'{person_link(p["person_id"], p["full_name"])}'
-        f'<span class="sub">{h(p["status_name"]) if p["status_name"] else "—"}'
-        f'{" · " + vi(p["family_name"]) if p["family_name"] else ""}</span></span>'
+        '<li class="row" data-row><span class="what wrap">'
+        f'{ui.clamp2(person_link(p["person_id"], p["full_name"]), p["full_name"])}{sub(p)}</span>'
         f'<span class="figure num{" faint" if not p["last_visit"] else ""}" title="Last Visit">'
         f'{h(ui.fmt_date(p["last_visit"])) if p["last_visit"] else "never"}</span>'
         f'<a class="row-action" href="{h(ui.url("/care", person_id=p["person_id"]))}#plan" '
@@ -90,8 +94,9 @@ def _plan_panel(conn, req, error):
                             rows=2)
         + form_error(errors) + ui.button("Plan a Visit")
     )
+    # a form only: on paper (print.css hides .no-print) it would be a heading over nothing
     return panel("plan", "Plan a Visit", ui.form("/care/visits", inner, id="plan"),
-                 meta="It goes on the Calendar as a Visit.")
+                 meta="It goes on the Calendar as a Visit.", cls="no-print")
 
 
 def _done_form(row, error, vals):
@@ -124,10 +129,13 @@ def _planned_panel(planned, error, req):
 
 def _log_panel(log, show_all):
     shown = log if show_all else log[:LOG_ROWS]
+    # as on the Person page: the name and the note each wrap to 2 lines, the full text in the title
     rows = "".join(
-        '<li class="row" data-row><span class="what">'
-        f'<span>{_who(r)}</span><span class="sub" lang="vi">{h(r["care_note"]) if r["care_note"] else "—"}</span>'
-        f'</span><span class="figure num">{h(ui.fmt_date(r["done_date"]))}</span></li>'
+        '<li class="row" data-row><span class="what wrap">'
+        + ui.clamp2(_who(r), r["who"] or "")
+        + (ui.clamp2(h(r["care_note"]), r["care_note"], lang="vi", cls="sub") if r["care_note"]
+           else '<span class="sub">—</span>')
+        + f'</span><span class="figure num">{h(ui.fmt_date(r["done_date"]))}</span></li>'
         for r in shown
     )
     body = f'<ul class="rows">{rows}</ul>' if shown else empty("No Visit done yet.")
