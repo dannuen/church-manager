@@ -36,6 +36,49 @@ class HandoverPagesTest(PagesTestBase):
     def note_count(self):
         return self.db().execute("SELECT COUNT(*) FROM private_note").fetchone()[0]
 
+    def test_a_refused_handover_is_made_after_the_private_note_is_changed(self):
+        """B13: a Private note and a .txt Document hold the same words -> refused. The page sends the
+        pastor to the Private note; Edit changes it in the app; then Make Handover works."""
+        conn = self.db()
+        owner = people.list_persons(conn)[4]["id"]
+        words = "B13 lời cầu nguyện riêng 9154"
+        note_id = people.add_private_note(conn, owner, words)
+        documents.add_document(conn, self.copy, f"Ghi chép: {words}\n".encode("utf-8"), "b13.txt", person_id=owner)
+        status, _h, data = self.request("POST", "/copies/handover", {})
+        page = data.decode("utf-8")
+        self.assertEqual(status, 400)
+        refusal = section(page, "handover")
+        self.assertIn(f'<li>The Private note of <a href="/people/{owner}#private-note">', refusal)
+        self.assertIn("A Document file cannot be changed in the app, so for a Document change the Private note. "
+                      "Then press Make Handover again. Nothing was changed and no zip was saved.", refusal)
+        self.assertNotIn(words, page)
+        self.assertNotIn("9154", page)
+        # the link opens the Person page at the Private note panel; Edit next to the note opens its form
+        person_page = self.page(f"/people/{owner}")
+        self.assertIn('<div id="private-note" class="no-print">', person_page)
+        self.assertIn(f'href="/people/{owner}?edit_note={note_id}#private-note"', section(person_page, "private-note"))
+        self.assertIn(f'action="/people/{owner}/private-notes/{note_id}"',
+                      section(self.page(f"/people/{owner}?edit_note={note_id}"), "private-note"))
+        new = "B13 đã đổi lời ghi riêng 2207"
+        headers = self.post(f"/people/{owner}/private-notes/{note_id}", {"body": new})[0]
+        self.assertNotIn("2207", urllib.parse.unquote_plus(headers["location"]))
+        # Make Handover again: it is made, and its zip has no Private note
+        before = set(self.handovers())
+        headers = self.post("/copies/handover", {})[0]
+        name = urllib.parse.parse_qs(urllib.parse.urlsplit(headers["location"]).query)["made"][0]
+        self.assertNotIn(name, before)
+        check = self.root / "check-b13.db"
+        with zipfile.ZipFile(self.root / "handovers" / name) as zf:
+            check.write_bytes(zf.read(db.DB_NAME))
+            for member in zf.namelist():
+                self.assertNotIn(new.encode("utf-8"), zf.read(member), member)
+        conn = sqlite3.connect(check)
+        try:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM private_note").fetchone()[0], 0)
+        finally:
+            conn.close()
+        self.assertEqual(people.list_private_notes(self.db(), owner)[0]["body"], new)  # the copy keeps it
+
     def test_copies_page_says_where_everything_is(self):
         page = self.page("/copies")
         this = section(page, "this-copy").replace("<wbr>", "")  # paths may wrap after a \ or /
@@ -65,9 +108,10 @@ class HandoverPagesTest(PagesTestBase):
         refusal = section(page, "handover")
         self.assertIn("Handover not made.", refusal)
         self.assertIn("The words of a Private note are also written somewhere else", refusal)
-        self.assertIn(f'href="/people/{owner}"', refusal)  # whose Private note
+        self.assertIn(f'href="/people/{owner}#private-note"', refusal)  # whose Private note: its Edit link is there
         self.assertIn(f'the note of the Person <a href="/people/{other}"', refusal)  # where it was found
-        self.assertIn("Edit that text", refusal)
+        self.assertIn("Change the Private note so it is not the same (open the Person, then Edit next to the note)",
+                      refusal)
         self.assertNotIn(words, page)  # the Private note text is never shown
         self.assertNotIn("trùng lặp", page)
         self.assertEqual(self.handovers(), before)  # no zip, no work folder left
@@ -89,8 +133,8 @@ class HandoverPagesTest(PagesTestBase):
         self.assertEqual(status, 400)
         refusal = section(page, "handover")
         self.assertIn("Handover not made.", refusal)
-        self.assertRegex(refusal, rf'<li>The Private note of <a href="/people/{owner["id"]}">.*?</a> is also written '
-                                  rf'in the Document <span lang="vi">ghichu.txt</span> of '
+        self.assertRegex(refusal, rf'<li>The Private note of <a href="/people/{owner["id"]}#private-note">.*?</a> is '
+                                  rf'also written in the Document <span lang="vi">ghichu.txt</span> of '
                                   rf'<a href="/people/{owner["id"]}" lang="vi">.*?</a>\.</li>')
         self.assertNotIn(words, page)  # the Private note text is never shown
         self.assertNotIn("tư vấn", page)

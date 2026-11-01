@@ -143,8 +143,9 @@ def not_found(what, back_href, back_text):
     return Response.html(ui.page(f"{what} not found", body), 404)
 
 
-def person_link(pid, name):
-    return f'<a href="/people/{int(pid)}">{vi(name)}</a>'
+def person_link(pid, name, anchor=""):
+    """A link to the Person page; ``anchor`` (such as ``"#private-note"``) goes to one panel of it."""
+    return f'<a href="/people/{int(pid)}{h(anchor)}">{vi(name)}</a>'
 
 
 def family_link(fid, name):
@@ -471,22 +472,43 @@ def _details_panel(conn, person):
     return panel("details", "Details", body, foot=card_link("Edit details", f"/people/{pid}/edit"))
 
 
-def _private_panel(conn, pid, error, vals):
-    """Private notes: only here, only on screen (``no-print``)."""
+def _private_panel(conn, pid, error, vals, edit_id=None, edit_vals=None):
+    """Private notes: only here, only on screen (``no-print``). Each note has an Edit link
+    (``?edit_note=<id>#private-note``); with ``edit_id`` that note shows in a form instead.
+    The words of a note are only ever in this panel: never in a URL, a message or the story."""
     notes = people.list_private_notes(conn, pid)
+    editing = next((n for n in notes if n["id"] == edit_id), None)
     errors = field_errors(error, "private", {})
-    items = "".join(
-        f'<li class="note" data-row><span class="when num">{h(ui.fmt_datetime(n["created_at"]))}</span>'
-        f'<p lang="vi">{h(n["body"])}</p></li>'
-        for n in notes
-    )
-    listing = f'<ul class="notes">{items}</ul>' if notes else empty("No Private note yet.")
-    form = ui.form(f"/people/{pid}/private-notes", (
-        ui.textarea_field("New Private note", "body", vals.get("body", ""), id="private-body", lang="vi",
-                          required=True)
-        + form_error(errors) + ui.button("Add Private note", "secondary")))
-    return panel("private-note", PRIVATE_LABEL, listing + form, cls="private no-print",
-                 meta="Never printed. Removed at Handover.")
+    edit_errors = field_errors(error, "private-edit", {"body": "A private note"})
+    edit_vals = edit_vals or {}
+    here = f"/people/{pid}"
+
+    def item(n):
+        when = h(ui.fmt_datetime(n["created_at"]))
+        if editing is not None and n["id"] == editing["id"]:
+            form = ui.form(f"{here}/private-notes/{n['id']}", (
+                ui.textarea_field("Change this Private note", "body", edit_vals.get("body", n["body"]),
+                                  id="private-edit-body", lang="vi", rows=4, required=True,
+                                  error=edit_errors.get("body"))
+                + form_error(edit_errors)
+                + '<div class="form-actions">' + ui.button("Save Private note", "secondary")
+                + f'<a class="text-action" href="{here}#private-note">Cancel</a></div>'))
+            return f'<li class="note editing" data-row><span class="when num">{when}</span>{form}</li>'
+        edit = (f'<a class="note-edit" href="{h(ui.url(here, edit_note=n["id"]))}#private-note" '
+                f'aria-label="Edit the Private note of {when}">Edit</a>')
+        return (f'<li class="note" data-row><div class="note-head"><span class="when num">{when}</span>{edit}</div>'
+                f'<p lang="vi">{h(n["body"])}</p></li>')
+
+    listing = f'<ul class="notes">{"".join(item(n) for n in notes)}</ul>' if notes else empty("No Private note yet.")
+    if editing is None:
+        listing = form_error(edit_errors) + listing  # a refused change of a note that is not here
+        listing += ui.form(f"{here}/private-notes", (
+            ui.textarea_field("New Private note", "body", vals.get("body", ""), id="private-body", lang="vi",
+                              required=True)
+            + form_error(errors) + ui.button("Add Private note", "secondary")))
+    section_html = panel("private-note", PRIVATE_LABEL, listing, cls="private no-print",
+                         meta="Never printed. Removed at Handover.")
+    return f'<div id="private-note" class="no-print">{section_html}</div>'
 
 
 def _care_panel(conn, pid):
@@ -527,7 +549,8 @@ def _person_view(req, person, error=None, status=200):
 
     left = (_status_panel(conn, pid, error, vals("status")) + _family_panel(conn, pid, error, vals("family"))
             + _ministry_panel(conn, pid, error, vals("ministry")) + _story_panel(events))
-    right = (_details_panel(conn, person) + _private_panel(conn, pid, error, vals("private"))
+    right = (_details_panel(conn, person)
+             + _private_panel(conn, pid, error, vals("private"), _edit_note_id(req, form_key), vals("private-edit"))
              + _care_panel(conn, pid) + document_pages.documents_panel(conn, person_id=pid))
     body = (f'<div class="grid person"><div class="span-8 stack">{left}</div>'
             f'<div class="side-4 stack">{right}</div></div>')
@@ -540,6 +563,16 @@ def _person_view(req, person, error=None, status=200):
 
 def _person_or_none(req):
     return people.get_person(req.conn, req.params["id"])
+
+
+def _edit_note_id(req, form_key):
+    """The Private note shown in its edit form: the one a refused change was for, else
+    ``?edit_note=<id>``. ``None`` when there is none or the value is not a whole number."""
+    raw = req.params.get("note_id") if form_key == "private-edit" else req.query.get("edit_note")
+    try:
+        return text.to_id(raw if raw is not None else "", "Private note")
+    except ValueError:
+        return None
 
 
 def person_page(req):
@@ -618,6 +651,22 @@ def private_note_post(req):
     return _history_post(req, "private", change)
 
 
+def private_note_edit_post(req):
+    """Save the changed text of one Private note. The words go only into the database: the
+    message and the URL never hold them. A note of another Person is not found here."""
+    person = _person_or_none(req)
+    if person is None:
+        return not_found("Person", "/people", "Go to People")
+    pid, note_id = person["id"], req.params["note_id"]
+    if not any(n["id"] == note_id for n in people.list_private_notes(req.conn, pid)):
+        return not_found("Private note", f"/people/{pid}", "Go back to the Person")
+    try:
+        people.update_private_note(req.conn, pid, note_id, req.form.get("body"))
+    except ValueError as exc:
+        return _person_view(req, person, ("private-edit", str(exc)), 400)
+    return Response.redirect(ui.url(f"/people/{pid}", msg="Private note changed.") + "#private-note")
+
+
 ROUTES = [
     ("GET", "/people", list_page),
     ("GET", "/people/new", new_page),
@@ -629,4 +678,5 @@ ROUTES = [
     ("POST", "/people/<int:id>/family", family_post),
     ("POST", "/people/<int:id>/ministry", ministry_post),
     ("POST", "/people/<int:id>/private-notes", private_note_post),
+    ("POST", "/people/<int:id>/private-notes/<int:note_id>", private_note_edit_post),
 ]

@@ -341,6 +341,30 @@ class PrivateNoteTest(CopyTestCase):
         # the normal note is a different field, never private
         self.assertIsNone(people.get_person(self.conn, pid)["note"])
 
+    def test_update_private_note_replaces_the_text_in_place(self):
+        """B13: the pastor can change a Private note (so a refused Handover can be made)."""
+        pid = people.add_person(self.conn, NAME)
+        other = people.add_person(self.conn, "Trần Văn Bảo")
+        nid = people.add_private_note(self.conn, pid, "Lời cũ cần xóa 7731")
+        keep = people.add_private_note(self.conn, other, "Của người khác")
+        created = people.list_private_notes(self.conn, pid)[0]["created_at"]
+        people.update_private_note(self.conn, pid, nid, nfd("  Lời mới đã đổi  "))
+        notes = people.list_private_notes(self.conn, pid)
+        self.assertEqual([(n["id"], n["body"], n["created_at"]) for n in notes], [(nid, "Lời mới đã đổi", created)])
+        rows = self.conn.execute("SELECT body FROM private_note").fetchall()
+        self.assertEqual(sorted(r[0] for r in rows), sorted(["Lời mới đã đổi", "Của người khác"]))  # no old copy
+        self.assertFalse(any("7731" in r[0] for r in rows))
+        # empty text, a note of another Person, a note that does not exist: refused, nothing changed
+        with self.assertRaisesRegex(ValueError, r"^A private note needs some text\.$"):
+            people.update_private_note(self.conn, pid, nid, "  \n ")
+        for person, note in ((pid, keep), (other, nid), (pid, 9999)):
+            with self.assertRaises(ValueError, msg=(person, note)):
+                people.update_private_note(self.conn, person, note, "Thử đổi")
+        with self.assertRaises(ValueError):
+            people.update_private_note(self.conn, 9999, nid, "Thử đổi")
+        self.assertEqual(sorted(r[0] for r in self.conn.execute("SELECT body FROM private_note")),
+                         sorted(["Lời mới đã đổi", "Của người khác"]))
+
 
 class SearchTest(CopyTestCase):
     def setUp(self):

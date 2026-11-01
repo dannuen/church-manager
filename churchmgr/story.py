@@ -112,7 +112,7 @@ def person_story(conn, person_id, include_private=False):
         f"SELECT ci.id, ci.visit_done, {day_sql} AS day, ci.care_note, COALESCE(p.full_name, f.name) AS who "
         "FROM calendar_item ci LEFT JOIN person p ON p.id = ci.visit_person_id "
         "LEFT JOIN family f ON f.id = ci.visit_family_id "
-        "WHERE ci.kind = 'Visit' AND " + _FOR_PERSON.format(day=day_sql), {"pid": pid}
+        "WHERE ci.kind = 'Visit' AND " + _FOR_PERSON.format(pid=":pid", day=day_sql), {"pid": pid}
     ):
         words = f"Visit done: {r['who']}" if r["visit_done"] else f"Visit planned: {r['who']}"
         if r["visit_done"] and r["care_note"]:

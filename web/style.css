@@ -435,3 +435,17 @@ table.money th.category { white-space: normal; line-height: 16px; }
 @media (max-width: 1249px) {
   .grid.money-month > .span-6 { grid-column: 1 / -1; }
 }
+
+/* ---------- FIX-T 2a ----------
+   B13: each Private note has an Edit text action at the right of its date. The note being edited shows
+   its form in place: Save Private note (secondary: the Person page keeps one filled primary) and Cancel
+   (a text action). Both stay inside the .no-print panel. */
+.note-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.note-edit, .form-actions .text-action { flex: none; font-size: var(--fs-meta); font-weight: 600; color: var(--text); }
+.note.editing .form { margin-top: 8px; max-width: none; }
+.panel.private .notes:last-child { margin-bottom: 0; }   /* while a note is edited the add form is hidden */
+.form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+@media (max-width: 640px) {
+  .note-edit { padding: 12px 0 12px 12px; margin: -12px 0 -12px -12px; }   /* a 44px tap */
+  .form-actions .text-action { display: inline-flex; align-items: center; min-height: 44px; }
+}

@@ -13,19 +13,20 @@ from .db import transaction
 DEFAULT_REMINDER_MONTHS = 3
 NOT_CARED_STATUS_CODES = ("left", "passed_away")
 
-# A done Visit ``ci`` is in the Care log of Person ``:pid`` when it was for the
-# Person, for their current Family, or for a Family they were in on the done date.
+# A Visit ``ci`` counts for Person ``{pid}`` when it was for the Person, or for a Family the
+# Person was in on ``{day}`` (the done date; the start date of a planned Visit). A Family Visit
+# from before the Person joined, or after they left, does not count for them.
 _FOR_PERSON = (
-    "(ci.visit_person_id = :pid"
-    " OR ci.visit_family_id IN (SELECT family_id FROM family_link WHERE person_id = :pid AND end_date IS NULL)"
-    " OR EXISTS (SELECT 1 FROM family_link fl WHERE fl.person_id = :pid AND fl.family_id = ci.visit_family_id"
+    "(ci.visit_person_id = {pid}"
+    " OR EXISTS (SELECT 1 FROM family_link fl WHERE fl.person_id = {pid} AND fl.family_id = ci.visit_family_id"
     " AND fl.start_date <= {day} AND (fl.end_date IS NULL OR fl.end_date > {day})))"
 )
 
 
 def plan_visit(conn, starts_at, person_id=None, family_id=None, title=None, note=None):
     """Plan a Visit for exactly one Person or one Family. Returns the Calendar item id.
-    The title defaults to "Visit <name>"."""
+    The title defaults to "Visit <name>", cut to ``text.MAX_NAME_LENGTH`` characters with "…"
+    when the name is long. A title the caller gives is never cut (it is still checked)."""
     has_person = person_id not in (None, "")
     has_family = family_id not in (None, "")
     if has_person == has_family:
@@ -45,6 +46,8 @@ def plan_visit(conn, starts_at, person_id=None, family_id=None, title=None, note
             pid = None
         if title is None or (isinstance(title, str) and not title.strip()):
             title = f"Visit {row['name']}"
+            if len(title) > text.MAX_NAME_LENGTH:
+                title = title[: text.MAX_NAME_LENGTH - 1].rstrip() + "…"
         return _add_items(conn, "Visit", title, starts_at, note=note,
                           visit_person_id=pid, visit_family_id=fid)[0]
 
@@ -69,8 +72,8 @@ def mark_visit_done(conn, item_id, done_date, care_note=None):
 def care_log(conn, person_id=None):
     """Done Visits, newest first: who, when (``done_date``) and the short note.
 
-    With ``person_id``: Visits for that Person, for their current Family, or for a
-    Family they were in on the done date.
+    With ``person_id``: Visits for that Person, or for a Family they were in on the done date
+    (a past Family too; not a Family they joined after the Visit).
     """
     sql = (
         "SELECT ci.id, ci.title, ci.visit_done_date AS done_date, ci.care_note, "
@@ -82,7 +85,7 @@ def care_log(conn, person_id=None):
     )
     params = {}
     if person_id is not None:
-        sql += " AND " + _FOR_PERSON.format(day="ci.visit_done_date")
+        sql += " AND " + _FOR_PERSON.format(pid=":pid", day="ci.visit_done_date")
         params["pid"] = text.to_id(person_id, "Person")
     return conn.execute(sql + " ORDER BY ci.visit_done_date DESC, ci.id DESC", params).fetchall()
 
@@ -99,7 +102,8 @@ def needs_visit(conn, today=None):
     A Person is included when their current Status is not Left or Passed away
     (no Status counts as included) and their last done Visit is older than the
     care reminder time, or they never had one. A done Visit counts for a Person
-    when it was for them or for their current Family.
+    when it was for them, or for a Family they were in on its done date (the same
+    rule as their Care log).
     Each item: person_id, full_name, status_name, family_name, last_visit (date text or ``None``).
     """
     day = _dt.date.today() if today is None else _dt.date.fromisoformat(text.check_date(today, "Today"))
@@ -109,13 +113,13 @@ def needs_visit(conn, today=None):
         "SELECT p.id AS person_id, p.full_name, p.name_folded, li.name AS status_name, "
         "f.name AS family_name, "
         "(SELECT MAX(ci.visit_done_date) FROM calendar_item ci "
-        " WHERE ci.kind = 'Visit' AND ci.visit_done = 1 AND (ci.visit_person_id = p.id "
-        " OR (fl.family_id IS NOT NULL AND ci.visit_family_id = fl.family_id))) AS last_visit "
+        " WHERE ci.kind = 'Visit' AND ci.visit_done = 1 AND "
+        + _FOR_PERSON.format(pid="p.id", day="ci.visit_done_date") + ") AS last_visit "
         "FROM person p "
         "LEFT JOIN person_status ps ON ps.person_id = p.id AND ps.end_date IS NULL "
         "LEFT JOIN list_item li ON li.id = ps.status_id "
-        "LEFT JOIN family_link fl ON fl.person_id = p.id AND fl.end_date IS NULL "
-        "LEFT JOIN family f ON f.id = fl.family_id "
+        "LEFT JOIN family_link cfl ON cfl.person_id = p.id AND cfl.end_date IS NULL "
+        "LEFT JOIN family f ON f.id = cfl.family_id "
         f"WHERE li.code IS NULL OR li.code NOT IN ({codes})",
         NOT_CARED_STATUS_CODES,
     ).fetchall()

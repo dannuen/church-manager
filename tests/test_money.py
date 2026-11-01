@@ -331,6 +331,27 @@ class CorrectAndDeleteTest(CopyTestCase):
         self.assertIsNone(money.get_offering(self.conn, 9999))
         self.assertIsNone(money.get_expense(self.conn, 9999))
 
+    def test_a_date_needs_a_year_from_1900(self):
+        """B18: a row dated before 1900 would be in no Money month (a month starts at 1900-01)."""
+        before = (tuple(self.row("offering", self.oid)), tuple(self.row("expense", self.eid)))
+        counts = (self.count("offering"), self.count("expense"))
+        for day in ("0001-01-01", "1899-12-31"):
+            calls = (
+                lambda: money.add_offering(self.conn, day, 1000, self.general),
+                lambda: money.update_offering(self.conn, self.oid, date=day, amount=1000, fund_id=self.general),
+                lambda: money.add_expense(self.conn, day, 1000, self.rent),
+                lambda: money.update_expense(self.conn, self.eid, date=day, amount=1000, spending_category_id=self.rent),
+            )
+            for i, call in enumerate(calls):
+                with self.assertRaisesRegex(ValueError, r"^Date: use a year from 1900 to 9999\.$", msg=(day, i)):
+                    call()
+        self.assertEqual((self.count("offering"), self.count("expense")), counts)  # nothing saved
+        self.assertEqual((tuple(self.row("offering", self.oid)), tuple(self.row("expense", self.eid))), before)
+        oid = money.add_offering(self.conn, "1900-01-01", 1000, self.general)
+        money.update_expense(self.conn, self.eid, date="1900-01-01", amount=500, spending_category_id=self.rent)
+        self.assertEqual(money.get_offering(self.conn, oid)["date"], "1900-01-01")
+        self.assertEqual(money.month_totals(self.conn, 1900, 1), {"offerings": 1000, "expenses": 500, "balance": 500})
+
 
 if __name__ == "__main__":
     unittest.main()

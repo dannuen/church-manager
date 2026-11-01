@@ -105,10 +105,19 @@ def _sum(conn, sql, params):
 # dated links (Status, Family, Chi phái, Trưởng Chi phái), so a typo is not history and no old copy
 # is kept. ``created_at`` keeps the moment the row was first recorded.
 
+def _money_date(value):
+    """The date of an Offering or Expense as ``YYYY-MM-DD``: a real date with a year from 1900 to
+    9999, the same years as a Money month and a Giving statement (so every row is in a month)."""
+    day = text.check_date(value, "Date")
+    if not 1900 <= int(day[:4]) <= 9999:
+        raise ValueError("Date: use a year from 1900 to 9999.")
+    return day
+
+
 def _offering_values(conn, date, amount, fund_id, giver_person_id, giver_family_id, note):
     """The checked columns of an Offering: ``(date, amount, fund_id, person_id, family_id, note)``.
     Shared by :func:`add_offering` and :func:`update_offering`; call it inside a transaction."""
-    day = text.check_date(date, "Date")
+    day = _money_date(date)
     amount = check_amount(amount)
     has_person = giver_person_id not in (None, "")
     has_family = giver_family_id not in (None, "")
@@ -122,7 +131,7 @@ def _offering_values(conn, date, amount, fund_id, giver_person_id, giver_family_
 
 def _expense_values(conn, date, amount, spending_category_id, note):
     """The checked columns of an Expense: ``(date, amount, spending_category_id, note)``."""
-    day = text.check_date(date, "Date")
+    day = _money_date(date)
     amount = check_amount(amount)
     category = lists.require_item(conn, spending_category_id, "spending_category")["id"]
     return day, amount, category, text.clean_text(note)

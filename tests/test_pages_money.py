@@ -397,6 +397,35 @@ class CorrectMoneyPagesTest(PagesTestBase):
         self.page(f"/money/expenses/{eid}/edit", expect=404)
         self.post(f"/money/expenses/{eid}/delete", {"confirm": "yes"}, expect=404)
 
+    def test_a_date_before_1900_is_refused_next_to_the_date(self):
+        """B18: such a row would be in no Money month. Add and Edit, Offering and Expense."""
+        conn = self.db()
+        events = self.category("Events")
+        oid = money.add_offering(conn, TODAY.isoformat(), 70_000, self.fund())
+        eid = money.add_expense(conn, TODAY.isoformat(), 80_000, events)
+        rows = (tuple(money.get_offering(conn, oid)), tuple(money.get_expense(conn, eid)))
+        counts = [conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in ("offering", "expense")]
+        sentence = '<p class="error" id="f-date-error">Date: use a year from 1900 to 9999.</p>'
+        for path in ("/money/offerings/new", f"/money/offerings/{oid}/edit", "/money/expenses/new",
+                     f"/money/expenses/{eid}/edit"):
+            self.assertRegex(self.page(path), r'name="date" type="date" value="[0-9-]+" min="1900-01-01" max=')
+            form = (self.offering_form("1000") if "offerings" in path else
+                    {"date": "", "amount": "1000", "spending_category_id": events, "note": ""})
+            for day in ("0001-01-01", "1899-12-31"):
+                _h, page = self.post(path, {**form, "date": day}, expect=400)
+                self.assertIn(sentence, page, (path, day))
+        conn = self.db()
+        self.assertEqual((tuple(money.get_offering(conn, oid)), tuple(money.get_expense(conn, eid))), rows)
+        self.assertEqual([conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in ("offering", "expense")],
+                         counts)  # nothing saved
+        # 1900-01-01 is saved and shown in the month 1900-01
+        headers, _ = self.post("/money/offerings/new", self.offering_form("1.900.000", day="1900-01-01"))
+        self.assertTrue(headers["location"].startswith("/money?month=1900-01&msg="), headers["location"])
+        page = self.page(headers["location"])
+        self.assertIn("1.900.000 ₫", section(page, "offerings"))
+        self.assertIn(shown("1900-01-01"), section(page, "offerings"))
+        self.assertIn("1.900.000 ₫", section(self.page("/money?month=1900-01"), "money-totals"))
+
 
 if __name__ == "__main__":
     unittest.main()

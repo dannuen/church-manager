@@ -2,10 +2,11 @@
 Host and Origin headers): Needs a visit, Plan a Visit, Mark Visit done and the Care log."""
 
 import datetime as dt
+import re
 import unittest
 
 import _support  # noqa: F401 - puts the repo root on sys.path
-from churchmgr import care, people
+from churchmgr import care, lists, people
 from churchmgr.pages import care as care_pages
 from test_pages_people import TODAY, PagesTestBase, section, shown
 from test_server import parse_panels
@@ -94,6 +95,38 @@ class CarePageTest(PagesTestBase):
         self.assertIn('type="datetime-local"', section(page, "plan"))
         self.assertGreaterEqual(parse_panels(page).rows["care-log"], 1)
         self.assertIn("People need a visit", page)  # the finding line
+
+    def test_a_family_visit_from_before_the_person_joined_is_not_theirs(self):
+        """B20: a Person put in Family F after F's done Visit: no Last Visit, in Needs a visit as never,
+        and the Visit is not in their story. Someone in F on that day keeps it."""
+        conn = self.db()
+        member = lists.find_item(conn, "status", code="member")["id"]
+        day = (TODAY - dt.timedelta(days=30)).isoformat()
+        fid = people.add_family(conn, "Gia đình B20 Hoàng")
+        before = people.add_person(conn, "Hoàng Văn Trước B20", status_id=member, start_date="2025-01-01")
+        joined = people.add_person(conn, "Hoàng Thị Sau B20", status_id=member, start_date="2025-01-01")
+        people.set_family(conn, before, fid, "Head", "2025-01-01")
+        visit = care.plan_visit(conn, f"{day} 10:00", family_id=fid)
+        care.mark_visit_done(conn, visit, day, "B20 thăm cả nhà")
+        people.set_family(conn, joined, fid, "Spouse", (TODAY - dt.timedelta(days=10)).isoformat())
+
+        page = self.page(f"/people/{joined}")
+        sub = re.search(r'<p class="sub">(.*?)</p>', page, re.S)  # the line under the h1
+        self.assertIsNotNone(sub)
+        self.assertIn("No Visit yet", sub.group(1))
+        self.assertNotIn("Last Visit", sub.group(1))
+        self.assertIn("No Visit done yet.", section(page, "care-log"))
+        self.assertNotIn("Visit done", section(page, "story"))
+        row = re.search(rf'<li class="row" data-row><span class="what"><a href="/people/{joined}">.*?</li>',
+                        section(self.page("/care"), "needs-visit"), re.S)
+        self.assertIsNotNone(row)
+        self.assertIn('title="Last Visit">never</span>', row.group(0))
+        # in the Family on the day of the Visit: it counts
+        page = self.page(f"/people/{before}")
+        self.assertIn(f"Last Visit {shown(day)}", page)
+        self.assertIn("B20 thăm cả nhà", section(page, "care-log"))
+        self.assertIn("Visit done: Gia đình B20 Hoàng", section(page, "story"))
+        self.assertNotIn(f'href="/people/{before}"', section(self.page("/care"), "needs-visit"))
 
 
 class SmallLogicTest(unittest.TestCase):
