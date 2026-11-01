@@ -64,13 +64,16 @@ def giver_cell(row):
 
 
 def _table(name, headers, rows, total_label, total, edits=None):
-    """A money table: ``headers`` = ``[(text, numeric)]``, ``rows`` = lists of trusted cell HTML.
+    """A money table: ``headers`` = ``[(text, numeric)]`` or ``[(text, numeric, column class)]``,
+    ``rows`` = lists of trusted cell HTML. The column class (``date``, ``category``, ``note``) is on the
+    header and on every cell of that column (style.css: a date stays on one line, a Note wraps by words).
     ``edits``: one ``(href, label)`` per row for the Edit link that ends the row (screen only).
     The total is the last body row (never a ``<tfoot>``: Chromium prints a tfoot on every page)."""
-    def cls(numeric):
-        return ' class="n"' if numeric else ""
+    def col(header):
+        names = (["n"] if header[1] else []) + list(header[2:3])
+        return f' class="{" ".join(names)}"' if names else ""
 
-    head = "".join(f'<th scope="col"{cls(n)}>{h(t)}</th>' for t, n in headers)
+    head = "".join(f'<th scope="col"{col(c)}>{h(c[0])}</th>' for c in headers)
     tails, total_tail = [""] * len(rows), ""  # the Edit cell that ends each row, and an empty one in the total row
     if edits is not None:
         head += '<th scope="col" class="edit no-print"><span class="sr-only">Edit</span></th>'
@@ -78,7 +81,7 @@ def _table(name, headers, rows, total_label, total, edits=None):
                  for href, label in edits]
         total_tail = '<td class="edit no-print"></td>'
     body = "".join(
-        "<tr data-row>" + "".join(f"<td{cls(headers[i][1])}>{c}</td>" for i, c in enumerate(r)) + tail + "</tr>"
+        "<tr data-row>" + "".join(f"<td{col(headers[i])}>{c}</td>" for i, c in enumerate(r)) + tail + "</tr>"
         for r, tail in zip(rows, tails, strict=True))
     span = len(headers) - 1
     body += (f'<tr class="total"><th scope="row" colspan="{span}">{h(total_label)}</th>'
@@ -125,7 +128,7 @@ def _offerings_panel(rows, total, scope):
     lines = [[num(ui.fmt_date(r["date"])), h(r["fund_name"]), giver_cell(r), money_cell(r["amount"])] for r in rows]
     edits = [(f"/money/offerings/{r['id']}/edit", f"Edit Offering on {ui.fmt_date(r['date'])}, {r['fund_name']}")
              for r in rows]
-    body = (_table("offerings", [("Date", False), ("Fund", False), ("Giver", False), ("Amount", True)], lines,
+    body = (_table("offerings", [("Date", False, "date"), ("Fund", False), ("Giver", False), ("Amount", True)], lines,
                    "Total Offerings", total, edits)
             if rows else empty(f"No Offering recorded in {scope}."))
     link = card_link("Record Offering", "/money/offerings/new")
@@ -138,7 +141,8 @@ def _expenses_panel(rows, total, scope):
              for r in rows]
     edits = [(f"/money/expenses/{r['id']}/edit",
               f"Edit Expense on {ui.fmt_date(r['date'])}, {r['spending_category_name']}") for r in rows]
-    body = (_table("expenses", [("Date", False), ("Spending category", False), ("Note", False), ("Amount", True)],
+    body = (_table("expenses", [("Date", False, "date"), ("Spending category", False, "category"),
+                                ("Note", False, "note"), ("Amount", True)],
                    lines, "Total Expenses", total, edits)
             if rows else empty(f"No Expense recorded in {scope}."))
     link = card_link("Record Expense", "/money/expenses/new")
@@ -179,8 +183,8 @@ def money_page(req):
         _month_toolbar(year, month, today)
         + _kpis(totals, len(offerings), len(expenses))
         + '<div class="grid money-month">'
-        + f'<div class="span-7 stack">{_offerings_panel(offerings, totals["offerings"], scope)}</div>'
-        + f'<div class="span-5 stack">{_expenses_panel(expenses, totals["expenses"], scope)}'
+        + f'<div class="span-6 stack">{_offerings_panel(offerings, totals["offerings"], scope)}</div>'
+        + f'<div class="span-6 stack">{_expenses_panel(expenses, totals["expenses"], scope)}'
         + f"{_statement_picker(conn, year)}</div></div>"
     )
     actions = (ui.link_button("Record Expense", "/money/expenses/new")
@@ -191,7 +195,7 @@ def money_page(req):
 # ---------------------------------------------------------------- Record, Edit and Delete an Offering or Expense
 #
 # /money/offerings/new and /money/expenses/new record a row. /money/<kind>/<id>/edit shows the same
-# fields filled in (plus the Note) and saves the row in place; the Delete box comes last and asks
+# fields filled in (Note included) and saves the row in place; the Delete box comes last and asks
 # once more on its own page before the row goes. A typo is not history: no old copy is kept.
 
 def _amount_field(value, error):
@@ -282,7 +286,7 @@ def _deleted(what, row):
 
 def _offering_form(req, values=None, error=None, status=200, row=None):
     """The Record Offering form; with ``row`` the Edit Offering form (the same fields filled in,
-    the Note, then the Delete box)."""
+    then the Delete box). Both have the Note."""
     conn = req.conn
     v = (values or {}).get
     errors = field_errors(error, "offering", {"date": "Date", "amount": "Amount", "fund_id": "Fund", "giver": "Giver"})
@@ -294,8 +298,8 @@ def _offering_form(req, values=None, error=None, status=200, row=None):
         + ui.select_field("Fund", "fund_id", funds, selected=v("fund_id", funds[0][0] if funds else ""),
                           error=errors.get("fund_id"))
         + _giver_field(conn, v("giver", ""), errors.get("giver"))
-        + (ui.textarea_field("Note", "note", v("note", ""), lang="vi", rows=2,
-                             hint="Optional. It is never printed on a Giving statement.") if row else "")
+        + ui.textarea_field("Note", "note", v("note", ""), lang="vi", rows=2,
+                            hint="Optional. It is never printed on a Giving statement.")
         + form_error(errors) + ui.button("Save" if row else "Record Offering")
     )
     if row is None:
@@ -327,7 +331,7 @@ def offering_new_post(req):
     try:
         day, amount, person_id, family_id = _offering_input(f)
         money_data.add_offering(req.conn, day, amount, f["fund_id"], giver_person_id=person_id,
-                                giver_family_id=family_id)
+                                giver_family_id=family_id, note=f.get("note"))
     except ValueError as exc:
         return _offering_form(req, f, ("offering", str(exc)), 400)
     return _saved(req.conn, "Offering", amount, day, f["fund_id"], new=True)
@@ -466,7 +470,7 @@ def _statement_sheet(st, today):
             for r in st["rows"]]
     count = ui.plural(len(rows), "Offering", "Offerings")
     if rows:
-        table = _table("statement", [("Date", False), ("Fund", False), ("Given by", False), ("Amount", True)],
+        table = _table("statement", [("Date", False, "date"), ("Fund", False), ("Given by", False), ("Amount", True)],
                        rows, f"Total ({count})", st["total"])
     else:
         table = empty(f"No Offering from this Giver in {st['year']}. Total {money_data.format_vnd(0)}.")

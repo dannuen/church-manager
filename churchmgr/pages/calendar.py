@@ -477,7 +477,7 @@ def _head_count_panel(conn, row, error, vals, today):
                        required=True, error=errors.get("count"), hint="People at this Service.")
             + ui.textarea_field("Absent", "absent_note", v("absent_note", ""), id="hc-absent", lang="vi", rows=2,
                                 hint="A note about who was absent. Optional.")
-            + "</div>" + form_error(errors) + ui.button("Save Head count")))
+            + "</div>" + form_error(errors) + ui.button("Save Head count", "secondary")))
         form_html = change_box("Change Head count", form, bool(errors)) if hc else form
     if hc is None and row["starts_at"][:10] <= today and not errors:
         current = '<p class="hint">No Head count yet.</p>'

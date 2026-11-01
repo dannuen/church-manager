@@ -11,6 +11,7 @@ from .. import calendar as cal
 from .. import care, money, sent, ui
 from ..server import Response
 from ..ui import h, vi
+from .people import clamp2
 
 WEEK_ROWS = 6  # Calendar items shown before "View all"
 VISIT_ROWS = 6  # Persons shown in Needs a visit (the card allows up to 10; the design rule caps lists at 4-6)
@@ -219,11 +220,12 @@ def _sent_documents(next_number, recent, span):
     rows = []
     for s in recent:
         sub = " · ".join(x for x in (h(ui.fmt_date(s["date"])), vi(s["recipient_name"]), h(s["purpose_name"])))
-        rows.append(
-            '<li class="row" data-row><span class="what">'
-            f'<span><span class="num">{h(s["number"])}</span> {vi(s["subject"]) if s["subject"] else ""}</span>'
-            f'<span class="sub">{sub}</span></span></li>'
-        )
+        sub_text = " · ".join(x or "—" for x in (ui.fmt_date(s["date"]), s["recipient_name"], s["purpose_name"]))
+        number = f'<span class="num nowrap">{h(s["number"])}</span>'
+        subject = clamp2(f'{number} {vi(s["subject"]) if s["subject"] else ""}',
+                         f'{s["number"]} {s["subject"] or ""}'.strip())
+        rows.append(f'<li class="row" data-row><span class="what wrap">{subject}'
+                    f'<span class="sub" title="{h(sub_text)}">{sub}</span></span></li>')
     body += f'<ul class="rows">{"".join(rows)}</ul>' if rows else _empty("No Sent document yet.")
     return _panel(name, title, body, foot=_link("Open Sent documents", "/sent"), span=span)
 

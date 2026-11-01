@@ -495,7 +495,7 @@ class FamilyAndChiPhaiEditTest(PagesTestBase):
         links_before = [tuple(r) for r in people.family_history(self.db(), pid)]
         page = self.page(f"/families/{fid}")
         self.assertIn(f'href="/families/{fid}/edit"', page)                         # Edit Family
-        self.assertIn(f'href="/families/{fid}/edit"', section(page, "address"))     # and under the Address
+        self.assertEqual(page.count(f'href="/families/{fid}/edit"'), 1)              # only that one (FIX-T B7)
         form = self.page(f"/families/{fid}/edit")
         self.assertEqual(parse_panels(form).h1, 1)
         self.assertIn('value="Gia đình Trần Văn Cũ"', form)
