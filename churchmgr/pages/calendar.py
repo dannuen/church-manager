@@ -18,6 +18,7 @@ from ..db import transaction
 from ..schema import CALENDAR_KINDS
 from ..server import Response
 from ..ui import h, vi
+from . import documents as document_pages  # card C3: the shared Documents block
 from .care import default_start
 from .people import (change_box, empty, family_link, field_errors, form_error, not_found, num, panel,
                      person_link, today_text)
@@ -491,9 +492,8 @@ def _delete_panel(conn, row, error):
 
 
 def documents_spot(conn, row):
-    """CARD C3 SPOT: return the Documents panel of this Calendar item here. It shows in the main
-    column under People and Head count. Card C2 leaves it empty on purpose."""
-    return "<!-- C3: the Documents list of this Calendar item goes here (documents_spot). -->"
+    """The Documents panel of this Calendar item (card C3), in the main column under People and Head count."""
+    return document_pages.documents_panel(conn, calendar_item_id=row["id"])
 
 
 def _item_view(req, row, error=None, status=200):

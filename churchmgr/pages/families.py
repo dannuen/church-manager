@@ -8,6 +8,7 @@ A Person joins or leaves a Family on the Person page.
 from .. import people, ui
 from ..server import Response
 from ..ui import h, vi
+from . import documents as document_pages  # card C3: the shared Documents block
 from .people import (change_box, chi_phai_link, date_field, empty, field_errors, form_error,
                      latest_change, list_panel, newest_first, not_found, num, panel, past_or_today, period,
                      person_link, same_change, statement_href, table)
@@ -131,7 +132,8 @@ def _family_view(req, family, error=None, status=200):
     address = panel("address", "Address", f'<p>{vi(family["address"])}</p>',
                     meta="Every Person in this Family uses it")
     body = (f'<div class="grid family"><div class="span-8 stack">{_people_panels(conn, fid)}</div>'
-            f'<div class="side-4 stack">{address}{_chi_phai_panel(conn, fid, error, vals)}</div></div>')
+            f'<div class="side-4 stack">{address}{_chi_phai_panel(conn, fid, error, vals)}'
+            f'{document_pages.documents_panel(conn, family_id=fid)}</div></div>')
     actions = ui.link_button("Giving statement", statement_href(family_id=fid))
     return Response.html(ui.page(family["name"], body, "families", sub=h(" · ".join(finding)), actions=actions),
                          status)

@@ -338,3 +338,65 @@ table.money.expenses td:nth-child(3) { color: var(--muted); }
   table.money tr.total > * { display: block; padding: 0; border: 0; }
   .link-btn { min-height: 44px; }
 }
+
+/* ---------- card C3: Documents, Sent documents, Lists, Copies and Settings ----------
+   Grid sum at 1440px: canvas 1160 = 8 + 4 columns (Sent documents), 7 + 5 (Copies, Settings) and
+   6 + 6 (Lists: two sections a row), 16px gutter. Below 1024px every column takes the full width. */
+.grid.sent, .grid.lists, .grid.copies, .grid.settings { align-items: start; }
+.lists > .span-6 { min-width: 0; }
+.list-foot { margin-top: 12px; }
+.sub-head { margin: 16px 0 4px; font-size: var(--fs-meta); line-height: 20px; font-weight: 600; }
+.kv.counts > div { grid-template-columns: minmax(0, 1fr) 64px; }
+.kv.counts dd { text-align: right; }
+.kv.wide > div { grid-template-columns: 128px minmax(0, 1fr); }
+.next-number { padding-top: 0; }
+
+/* a small grey word inside a row: Hidden, Open now */
+.tag { display: inline-flex; align-items: center; flex: none; height: 20px; margin-left: 8px; padding: 0 8px; border-radius: 4px; background: var(--active); color: var(--muted); font-size: var(--fs-small); font-weight: 500; white-space: nowrap; vertical-align: 1px; }
+.list-item.is-hidden .what { color: var(--muted); }
+
+/* a name field with its button on one line (Add, Rename) */
+.inline-add { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: start; }
+.inline-add > .btn { margin-top: 28px; }   /* the label line (20px) + its gap (8px): level with the field */
+.add-form .inline-add .field label { font-weight: 500; }
+
+/* each list item: name, what uses it, Hide/Show, Rename (the form opens on its own line) */
+.list-item { flex-wrap: wrap; }
+details.rename > summary { display: inline-flex; align-items: center; min-height: 36px; padding: 0 4px; font-size: var(--fs-meta); font-weight: 600; cursor: pointer; list-style: none; }
+details.rename > summary::-webkit-details-marker { display: none; }
+details.rename > summary:hover { text-decoration: underline; text-underline-offset: 3px; }
+details.rename[open] { flex-basis: 100%; padding-bottom: 4px; }
+details.rename[open] > summary { margin-bottom: 8px; }
+details.rename .form { max-width: none; }
+
+/* Handover: the result is a tone step; a refusal is the pale negative pair */
+.result, .refusal { margin-bottom: 16px; padding: 12px 16px; border-radius: var(--radius-control); font-size: var(--fs-meta); line-height: 20px; }
+.result { background: var(--raised); }
+.refusal { background: #ffedea; }
+.refusal strong { color: #831c1e; }
+.result p + p, .refusal p + p, .refusal .places + p, .refusal p + .places { margin-top: 8px; }
+.places { padding-left: 20px; }
+.places li + li { margin-top: 4px; }
+
+@media (max-width: 1023px) {
+  .grid.sent > *, .grid.lists > *, .grid.copies > *, .grid.settings > * { grid-column: 1 / -1; }
+}
+@media (max-width: 640px) {
+  details.rename > summary { min-height: 44px; }
+}
+
+/* C3 round 2: the file of a Sent document under its subject; a file field that looks like the others */
+.cell-sub { display: block; color: var(--muted); font-size: var(--fs-small); line-height: 16px; font-weight: 400; }
+.cell-sub a { color: var(--text); }
+table.sent td:nth-child(-n+4) { white-space: nowrap; }
+table.sent td:last-child { width: 50%; }
+input[type="file"].input { height: auto; min-height: var(--control-height); padding: 5px 6px; font-size: var(--fs-meta); line-height: 28px; }
+input[type="file"].input::file-selector-button { height: 28px; margin-right: 12px; padding: 0 12px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+input[type="file"].input::file-selector-button:hover { background: var(--raised); }
+.next-number .kpi-value { font-weight: 600; }
+@media (max-width: 640px) {
+  table.sent td:nth-child(-n+4) { white-space: normal; }
+  table.sent td:last-child { width: auto; flex-basis: 100%; color: var(--text); }
+  input[type="file"].input::file-selector-button { height: 34px; }
+}
+.refusal a, .result a:not(.btn) { text-decoration: underline; text-underline-offset: 3px; }

@@ -18,6 +18,7 @@ from .. import search as person_search
 from ..schema import FAMILY_ROLES, MINISTRY_ROLES
 from ..server import Response
 from ..ui import h, vi
+from . import documents as document_pages  # card C3 (a module import: pages/documents.py imports this one)
 
 GENDERS = (("", "—"), ("M", "Male"), ("F", "Female"))
 GENDER_WORDS = {"M": "Male", "F": "Female"}
@@ -500,7 +501,7 @@ def _person_view(req, person, error=None, status=200):
     left = (_status_panel(conn, pid, error, vals("status")) + _family_panel(conn, pid, error, vals("family"))
             + _ministry_panel(conn, pid, error, vals("ministry")) + _story_panel(events))
     right = (_details_panel(conn, person) + _private_panel(conn, pid, error, vals("private"))
-             + _care_panel(conn, pid))
+             + _care_panel(conn, pid) + document_pages.documents_panel(conn, person_id=pid))
     body = (f'<div class="grid person"><div class="span-8 stack">{left}</div>'
             f'<div class="side-4 stack">{right}</div></div>')
     actions = (ui.link_button("Edit", f"/people/{pid}/edit")

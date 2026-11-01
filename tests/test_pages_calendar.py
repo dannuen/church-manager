@@ -173,7 +173,7 @@ class CalendarPagesTest(PagesTestBase):
         self.assertIn("&lt;b&gt;C2 Thoát&lt;/b&gt;", page)
         self.assertNotIn("<b>C2 Thoát</b>", page)
         self.assertIn("&lt;b&gt;C2 Thoát&lt;/b&gt;", self.page(f"/calendar/{iid}"))
-        self.assertIn("C3: the Documents list", self.page(f"/calendar/{iid}"))  # the marked spot for card C3
+        self.assertIn('action="/documents/new"', section(self.page(f"/calendar/{iid}"), "documents"))  # card C3
         self.assertIn("Month must be written YYYY-MM", self.page("/calendar?month=2026-13", expect=400))
         self.assertIn('type="datetime-local"', self.page("/calendar/new"))
 
