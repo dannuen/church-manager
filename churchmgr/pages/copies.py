@@ -203,10 +203,11 @@ _LABEL_SQL = {"person": "SELECT full_name FROM person WHERE id = ?", "family": "
               "calendar_item": "SELECT title FROM calendar_item WHERE id = ?"}
 
 
-def _refusal_html(conn, message):
-    """A refused Handover in plain words: what was found and where, never the words of the Private note."""
-    if "Private note" not in message:
-        return (f'<div class="refusal" role="alert"><p><strong>Handover not made.</strong> {h(message)}</p>'
+def _refusal_html(conn, refusal):
+    """A refused Handover (a ``handover.HandoverError``) in plain words: what was found and where,
+    never the words of the Private note."""
+    if not refusal.private_text_found:
+        return (f'<div class="refusal" role="alert"><p><strong>Handover not made.</strong> {h(refusal)}</p>'
                 "<p>Nothing was changed. Fix this, then press Make Handover again.</p></div>")
     bodies = [r[0] for r in conn.execute("SELECT body FROM private_note") if len(r[0]) >= handover.MIN_CHECK_LENGTH]
     places = private_text_places(conn)
@@ -282,7 +283,7 @@ def handover_post(req):
     try:
         made = handover.make_handover(req.state.copy_folder, handovers_dir(req.state.copies_root))
     except handover.HandoverError as exc:
-        return _view(req, refusal=str(exc), status=400)
+        return _view(req, refusal=exc, status=400)
     return Response.redirect(ui.url("/copies", made=made.name, msg="Handover made. Private notes were removed."))
 
 

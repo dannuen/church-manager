@@ -154,7 +154,8 @@ def _chi_phai_view(req, row, error=None, status=200):
     body = (f'<div class="grid chi-phai"><div class="span-8 stack">{_families_panels(conn, cid, families)}</div>'
             f'<div class="side-4 stack">{_truong_panel(conn, cid, families, error, vals)}</div></div>')
     actions = ui.link_button("Rename Chi phái", f"/chi-phai/{cid}/edit")
-    return Response.html(ui.page(row["name"], body, "chi-phai", sub=h(" · ".join(finding)), actions=actions), status)
+    return Response.html(ui.page(row["name"], body, "chi-phai", sub=h(" · ".join(finding)), actions=actions,
+                                 lang="vi"), status)
 
 
 def _row_or_none(req):
@@ -183,7 +184,7 @@ def _edit_form(req, row, values=None, error=None, status=200):
     body = (f'<section class="panel narrow">{ui.form(f"/chi-phai/{cid}/edit", inner)}'
             '<p class="hint">Its Families and its Trưởng Chi phái stay as they are, with their dates. '
             'The new name shows on every page at once.</p></section>')
-    return Response.html(ui.page(f"Rename {row['name']}", body, "chi-phai",
+    return Response.html(ui.page(f"Rename {row['name']}", body, "chi-phai", lang="vi",
                                  actions=ui.link_button("Back to the Chi phái", f"/chi-phai/{cid}")), status)
 
 

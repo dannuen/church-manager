@@ -20,7 +20,7 @@ def _form(req, name="", error=None, status=200):
         '(Status, Fund, Spending category, Recipient, Purpose, Ministry).</p>'
         + ui.form("/setup",
                   ui.field("Church name", "church_name", name, error=error, required=True, autocomplete="off",
-                           hint="For example: Hội Thánh Tin Lành Bình An")
+                           lang="vi", hint="For example: Hội Thánh Tin Lành Bình An")
                   + ui.button("Start the church copy"))
         + f'<p class="hint">It is saved in <span class="path">{h(root)}</span>, outside OneDrive.</p>'
         "</section>"

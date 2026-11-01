@@ -162,6 +162,22 @@ def same_change(message):
     return f"{message} Nothing changed."
 
 
+def list_choice(conn, value, list_name, label):
+    """The item of ``list_name`` picked in a form's ``<select>``, or ``ValueError``.
+
+    The refusal starts with ``label``, a glossary word ("Status", "Ministry"), so
+    :func:`field_errors` puts it next to that field and the pastor never reads "Item".
+    A hidden item is still accepted (old rows keep it); the data layer decides the rest.
+    """
+    try:
+        item = lists.get_item(conn, value or "")
+    except ValueError:  # not a whole number above 0
+        item = None
+    if item is None or item["list_name"] != list_name:
+        raise ValueError(f"{label} must be one of the choices in the list.")
+    return item
+
+
 # ---------------------------------------------------------------- /people
 
 def _status_counts(rows):
@@ -251,7 +267,7 @@ def list_page(req):
 # ---------------------------------------------------------------- /people/new and /people/<id>/edit
 
 _PERSON_LABELS = {"full_name": "Full name", "gender": "Gender", "birth_date": "Birth date",
-                  "start_date": "Start date", "status_id": "Item"}
+                  "start_date": "Start date", "status_id": "Status"}
 
 
 def _plain_fields(values, errors):
@@ -298,9 +314,10 @@ def new_post(req):
         if f.get("birth_date"):
             past_or_today(f["birth_date"], "Birth date")
         start = past_or_today(f.get("start_date"), "Start date")
+        status_id = list_choice(req.conn, f["status_id"], "status", "Status")["id"] if f.get("status_id") else None
         pid = people.add_person(req.conn, f.get("full_name"), gender=f.get("gender"), birth_date=f.get("birth_date"),
                                 phone=f.get("phone"), address=f.get("address"), note=f.get("note"),
-                                status_id=f.get("status_id") or None, start_date=start)
+                                status_id=status_id, start_date=start)
     except ValueError as exc:
         return _new_form(req, f, ("new", str(exc)), 400)
     return Response.redirect(ui.url(f"/people/{pid}", msg="Person added."))
@@ -316,7 +333,7 @@ def _edit_form(req, person, values=None, error=None, status=200):
     body = (f'<section class="panel narrow">{ui.form(f"/people/{pid}/edit", inner)}'
             f'<p class="hint">Status, Family and Ministry keep their history: change them on the '
             f'<a href="/people/{pid}">Person page</a>.</p></section>')
-    return Response.html(ui.page(f"Edit {person['full_name']}", body, "people"), status)
+    return Response.html(ui.page(f"Edit {person['full_name']}", body, "people", lang="vi"), status)
 
 
 def edit_page(req):
@@ -347,7 +364,7 @@ def edit_post(req):
 def _status_panel(conn, pid, error, vals):
     rows = people.status_history(conn, pid)
     current = next((r for r in rows if r["end_date"] is None), None)
-    errors = field_errors(error, "status", {"start_date": "Start date", "status_id": "Item"})
+    errors = field_errors(error, "status", {"start_date": "Start date", "status_id": "Status"})
     items = lists.get_list(conn, "status")
     form = ui.form(f"/people/{pid}/status", (
         ui.select_field("New Status", "status_id", [(i["id"], i["name"]) for i in items], id="status-id",
@@ -400,8 +417,9 @@ def _family_panel(conn, pid, error, vals):
 def _ministry_panel(conn, pid, error, vals):
     rows = people.ministry_history(conn, pid)
     current = [r for r in rows if r["end_date"] is None]
+    # "Ministry role" before "Ministry": field_errors takes the first label a message starts with.
     errors = field_errors(error, "ministry", {"start_date": "Start date", "ministry_role": "Ministry role",
-                                              "ministry_id": "Item"})
+                                              "ministry_id": "Ministry"})
     items = lists.get_list(conn, "ministry")
     form = ui.form(f"/people/{pid}/ministry", (
         ui.select_field("Ministry", "ministry_id", [(i["id"], i["name"]) for i in items], id="ministry-id",
@@ -485,7 +503,7 @@ def _person_view(req, person, error=None, status=200):
     def vals(key):
         return req.form if form_key == key else {}
 
-    events = [e for e in story.person_story(conn, pid, include_private=True) if e["kind"] != "private_note"]
+    events = story.person_story(conn, pid)  # no Private note: the story is printed
     current_status = people.current_status(conn, pid)
     family = people.current_family(conn, pid)
     finding = [f"{current_status['name']} since {ui.fmt_date(current_status['start_date'])}"
@@ -507,8 +525,8 @@ def _person_view(req, person, error=None, status=200):
     actions = (ui.link_button("Edit", f"/people/{pid}/edit")
                + ui.link_button("Giving statement", statement_href(person_id=pid))
                + ui.link_button("Plan a Visit", ui.url("/care", person_id=pid) + "#plan", "primary"))
-    return Response.html(ui.page(person["full_name"], body, "people", sub=h(" · ".join(finding)), actions=actions),
-                         status)
+    return Response.html(ui.page(person["full_name"], body, "people", sub=h(" · ".join(finding)), actions=actions,
+                                 lang="vi"), status)
 
 
 def _person_or_none(req):
@@ -539,7 +557,7 @@ def status_post(req):
     def change(conn, pid):
         day = past_or_today(req.form.get("start_date"), "Start date")
         before = people.current_status(conn, pid)
-        new_id = text.to_id(req.form.get("status_id") or "", "Item")
+        new_id = list_choice(conn, req.form.get("status_id"), "status", "Status")["id"]
         if before is not None and before["status_id"] == new_id:
             return same_change(f"Status is already {before['name']}.")
         people.set_status(conn, pid, new_id, day)
@@ -569,7 +587,7 @@ def family_post(req):
 def ministry_post(req):
     def change(conn, pid):
         day = past_or_today(req.form.get("start_date"), "Start date")
-        item = lists.require_item(conn, req.form.get("ministry_id") or "0", "ministry")
+        item = list_choice(conn, req.form.get("ministry_id"), "ministry", "Ministry")
         role = req.form.get("ministry_role") or None
         before = next((r for r in people.current_ministries(conn, pid) if r["ministry_id"] == item["id"]), None)
         if role is None:

@@ -229,24 +229,37 @@ def _has_head_count(conn, item_id):
 def delete_calendar_item(conn, item_id, today=None):
     """Delete one Calendar item (and its list of people).
 
-    Refused when it has a Head count, a Document, or is a done Visit: that is history.
-    Also refused when it is before ``today`` and people joined or served it, so the
-    Person story keeps them. ``today`` (a date or ``YYYY-MM-DD``) defaults to the local date.
+    Refused (``ValueError`` with the reason of :func:`delete_refusal`) when it has a Head count,
+    a Document, or is a done Visit: that is history. Also refused when it is before ``today`` and
+    people joined or served it, so the Person story keeps them. ``today`` (a date or
+    ``YYYY-MM-DD``) defaults to the local date.
+    """
+    with transaction(conn):
+        reason = delete_refusal(conn, item_id, today)
+        if reason is not None:
+            raise ValueError(reason)
+        conn.execute("DELETE FROM calendar_item WHERE id = ?", (text.to_id(item_id, "Calendar item"),))
+
+
+def delete_refusal(conn, item_id, today=None):
+    """Why :func:`delete_calendar_item` would refuse this Calendar item, or ``None`` when it may go.
+
+    Only reads (no transaction, no write lock), so a page can ask it on every view.
+    A missing Calendar item raises ``ValueError``, as the delete does.
     """
     day = text.today_text() if today is None else text.check_date(today, "Today")
-    with transaction(conn):
-        row = _require_item(conn, item_id)
-        if _has_head_count(conn, row["id"]):
-            raise ValueError("This Service has a Head count, so it is kept.")
-        if conn.execute("SELECT 1 FROM document WHERE calendar_item_id = ?", (row["id"],)).fetchone():
-            raise ValueError("This Calendar item has a Document, so it is kept.")
-        if row["kind"] == "Visit" and row["visit_done"]:
-            raise ValueError("This Visit is done and is part of the Care log, so it is kept.")
-        if row["starts_at"][:10] < day and conn.execute(
-            "SELECT 1 FROM calendar_person WHERE calendar_item_id = ?", (row["id"],)
-        ).fetchone():
-            raise ValueError("This Calendar item is in the past and people joined or served it, so it is kept.")
-        conn.execute("DELETE FROM calendar_item WHERE id = ?", (row["id"],))
+    row = _require_item(conn, item_id)
+    if _has_head_count(conn, row["id"]):
+        return "This Service has a Head count, so it is kept."
+    if conn.execute("SELECT 1 FROM document WHERE calendar_item_id = ?", (row["id"],)).fetchone():
+        return "This Calendar item has a Document, so it is kept."
+    if row["kind"] == "Visit" and row["visit_done"]:
+        return "This Visit is done and is part of the Care log, so it is kept."
+    if row["starts_at"][:10] < day and conn.execute(
+        "SELECT 1 FROM calendar_person WHERE calendar_item_id = ?", (row["id"],)
+    ).fetchone():
+        return "This Calendar item is in the past and people joined or served it, so it is kept."
+    return None
 
 
 def items_between(conn, start_date, end_date):

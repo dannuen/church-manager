@@ -340,7 +340,7 @@ class CodeRulesTest(unittest.TestCase):
     PACKAGE = pathlib.Path(_support.ROOT) / "churchmgr"
     AVOID = ("household", "donation", "tithe", "income", "attachment", "upload", "instance", "install",
              "tenant", "contact", "user", "appointment", "schedule", "activity", "attendance record",
-             "area", "zone", "cell group", "department", "team", "secret note", "letter", "outgoing mail",
+             "area", "zone", "cell group", "department", "team", "secret", "letter", "outgoing mail",
              "receipt", "tax letter", "cost", "payment", "pastoral call", "home visit", "mass")
 
     TESTS = pathlib.Path(_support.ROOT) / "tests"

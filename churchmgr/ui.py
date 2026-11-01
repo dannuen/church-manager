@@ -221,19 +221,23 @@ def _sidebar(church, active):
     )
 
 
-def title_row(title, sub=None, actions=""):
+def title_row(title, sub=None, actions="", lang=None):
+    """The h1 (escaped ``title``), the one line under it and the buttons on its right.
+    ``lang="vi"`` marks an h1 that holds a Vietnamese name (a Person, Family, Chi phái, Calendar item)."""
     sub_html = f'<p class="sub">{sub}</p>' if sub else ""
     actions_html = f'<div class="actions">{actions}</div>' if actions else ""
-    return f'<header class="title-row"><div><h1>{h(title)}</h1>{sub_html}</div>{actions_html}</header>'
+    lang_attr = f' lang="{h(lang)}"' if lang else ""
+    return f'<header class="title-row"><div><h1{lang_attr}>{h(title)}</h1>{sub_html}</div>{actions_html}</header>'
 
 
-def page(title, body_html, active=None, sub=None, actions=""):
+def page(title, body_html, active=None, sub=None, actions="", lang=None):
     """The whole HTML page: sidebar (church name + nav), the h1 ``title``, the flash
     message from ``?msg=``, then ``body_html``.
 
     ``active``: the NAV key to mark (``"people"``, ``"money"``, ...). ``sub`` is trusted HTML
     (escape its values) for the one line under the h1; ``actions`` is trusted HTML for buttons
-    on the right of the title. With no church copy open (first run) there is no navigation.
+    on the right of the title. ``lang="vi"`` when the h1 holds a Vietnamese name.
+    With no church copy open (first run) there is no navigation.
     """
     req = current_request()
     church = req.church_name if req is not None else None
@@ -246,7 +250,7 @@ def page(title, body_html, active=None, sub=None, actions=""):
     return (
         _head(full_title)
         + f'<body>\n<div class="app">{side}<main class="canvas">'
-        + flash + title_row(title, sub, actions) + body_html
+        + flash + title_row(title, sub, actions, lang) + body_html
         + "</main></div>\n</body>\n</html>\n"
     )
 

@@ -106,21 +106,6 @@ def time_span(starts_at, ends_at):
     return f"{start} – {ui.fmt_date(ends_at)[:5]} {ui.fmt_time(ends_at)}"
 
 
-def delete_refusal(conn, item_id):
-    """Why the data layer would refuse to delete this Calendar item, or ``None`` when it may go.
-    It tries the real delete inside a transaction and always rolls it back."""
-    class _Allowed(Exception):
-        pass
-    try:
-        with transaction(conn):
-            cal.delete_calendar_item(conn, item_id)
-            raise _Allowed
-    except _Allowed:
-        return None
-    except ValueError as exc:
-        return str(exc)
-
-
 def _errors(error, key):
     """Where a refused Calendar form shows its sentence (a repeat message goes to Repeat until)."""
     errs = field_errors(error, key, _ITEM_LABELS)
@@ -482,7 +467,7 @@ def _head_count_panel(conn, row, error, vals, today):
 
 def _delete_panel(conn, row, error):
     message = error[1] if error and error[0] == "delete" else None
-    reason = message or delete_refusal(conn, row["id"])
+    reason = message or cal.delete_refusal(conn, row["id"])  # a read only: no write lock on a page view
     if reason:
         body = f'<p class="{"error" if message else "hint"}" role="{"alert" if message else "note"}">{h(reason)}</p>'
     else:
@@ -521,8 +506,8 @@ def _item_view(req, row, error=None, status=200):
         finding.append(f"Head count {hc['count']}" if hc else "No Head count yet")
     week = ui.url("/calendar", week=row["starts_at"][:10])
     actions = ui.link_button("Back to the week", week)
-    return Response.html(ui.page(row["title"], body, "calendar", sub=h(" · ".join(finding)), actions=actions),
-                         status)
+    return Response.html(ui.page(row["title"], body, "calendar", sub=h(" · ".join(finding)), actions=actions,
+                                 lang="vi"), status)
 
 
 def _item_or_none(req):
@@ -636,7 +621,7 @@ def head_count_post(req):
 def delete_post(req):
     def do(conn, row):
         if req.form.get("confirm") != "yes":
-            reason = delete_refusal(conn, row["id"])
+            reason = cal.delete_refusal(conn, row["id"])
             if reason:
                 raise ValueError(reason)
             question = (f"Delete <strong lang=\"vi\">{h(row['title'])}</strong> ({h(row['kind'])}) on "

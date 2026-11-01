@@ -9,6 +9,7 @@ import datetime as dt
 import http.client
 import io
 import json
+import os
 import pathlib
 import socket
 import tempfile
@@ -257,16 +258,16 @@ class FakeChurchServerTest(LiveServer, unittest.TestCase):
 
     def test_friendly_500_hides_the_traceback(self):
         def boom(req):
-            raise RuntimeError("secret-trace-text")
+            raise RuntimeError("hidden-trace-text")
         self.add_route("GET", "/boom", boom)
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
             status, _h, page = self.get_text("/boom")
         self.assertEqual(status, 500)
         self.assertIn("Something went wrong", page)
-        self.assertNotIn("secret-trace-text", page)
+        self.assertNotIn("hidden-trace-text", page)
         self.assertNotIn("Traceback", page)
-        self.assertIn("secret-trace-text", err.getvalue())  # it went to the console
+        self.assertIn("hidden-trace-text", err.getvalue())  # it went to the console
 
     def test_value_error_shows_its_plain_message(self):
         def refuse(req):
@@ -352,6 +353,7 @@ class FirstRunTest(LiveServer, unittest.TestCase):
         status, _h, page = self.get_text("/setup")
         self.assertEqual(status, 200)
         self.assertIn('name="church_name"', page)
+        self.assertRegex(page, r'<input [^>]*name="church_name"[^>]*lang="vi"')  # the name is Vietnamese
         self.assertIn("New church setup", page)
 
     def test_setup_makes_a_copy_and_opens_it(self):
@@ -424,6 +426,38 @@ class AppStartTest(unittest.TestCase):
         code, text = self.run_app("--copy", str(pathlib.Path(tmp.name) / "missing"))
         self.assertEqual(code, 2)
         self.assertIn("no church copy", text)
+
+    def test_refuses_a_copies_root_in_the_church_copy(self):
+        """Handover zips and New church setups go in the copies root: it may not be the church copy
+        or inside it. The start is refused before anything is opened or written."""
+        tmp = tempfile.TemporaryDirectory(prefix="cm-test-")
+        self.addCleanup(tmp.cleanup)
+        copy = pathlib.Path(tmp.name) / "copy"
+        db.create_church_copy(copy, "Hội Thánh Thử").close()
+        (copy / db.DOCUMENTS_DIR).rmdir()  # opening the copy would make it again: it must stay missing
+
+        def tree():
+            return sorted((str(p.relative_to(tmp.name)), p.stat().st_size, p.stat().st_mtime_ns)
+                          for p in pathlib.Path(tmp.name).rglob("*"))
+
+        before = tree()
+        roots = [copy, copy / "backups"]
+        if os.name == "nt":
+            roots.append(pathlib.Path(str(copy).upper()) / "backups")  # Windows paths compare without case
+        for root in roots:
+            code, text = self.run_app("--copy", str(copy), "--copies-root", str(root))
+            self.assertEqual(code, 2, root)
+            self.assertIn("Not started: The copies folder", text, root)
+            self.assertIn("choose a copies folder outside it.", text, root)
+            self.assertEqual(text.count("\n"), 1, text)  # one sentence on one line
+            self.assertEqual(tree(), before, root)  # nothing written: no documents/, no backups/, no current.txt
+        self.assertIn("is the church copy folder itself", self.run_app("--copy", str(copy), "--copies-root",
+                                                                       str(copy))[1])
+        with self.assertRaises(db.ChurchCopyError):  # the server checks it too, whoever starts it
+            server.make_server(copy, copy / "backups", 0, remember=False)
+        # the copy's parent (the default copies root for --copy) is fine
+        httpd = server.make_server(copy, copy.parent, 0, remember=False)
+        httpd.server_close()
 
     def test_ports(self):
         self.assertEqual(app.candidate_ports(None), list(range(8765, 8786)))

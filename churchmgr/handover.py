@@ -23,7 +23,16 @@ MIN_CHECK_LENGTH = 4  # Private note texts this long or longer are searched for 
 
 
 class HandoverError(Exception):
-    """The Handover was stopped. No zip was made."""
+    """The Handover was stopped. No zip was made.
+
+    ``private_text_found`` is True only when the text of a Private note was found in the
+    handover database (it is also written somewhere else in the church copy). The Copies page
+    then lists where, instead of showing the message.
+    """
+
+    def __init__(self, message, private_text_found=False):
+        super().__init__(message)
+        self.private_text_found = private_text_found
 
 
 def _connect_ro(path):
@@ -101,7 +110,8 @@ def check_no_private_text(data, bodies):
         if body in data:
             raise HandoverError(
                 f"The text of Private note {note_id} was still found in the handover database "
-                "(maybe the same text is also used somewhere else). No handover was made."
+                "(maybe the same text is also used somewhere else). No handover was made.",
+                private_text_found=True,
             )
 
 

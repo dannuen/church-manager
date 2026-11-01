@@ -138,8 +138,8 @@ def _family_view(req, family, error=None, status=200):
             f'{document_pages.documents_panel(conn, family_id=fid)}</div></div>')
     actions = (ui.link_button("Edit Family", f"/families/{fid}/edit")
                + ui.link_button("Giving statement", statement_href(family_id=fid)))
-    return Response.html(ui.page(family["name"], body, "families", sub=h(" · ".join(finding)), actions=actions),
-                         status)
+    return Response.html(ui.page(family["name"], body, "families", sub=h(" · ".join(finding)), actions=actions,
+                                 lang="vi"), status)
 
 
 def _family_or_none(req):
@@ -170,7 +170,7 @@ def _edit_form(req, family, values=None, error=None, status=200):
     body = (f'<section class="panel narrow">{ui.form(f"/families/{fid}/edit", inner)}'
             '<p class="hint">Who is in this Family changes on each Person page, and its Chi phái on the '
             f'<a href="/families/{fid}">Family page</a>. Both keep their history.</p></section>')
-    return Response.html(ui.page(f"Edit {family['name']}", body, "families",
+    return Response.html(ui.page(f"Edit {family['name']}", body, "families", lang="vi",
                                  actions=ui.link_button("Back to the Family", f"/families/{fid}")), status)
 
 

@@ -232,11 +232,19 @@ class ChurchServer(ThreadingHTTPServer):
     def switch_copy(self, folder, write_current=True):
         """Open the church copy in ``folder`` for every next request.
 
-        Checks the copy first (``church.db`` there, right version, not in OneDrive).
+        Checks the copy first (``church.db`` there, right version, not in OneDrive), and that the
+        copies root is not this folder or inside it (Handover zips and New church setups would then
+        be saved inside the church copy). Nothing is written before these checks pass.
         Writes ``current.txt`` in the copies root only when the app was started the
         default way (``remember``); a ``--copy`` start never changes it.
         """
         folder = paths.check_not_onedrive(folder)
+        root = self.copies_root
+        if root == folder or root.is_relative_to(folder):  # Windows paths compare without case
+            where = "is the church copy folder itself" if root == folder else f"is inside the church copy {folder}"
+            raise db.ChurchCopyError(
+                f"The copies folder {root} {where}, so Handover zips and New church setups would be saved "
+                "in the church copy: choose a copies folder outside it.")
         db.open_church_copy(folder).close()
         self.copy_folder = folder
         if write_current and self.remember:

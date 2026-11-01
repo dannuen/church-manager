@@ -10,9 +10,10 @@ import tempfile
 import unittest
 import urllib.parse
 import zipfile
+from unittest import mock
 
 import _support  # noqa: F401 - puts the repo root on sys.path
-from churchmgr import care, db, documents, fake, paths, people, schema, settings
+from churchmgr import care, db, documents, fake, handover, paths, people, schema, settings
 from churchmgr.pages import copies as copy_pages
 from churchmgr.pages import settings as settings_pages
 from test_pages_people import PagesTestBase, section
@@ -115,6 +116,25 @@ class HandoverPagesTest(PagesTestBase):
         self.assertIn(f"filename*=UTF-8''{name}", headers["content-disposition"])
         for bad in ("handover-nope-2001-01-01.zip", "..%2Fcopy%2Fchurch.db", "..%5Cfake%5Cchurch.db"):
             self.assertEqual(self.request("GET", f"/copies/handovers/{bad}")[0], 404, bad)
+
+    def test_refusal_layout_follows_private_text_found_not_the_words(self):
+        # words that name a Private note, but not the "text found" refusal: the plain layout with the sentence
+        plain = handover.HandoverError("2 Private note(s) were still in the handover database. No handover was made.")
+        with mock.patch.object(handover, "make_handover", side_effect=plain):
+            status, _h, data = self.request("POST", "/copies/handover", {})
+        box = section(data.decode("utf-8"), "handover")
+        self.assertEqual(status, 400)
+        self.assertIn("2 Private note(s) were still in the handover database.", box)
+        self.assertIn("Nothing was changed. Fix this", box)
+        self.assertNotIn("also written somewhere else", box)
+        # the "text found" refusal, whatever its words: the list of places, not the message
+        found = handover.HandoverError("Stopped.", private_text_found=True)
+        with mock.patch.object(handover, "make_handover", side_effect=found):
+            status, _h, data = self.request("POST", "/copies/handover", {})
+        box = section(data.decode("utf-8"), "handover")
+        self.assertEqual(status, 400)
+        self.assertIn("The words of a Private note are also written somewhere else", box)
+        self.assertNotIn("Stopped.", box)
 
 
 class CopySwitchTest(LiveServer, unittest.TestCase):

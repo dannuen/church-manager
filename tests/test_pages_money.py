@@ -95,8 +95,8 @@ class MoneyPagesTest(PagesTestBase):
 
     def test_giving_statement_for_a_person_and_a_family(self):
         pid = self.first_person_id()
-        secret = "C2-PRIVATE-Cầu nguyện riêng cho gia đình"
-        self.post(f"/people/{pid}/private-notes", {"body": secret})
+        private_text = "C2-PRIVATE-Cầu nguyện riêng cho gia đình"
+        self.post(f"/people/{pid}/private-notes", {"body": private_text})
         self.record_offering("2.000.000", giver=f"person-{pid}")
         family = people.current_family(self.db(), pid)
         self.record_offering("3.000.000", giver=f"family-{family['family_id']}")
@@ -117,7 +117,7 @@ class MoneyPagesTest(PagesTestBase):
         self.assertEqual(sum(figures[:-1]), expected)
         self.assertIn(money.format_vnd(expected), sheet)
         self.assertNotIn("<tfoot", sheet)  # the total is the last body row
-        for text_ in (fake.MARKER, "PRIVATE-NOTE-MARKER", secret):
+        for text_ in (fake.MARKER, "PRIVATE-NOTE-MARKER", private_text):
             self.assertNotIn(text_, page)
         self.assertIn("data-print", page)  # the Print button (app.js calls window.print)
         self.assertIn('href="/static/print.css"', page)
@@ -134,7 +134,7 @@ class MoneyPagesTest(PagesTestBase):
         self.assertEqual(parse_panels(page).rows["statement"], len(st["rows"]))
         self.assertIn(fake.FIRST_PERSON, sheet)  # given by the Person while in the Family
         self.assertGreaterEqual(st["total"], 2_000_000 + 3_000_000)
-        for text_ in (fake.MARKER, "PRIVATE-NOTE-MARKER", secret, "Hộp dâng hiến"):
+        for text_ in (fake.MARKER, "PRIVATE-NOTE-MARKER", private_text, "Hộp dâng hiến"):
             self.assertNotIn(text_, page)
 
         # another year with no Offering keeps the frame and says so

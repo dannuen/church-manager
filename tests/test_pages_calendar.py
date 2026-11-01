@@ -4,6 +4,7 @@ dashboard, the past-item rules, delete with a confirm step, and a Visit from /ca
 
 import datetime as dt
 import re
+import time
 import unittest
 
 import _support  # noqa: F401 - puts the repo root on sys.path
@@ -137,6 +138,24 @@ class CalendarPagesTest(PagesTestBase):
         self.assertTrue(headers["location"].startswith("/calendar?week="))
         self.assertIsNone(cal.get_calendar_item(self.db(), iid))
         self.assertIn("not found", self.page(f"/calendar/{iid}", expect=404))
+
+    def test_item_page_needs_no_write_lock(self):
+        """Showing or hiding Delete only reads: the page opens while another connection holds the write lock."""
+        iid = self.new_item(kind="Meeting", title="C2 Họp không khoá", starts_at=at(days(5), "18:00"))
+        kept = self.new_item(kind="Meeting", title="C2 Họp đã qua", starts_at=at(days(-5), "18:00"))
+        self.post(f"/calendar/{kept}/people", {"person_id": self.some_person(2)["id"], "part": "joins"})
+        writer = self.db()
+        writer.execute("BEGIN IMMEDIATE")  # the write lock (a real delete would wait for it, then fail)
+        try:
+            started = time.monotonic()
+            page = self.page(f"/calendar/{iid}")
+            self.assertIn(f'action="/calendar/{iid}/delete"', section(page, "delete"))
+            kept_box = section(self.page(f"/calendar/{kept}"), "delete")
+            self.assertLess(time.monotonic() - started, 3)  # sqlite3 waits 5 s for a lock
+        finally:
+            writer.execute("ROLLBACK")
+        self.assertIn("in the past and people joined or served it, so it is kept", kept_box)
+        self.assertNotIn(f'action="/calendar/{kept}/delete"', kept_box)
 
     def test_visit_from_the_calendar_form(self):
         person = self.some_person(5)

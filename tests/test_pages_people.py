@@ -15,7 +15,7 @@ import urllib.parse
 from html.parser import HTMLParser
 
 import _support  # noqa: F401 - puts the repo root on sys.path
-from churchmgr import db, fake, lists, people
+from churchmgr import db, fake, lists, people, story
 from churchmgr.pages import people as people_pages
 from test_server import LiveServer, parse_panels
 
@@ -134,7 +134,7 @@ class PeoplePagesTest(PagesTestBase):
         # the Person page: one h1, the name in NFC, the first Status with its date
         page = self.page(f"/people/{pid}")
         self.assertEqual(parse_panels(page).h1, 1)
-        self.assertIn(f"<h1>{nfc}</h1>", page)
+        self.assertIn(f'<h1 lang="vi">{nfc}</h1>', page)
         self.assertNotIn(nfd, page)
         status_html = section(page, "status")
         self.assertIn("Visitor", status_html)
@@ -343,6 +343,67 @@ class PeoplePagesTest(PagesTestBase):
         self.assertIn("&lt;script&gt;x&lt;/script&gt; Thoát Ký Tự", page)
         self.assertNotIn("<script>x</script>", page)
 
+    def test_story_never_holds_private_note_text(self):
+        pid = self.new_person("Đỗ Thị Câu Chuyện", "member", start=ago(40))
+        note = "C1B-PRIVATE-Xin cầu nguyện cho con trai"
+        self.post(f"/people/{pid}/private-notes", {"body": note})
+        page = self.page(f"/people/{pid}")
+        story_html = section(page, "story")
+        self.assertNotIn(note, story_html)
+        self.assertNotIn("Private note", story_html)
+        # the story lists exactly what the data layer gives without Private notes
+        self.assertEqual(parse_panels(page).rows["story"], len(story.person_story(self.db(), pid)))
+        # the on-screen Private note box still shows the note
+        box = re.search(r'<section class="panel private no-print"[^>]*>(.*?)</section>', page, re.S)
+        self.assertIsNotNone(box)
+        self.assertIn(note, box.group(1))
+        # the fake church's first Person has a Private note too: not in the story
+        first_id = next(r["id"] for r in people.list_persons(self.db()) if r["full_name"] == fake.FIRST_PERSON)
+        first_page = self.page(f"/people/{first_id}")
+        self.assertNotIn(fake.MARKER, section(first_page, "story"))
+        self.assertIn(fake.MARKER, first_page)  # in its box
+
+    def test_refused_status_and_ministry_say_the_glossary_word(self):
+        pid = self.new_person("Mai Văn Từ Chối", "member", start=ago(40))
+        ministry = self.item("ministry", name="Worship")
+        member = self.item("status", code="member")
+        # a Status that is not a whole number: the sentence says Status (not Item), next to the Status field
+        _h, page = self.post(f"/people/{pid}/status", {"status_id": "abc", "start_date": ago(0)}, expect=400)
+        self.assertIn('<p class="error" id="status-id-error">Status must be one of the choices in the list.</p>',
+                      page)
+        # a Ministry id from another list
+        _h, page = self.post(f"/people/{pid}/ministry", {"ministry_id": member, "ministry_role": "Member",
+                                                         "start_date": ago(0)}, expect=400)
+        self.assertIn('<p class="error" id="ministry-id-error">Ministry must be one of the choices in the list.</p>',
+                      page)
+        # a wrong Ministry role still goes next to the Ministry role field, not the Ministry field
+        _h, page = self.post(f"/people/{pid}/ministry", {"ministry_id": ministry, "ministry_role": "Boss",
+                                                         "start_date": ago(0)}, expect=400)
+        self.assertIn('id="ministry-role-error"', page)
+        self.assertNotIn('id="ministry-id-error"', page)
+        # a new Person with a Ministry id as first Status is not added
+        conn = self.db()
+        before = len(people.list_persons(conn))
+        _h, page = self.post("/people/new", {"full_name": "Lâm Văn Sai Danh Sách", "status_id": ministry,
+                                             "start_date": ago(0)}, expect=400)
+        self.assertIn('<p class="error" id="f-status_id-error">Status must be one of the choices in the list.</p>',
+                      page)
+        self.assertEqual(len(people.list_persons(conn)), before)
+        self.assertEqual(len(people.status_history(conn, pid)), 1)
+        self.assertEqual(people.current_ministries(conn, pid), [])
+
+    def test_vietnamese_names_in_the_h1_have_lang_vi(self):
+        conn = self.db()
+        pid = people.list_persons(conn)[0]["id"]
+        fid = people.list_families(conn)[0]["id"]
+        cid = people.list_chi_phai(conn)[0]["id"]
+        iid = conn.execute("SELECT id FROM calendar_item ORDER BY id LIMIT 1").fetchone()[0]
+        for path in (f"/people/{pid}", f"/people/{pid}/edit", f"/families/{fid}", f"/families/{fid}/edit",
+                     f"/chi-phai/{cid}", f"/chi-phai/{cid}/edit", f"/calendar/{iid}"):
+            self.assertEqual(len(re.findall(r'<h1 lang="vi">', self.page(path))), 1, path)
+        for path in ("/", "/people", "/families", "/chi-phai", "/calendar", "/money"):
+            self.assertIn("<h1>", self.page(path), path)  # English page names keep the page language
+
 
 class SmallLogicTest(unittest.TestCase):
     def test_past_or_today(self):
@@ -371,6 +432,25 @@ class SmallLogicTest(unittest.TestCase):
             source = (ROOT / "churchmgr" / "pages" / name).read_text(encoding="utf-8")
             self.assertIsNone(re.search(rf"\b(UPDATE|INSERT\s+INTO|DELETE\s+FROM)\s+({tables})\b", source, re.I), name)
             self.assertNotRegex(source, r"\bUPDATE\s+\w+\s+SET\b", name)  # the C1 pages only read with SQL
+
+    def test_no_page_asks_the_story_for_private_notes(self):
+        """The story is printed. A page that asked for Private notes and filtered them out again
+        would leak any new private kind added later."""
+        for path in sorted((ROOT / "churchmgr" / "pages").glob("*.py")):
+            self.assertNotIn("include_private", path.read_text(encoding="utf-8"), path.name)
+
+    def test_list_choice(self):
+        conn = db.create_church_copy(pathlib.Path(_support.temp_folder(self)) / "copy", "Hội Thánh Thử")
+        self.addCleanup(conn.close)
+        worship = lists.find_item(conn, "ministry", name="Worship")
+        self.assertEqual(people_pages.list_choice(conn, str(worship["id"]), "ministry", "Ministry")["id"],
+                         worship["id"])
+        lists.set_active(conn, worship["id"], False)  # a hidden item is still a choice of its list
+        self.assertEqual(people_pages.list_choice(conn, worship["id"], "ministry", "Ministry")["id"], worship["id"])
+        for bad in ("", None, "abc", "0", "-3", "999999", str(lists.find_item(conn, "status", code="member")["id"])):
+            with self.assertRaises(ValueError) as ctx:
+                people_pages.list_choice(conn, bad, "ministry", "Ministry")
+            self.assertEqual(str(ctx.exception), "Ministry must be one of the choices in the list.", bad)
 
 
 class FamilyAndChiPhaiEditTest(PagesTestBase):
@@ -407,7 +487,7 @@ class FamilyAndChiPhaiEditTest(PagesTestBase):
         row = people.get_family(self.db(), fid)
         self.assertEqual((row["name"], row["address"]), ("Gia đình Trần Văn Mới", "45 Hai Bà Trưng, Phường 3"))
         page = self.page(headers["location"])
-        self.assertIn("<h1>Gia đình Trần Văn Mới</h1>", page)
+        self.assertIn('<h1 lang="vi">Gia đình Trần Văn Mới</h1>', page)
         self.assertIn("45 Hai Bà Trưng, Phường 3", section(page, "address"))
         self.assertIn("Family name and Address saved.", page)
         self.assertIn("Gia đình Trần Văn Mới", self.page("/families"))
@@ -444,7 +524,7 @@ class FamilyAndChiPhaiEditTest(PagesTestBase):
         headers, _ = self.post(f"/chi-phai/{cid}/edit", {"name": "Chi phái Thử Tên"})
         self.assertTrue(headers["location"].startswith(f"/chi-phai/{cid}?msg="), headers["location"])
         page = self.page(headers["location"])
-        self.assertIn("<h1>Chi phái Thử Tên</h1>", page)
+        self.assertIn('<h1 lang="vi">Chi phái Thử Tên</h1>', page)
         self.assertIn("Renamed to Chi phái Thử Tên.", page)
         self.assertIn("Chi phái Thử Tên", self.page("/chi-phai"))
         self.assertNotIn("Thử Tênn", self.page("/chi-phai"))
