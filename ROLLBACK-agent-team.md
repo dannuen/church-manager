@@ -30,3 +30,9 @@ Backups of old config: C:/Users/danng/AppData/Local/hermes/backups/agent-team-20
 - Board `church-manager` (workdir = this repo). Active board switched to it (old: `default`; undo: `hermes kanban boards switch default`).
 - kanban.orchestrator_profile/default_assignee/max_in_progress were already these values.
 - SOUL.md written for the 4 new profiles. No old SOUL.md was overwritten.
+
+## Skills copied (user said keep + copy)
+Copied into profiles orchestrator, coder, reviewer, tester (folder `<profile>/skills/`):
+design-taste-frontend (from C:/Users/danng/.hermes/skills), impeccable, mattpocock (33 skills),
+ponytail/ (6 skills: ponytail, -audit, -debt, -gain, -help, -review; copied from the plugin as plain skills, the plugin hooks are NOT copied).
+Undo: delete those folders from each profile's skills/ folder (they hold nothing else; each profile had only autonomous-ai-agents/hermes-agent before).
