@@ -260,3 +260,81 @@ details.change .form { max-width: none; }
   .kv > div { grid-template-columns: 96px minmax(0, 1fr); }
   .chip, details.change > summary { min-height: 44px; }
 }
+
+/* ---------- card C2: Calendar and Money pages ----------
+   Grid sum at 1440px: canvas 1160 = 8 columns (agenda, item page) + 4 columns (side), 16px gutter;
+   Money: 7 columns (Offerings) + 5 columns (Expenses, Giving statement). Below 1024px one column. */
+.grid.calendar, .grid.calendar-item, .grid.money-month { align-items: start; }
+.span-5.stack, .span-7.stack { min-width: 0; }
+
+/* month picker beside the week / month chips */
+.month-picker, .year-form { display: grid; gap: 6px; }
+.month-picker label, .year-form label { font-size: var(--fs-meta); font-weight: 500; line-height: 20px; }
+.month-picker .input { width: 184px; }
+.year-form .input { width: 112px; }
+
+/* the agenda: one block per day, the date on the left, the Calendar items on the right */
+.list-panel.agenda { padding-top: 4px; padding-bottom: 4px; }
+.cal-day { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px; padding: 4px 0; }
+.cal-day + .cal-day { border-top: 1px solid var(--rule); }
+.cal-date { padding-top: 10px; font-size: var(--fs-meta); line-height: 24px; font-weight: 600; }
+.today-tag { display: block; color: var(--accent); font-size: var(--fs-small); line-height: 16px; font-weight: 600; }
+.cal-none { padding: 10px 0; color: var(--faint); font-size: var(--fs-meta); line-height: 24px; }
+.cal-day .cal-none { margin-top: 0; }      /* not the panel's p + p gap: it sits level with the date */
+.cal-row { align-items: flex-start; }
+.cal-row .time { width: 104px; padding-top: 2px; }
+.kind { color: var(--muted); }
+.kind.k-service { color: var(--accent); font-weight: 600; }   /* the one hue stays on Services */
+
+/* forms of the Calendar */
+.inline-fields.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.inline-fields.two > .field, #head-count .inline-fields > .field { align-content: start; }
+fieldset.group { margin: 0; padding: 0; border: 0; min-width: 0; display: grid; gap: 12px; }
+fieldset.group legend { padding: 0; margin-bottom: 8px; font-size: var(--fs-meta); font-weight: 600; line-height: 20px; }
+.add-form { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--rule); }
+.add-form .form { max-width: none; }
+.add-person { display: grid; grid-template-columns: minmax(0, 1fr) 136px auto; gap: 12px; align-items: end; }
+.row-form { flex: none; margin: 0; }
+.link-btn { min-height: 36px; padding: 0 4px; border: 0; background: none; color: var(--text); font: inherit; font-size: var(--fs-meta); font-weight: 600; cursor: pointer; }
+.link-btn:hover { text-decoration: underline; text-underline-offset: 3px; }
+.series-links { font-size: var(--fs-meta); }
+.absent { margin-top: 4px; font-size: var(--fs-meta); line-height: 20px; color: var(--muted); white-space: pre-wrap; }
+#head-count .kpi + .absent + details.change, #head-count .absent + .form { margin-top: 12px; }
+.confirm-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; }
+.confirm-actions .form { display: block; }
+
+/* Money: the totals are type in one container split by 1px rules; Balance is the bold figure */
+.kpi-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: var(--gap); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.kpi-strip .kpi { padding: 14px 20px; }
+.kpi-strip .kpi + .kpi { border-top: 0; border-left: 1px solid var(--rule); }
+.kpi-sub { color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+table.money td.n { white-space: nowrap; }
+table.money tr.total > * { border-top: 1px solid var(--border); border-bottom: 0; padding: 10px 12px; font-size: var(--fs-meta); line-height: 20px; color: var(--text); font-weight: 600; height: auto; }
+table.money tr.total th { text-align: left; }
+table.money.expenses td:nth-child(3) { color: var(--muted); }
+
+/* the Giving statement sheet (print.css turns it into ink on white A4) */
+.statement { max-width: 840px; }
+.statement > .statement-head { display: block; margin-bottom: 16px; }   /* not the panel's flex header */
+.statement-church { font-weight: 600; }
+.statement-head h2 { margin: 2px 0 12px; font-size: var(--fs-title); line-height: 32px; font-weight: 600; }
+.statement .table-wrap + .hint { margin-top: 12px; }
+
+@media (max-width: 1023px) {
+  .grid.calendar > *, .grid.calendar-item > *, .grid.money-month > * { grid-column: 1 / -1; }
+}
+@media (max-width: 640px) {
+  .cal-day { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .cal-date { padding-top: 8px; }
+  .today-tag { display: inline; margin-left: 8px; }
+  .cal-row .time { width: 100%; order: 1; padding-top: 0; }
+  .inline-fields.two, .add-person { grid-template-columns: minmax(0, 1fr); }
+  .month-picker, .year-form { flex: 1 1 100%; }
+  .month-picker .input, .year-form .input { width: auto; flex: 1; }
+  .kpi-strip { grid-template-columns: minmax(0, 1fr); }
+  .kpi-strip .kpi + .kpi { border-left: 0; border-top: 1px solid var(--rule); }
+  table.money td.n { margin-left: auto; color: var(--text); }
+  table.money tr.total { justify-content: space-between; }
+  table.money tr.total > * { display: block; padding: 0; border: 0; }
+  .link-btn { min-height: 44px; }
+}

@@ -7,3 +7,7 @@ from . import care, chi_phai, dashboard, families, people, search, setup
 
 PAGES = [dashboard, search, setup]
 PAGES += [people, families, chi_phai, care]  # card C1
+
+from . import calendar, money  # noqa: E402 - card C2
+
+PAGES += [calendar, money]  # card C2

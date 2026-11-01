@@ -4,7 +4,8 @@
 @page { size: A4; margin: 15mm 15mm 18mm; }
 
 @media print {
-  .sidebar, nav, .no-print, button, .btn, form, .flash, .title-row .actions, .title-search { display: none !important; }
+  .sidebar, nav, .no-print, button, .btn, form, .flash, .title-row .actions, .title-search,
+  .list-toolbar, details.change { display: none !important; }
   html, body { background: #fff; color: #000; }
   body { font: 11pt/1.4 "Segoe UI", Arial, sans-serif; }
   .app { display: block; }
@@ -18,4 +19,18 @@
   tr { break-inside: avoid; }              /* a row is never split */
   th, td { padding: 2mm 1.5mm; border-bottom: 0.3mm solid #888; color: #000; }
   .num, th.n, td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  .faint, .hint, .meta { color: #333; }
+
+  /* Giving statement: the sheet carries the church, the Giver and the year, so the screen title goes */
+  .canvas:has(.statement) .title-row { display: none; }
+  .statement { max-width: none; }
+  .statement-church { font-size: 13pt; font-weight: 600; }
+  .statement-head h2 { font-size: 16pt; margin: 1mm 0 4mm; }
+  .statement-head .kv > div { display: grid; grid-template-columns: 28mm 1fr; border: 0; padding: 0.6mm 0; }
+  .statement-head .kv dt { color: #333; }
+  .statement-head { margin-bottom: 6mm; break-inside: avoid; }
+  th { font-weight: 600; text-align: left; border-bottom: 0.4mm solid #000; }
+  th.n { text-align: right; }
+  tr.total > * { border-top: 0.5mm solid #000; border-bottom: 0; font-weight: 700; }
+  .statement-head .kv dd { text-align: left; }
 }
