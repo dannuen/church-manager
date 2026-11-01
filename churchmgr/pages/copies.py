@@ -290,7 +290,8 @@ def _handover_panel(req, refusal):
     made = list_handovers(root)
     if made:
         rows = "".join(
-            f'<li class="row" data-row><span class="what"><a href="/copies/handovers/{h(p.name)}">{h(p.name)}</a></span>'
+            f'<li class="row" data-row><span class="what wrap">'
+            f'<a class="file-name" href="/copies/handovers/{h(p.name)}">{h(p.name)}</a></span>'
             f'<span class="side num">{h(fmt_size(size))}</span></li>' for p, size in made[:HANDOVER_ROWS])
         listing = f'<h3 class="sub-head">Handovers made</h3><ul class="rows">{rows}</ul>'
     else:

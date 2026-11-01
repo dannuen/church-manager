@@ -76,9 +76,12 @@ def add_form(key, rid, error=None):
 
 
 def _doc_row(row):
+    """One Document: its name wraps to 2 lines at most (full name in the title), then size and date."""
     meta = f"{fmt_size(row['size'])} · added {ui.fmt_date(row['added_at'])}"
-    return ('<li class="row" data-row><span class="what">'
-            f'<a href="/documents/{int(row["id"])}/file">{vi(row["original_name"])}</a>'
+    name = row["original_name"]
+    link = f'<a href="/documents/{int(row["id"])}/file">{h(name)}</a>'
+    return ('<li class="row" data-row><span class="what wrap">'
+            f'{person_pages.clamp2(link, name, lang="vi")}'
             f'<span class="sub num">{h(meta)}</span></span></li>')
 
 

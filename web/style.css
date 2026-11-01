@@ -100,12 +100,15 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .kpi-value.strong { font-weight: 700; }
 .neg { color: var(--negative); }
 
-/* Services: one series, faint grid, the line in the one accent */
-.chart { display: block; width: 100%; height: auto; margin: 4px 0 8px; }
+/* Services: one series, faint grid, the line in the one accent. One height at every width (B17: the
+   height attribute, CHART_HEIGHT in dashboard.py): x places are percentages of the plot, the y ticks and
+   the last value sit in the side padding, the line's stroke does not scale. */
+.chart { display: block; width: 100%; margin: 4px 0 8px; padding: 0 32px 0 40px; overflow: visible; }
+.chart .plot { overflow: visible; }
 .chart .gridline { stroke: #ececec; stroke-width: 1; }
 .chart .gridline.base { stroke: #cfcfcf; }
 .chart .tick { fill: var(--muted); font-size: 12px; font-family: var(--font); }
-.chart .line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+.chart .line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .chart .end { fill: var(--accent); font-size: 12px; font-weight: 600; font-family: var(--font); }
 .trend { font-size: var(--fs-meta); line-height: 20px; color: var(--muted); }
 .trend strong { color: var(--text); }
@@ -449,3 +452,10 @@ table.money th.category { white-space: normal; line-height: 16px; }
   .note-edit { padding: 12px 0 12px 12px; margin: -12px 0 -12px -12px; }   /* a 44px tap */
   .form-actions .text-action { display: inline-flex; align-items: center; min-height: 44px; }
 }
+
+/* ---------- FIX-T 2b ----------
+   B17: Dashboard row 2 is Services 4 + Money this month 4 + Sent documents 4 columns (ROW2_SPANS), with
+   2 Sent document rows and a Services chart of one height, so the 3 cards end level by their content
+   (each keeps align-self: start from B11, no stretched blank).
+   B19: a file name (a Handover zip) shows whole: it wraps, and may break inside the name; no "…". */
+.row .what .file-name { overflow-wrap: anywhere; }
