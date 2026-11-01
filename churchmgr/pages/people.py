@@ -131,6 +131,13 @@ def card_link(text_, href):
     return f'<a class="card-link" href="{h(href)}">{h(text_)}</a>'
 
 
+def clamp2(inner_html, full_text, lang=None, cls=""):
+    """Text that wraps to 2 lines at most and then ends with "…" (``.clamp-2`` in style.css), never
+    one cut line. The full text is in the ``title``. ``inner_html`` is trusted HTML (escape its values)."""
+    lang_attr = f' lang="{h(lang)}"' if lang else ""
+    return f'<span class="clamp-2{" " + cls if cls else ""}"{lang_attr} title="{h(full_text)}">{inner_html}</span>'
+
+
 def not_found(what, back_href, back_text):
     body = f'<p class="lead">There is no {h(what)} with this number.</p><p><a href="{h(back_href)}">{h(back_text)}</a></p>'
     return Response.html(ui.page(f"{what} not found", body), 404)
@@ -372,7 +379,7 @@ def _status_panel(conn, pid, error, vals):
                         error=errors.get("status_id"))
         + date_field("Start date", "start_date", "status-date", vals.get("start_date"), errors.get("start_date"),
                      min_date=latest_change(rows))
-        + form_error(errors) + ui.button("Change Status")))
+        + form_error(errors) + ui.button("Change Status", "secondary")))
     lines = [[h(r["name"]), *period(r["start_date"], r["end_date"])] for r in newest_first(rows)]
     body = (table([("Status", False), ("From", True), ("To", True)], lines, "history")
             if lines else empty("No Status yet."))
@@ -395,7 +402,7 @@ def _family_panel(conn, pid, error, vals):
                           selected=role, error=errors.get("family_role"))
         + date_field("Start date", "start_date", "family-date", vals.get("start_date"), errors.get("start_date"),
                      min_date=latest_change(rows), hint="The day of the move. The old Family link is kept.")
-        + form_error(errors) + ui.button("Save Family")))
+        + form_error(errors) + ui.button("Save Family", "secondary")))
     now = ""
     if current is not None:
         cp = people.current_chi_phai(conn, current["family_id"])
@@ -429,7 +436,7 @@ def _ministry_panel(conn, pid, error, vals):
                           id="ministry-role", selected=vals.get("ministry_role", "Member"),
                           error=errors.get("ministry_role"))
         + date_field("Start date", "start_date", "ministry-date", vals.get("start_date"), errors.get("start_date"))
-        + form_error(errors) + ui.button("Save Ministry")))
+        + form_error(errors) + ui.button("Save Ministry", "secondary")))
     lines = [[h(r["name"]), h(r["ministry_role"]), *period(r["start_date"], r["end_date"])] for r in newest_first(rows)]
     body = (table([("Ministry", False), ("Ministry role", False), ("From", True), ("To", True)], lines, "history")
             if lines else empty("Not serving in a Ministry."))
@@ -485,9 +492,11 @@ def _private_panel(conn, pid, error, vals):
 def _care_panel(conn, pid):
     log = care.care_log(conn, pid)
     rows = "".join(
-        '<li class="row" data-row><span class="what">'
-        f'<span>{vi(r["who"])}</span><span class="sub" lang="vi">{h(r["care_note"]) if r["care_note"] else "—"}</span>'
-        f'</span><span class="figure num">{h(ui.fmt_date(r["done_date"]))}</span></li>'
+        '<li class="row" data-row><span class="what wrap">'
+        + (clamp2(h(r["who"]), r["who"], lang="vi") if r["who"] else ui.DASH)
+        + (clamp2(h(r["care_note"]), r["care_note"], lang="vi", cls="sub") if r["care_note"]
+           else '<span class="sub">—</span>')
+        + f'</span><span class="figure num">{h(ui.fmt_date(r["done_date"]))}</span></li>'
         for r in log
     )
     body = f'<ul class="rows">{rows}</ul>' if log else empty("No Visit done yet.")

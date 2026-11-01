@@ -180,6 +180,9 @@ class ListsPagesTest(BlankCopyTest):
         _h, page = self.post("/lists/recipient/add", {"name": "Giáo hội"}, expect=400)
         self.assertIn("is already in the Recipient list", page)
         self.assertIn('id="add-list-recipient-error"', page)
+        _h, page = self.post("/lists/recipient/add", {"name": "giáo hội"}, expect=400)  # B4: case aside
+        self.assertIn('<p class="error" id="add-list-recipient-error">giáo hội is already in the Recipient list.</p>',
+                      page)
         _h, page = self.post("/lists/spending_category/add", {"name": "  "}, expect=400)
         self.assertIn("Name is required", page)
         self.assertIn('id="add-list-spending-category-error"', page)

@@ -47,7 +47,8 @@ A Handover gives the church copy to the next pastor of the same church. Private 
    The page also has a link to download it.
 
 Your church copy is not changed. If the words of a Private note are also written somewhere else in
-the church copy, no zip is made: the page lists where, so you can edit that text first.
+the church copy, no zip is made: the page lists where, so you can edit that text first. Document
+files are checked as plain text only: text inside Word or PDF files is not read.
 
 The next pastor:
 

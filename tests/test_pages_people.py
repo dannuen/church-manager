@@ -291,6 +291,26 @@ class PeoplePagesTest(PagesTestBase):
         self.assertIn("Full name is required", page)
         self.assertIn('id="f-full_name-error"', page)
 
+    def test_full_name_at_most_120_characters(self):
+        """B3: a Full name of 120 characters is saved; 121 is refused next to the field (add and edit)."""
+        long_name = "Trần Thị B3 " + "Hồng" * 27
+        self.assertEqual(len(long_name), 120)
+        pid = self.new_person(long_name)
+        self.assertEqual(people.get_person(self.db(), pid)["full_name"], long_name)
+        sentence = '<p class="error" id="f-full_name-error">Full name: use at most 120 characters.</p>'
+        form = {"full_name": long_name + "x", "gender": "", "birth_date": "", "phone": "", "address": "", "note": "",
+                "status_id": self.item("status", code="visitor"), "start_date": ago(0)}
+        _h, page = self.post("/people/new", form, expect=400)
+        self.assertIn(sentence, page)
+        self.assertEqual([p for p in people.list_persons(self.db()) if p["full_name"].startswith(long_name)][0]["id"],
+                         pid)  # the 121 one was not added
+        _h, page = self.post(f"/people/{pid}/edit", {"full_name": long_name + "x"}, expect=400)
+        self.assertIn(sentence, page)
+        self.assertEqual(people.get_person(self.db(), pid)["full_name"], long_name)
+        self.post(f"/people/{pid}/edit", {"full_name": "Trần Thị B3 Ngắn"})
+        self.post(f"/people/{pid}/edit", {"full_name": long_name})  # 120 is saved on edit too
+        self.assertEqual(people.get_person(self.db(), pid)["full_name"], long_name)
+
     def test_families_and_chi_phai_forms(self):
         headers, _ = self.post("/families/new", {"name": "Gia đình Thử Nghiệm", "address": "9 Nguyễn Trãi"})
         fid = int(re.fullmatch(r"/families/(\d+)\?msg=.+", headers["location"]).group(1))
@@ -475,7 +495,7 @@ class FamilyAndChiPhaiEditTest(PagesTestBase):
         links_before = [tuple(r) for r in people.family_history(self.db(), pid)]
         page = self.page(f"/families/{fid}")
         self.assertIn(f'href="/families/{fid}/edit"', page)                         # Edit Family
-        self.assertIn(f'href="/families/{fid}/edit"', section(page, "address"))     # and under the Address
+        self.assertEqual(page.count(f'href="/families/{fid}/edit"'), 1)              # only that one (FIX-T B7)
         form = self.page(f"/families/{fid}/edit")
         self.assertEqual(parse_panels(form).h1, 1)
         self.assertIn('value="Gia đình Trần Văn Cũ"', form)
@@ -509,6 +529,21 @@ class FamilyAndChiPhaiEditTest(PagesTestBase):
         self.assertEqual((row["name"], row["address"]), ("Gia đình Không Đổi", "1 Nguyễn Huệ"))
         self.page("/families/999999/edit", expect=404)
         self.post("/families/999999/edit", {"name": "Gia đình Lạ"}, expect=404)
+
+    def test_family_and_chi_phai_name_at_most_120_characters(self):
+        """B3: a Family name of 120 characters is saved; 121 is refused next to the field (add and edit)."""
+        long_name = "Gia đình B3 " + "Lê" * 54
+        self.assertEqual(len(long_name), 120)
+        fid = self.new_family(long_name)
+        self.assertEqual(people.get_family(self.db(), fid)["name"], long_name)
+        sentence = '<p class="error" id="f-name-error">Family name: use at most 120 characters.</p>'
+        _h, page = self.post("/families/new", {"name": long_name + "x", "address": ""}, expect=400)
+        self.assertIn(sentence, page)
+        _h, page = self.post(f"/families/{fid}/edit", {"name": long_name + "x", "address": ""}, expect=400)
+        self.assertIn(sentence, page)
+        self.assertEqual(people.get_family(self.db(), fid)["name"], long_name)
+        _h, page = self.post("/chi-phai/new", {"name": "Chi phái " + "x" * 112}, expect=400)
+        self.assertIn("Chi phái name: use at most 120 characters.", page)
 
     def test_rename_chi_phai(self):
         cid = self.new_chi_phai("Chi phái Thử Tênn")

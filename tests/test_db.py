@@ -228,6 +228,30 @@ class ListsTest(CopyTestCase):
         with self.assertRaises(ValueError):
             lists.get_list(self.conn, "nope")
 
+    def test_names_are_unique_whatever_the_case(self):
+        """B4: "giáo hội" is refused next to "Giáo hội" (casefold of the NFC name; hidden items count)."""
+        with self.assertRaises(ValueError) as ctx:
+            lists.add_item(self.conn, "recipient", nfd("giáo hội"))
+        self.assertEqual(str(ctx.exception), "giáo hội is already in the Recipient list.")
+        with self.assertRaises(ValueError):
+            lists.add_item(self.conn, "recipient", "GIÁO HỘI")
+        with self.assertRaises(ValueError) as ctx:
+            lists.add_item(self.conn, "spending_category", "rent")
+        self.assertEqual(str(ctx.exception), "rent is already in the Spending category list.")
+        hidden = lists.add_item(self.conn, "fund", "Quỹ Xây Dựng")
+        lists.set_active(self.conn, hidden, False)
+        with self.assertRaises(ValueError) as ctx:
+            lists.add_item(self.conn, "fund", "quỹ xây dựng")
+        self.assertEqual(str(ctx.exception), "quỹ xây dựng is already in the Fund list.")
+        with self.assertRaises(ValueError) as ctx:  # rename onto another item, case aside
+            lists.rename_item(self.conn, self.item("recipient", name="Hội Thánh"), "giáo HỘI")
+        self.assertEqual(str(ctx.exception), "giáo HỘI is already in the Recipient list.")
+        giao_hoi = self.item("recipient", name="Giáo hội")
+        lists.rename_item(self.conn, giao_hoi, "Giáo Hội")  # a case-only change of its own name is allowed
+        self.assertEqual(lists.get_item(self.conn, giao_hoi)["name"], "Giáo Hội")
+        self.assertEqual(len(lists.get_list(self.conn, "recipient")), 3)
+        lists.add_item(self.conn, "purpose", "giáo hội")  # another list may hold the same name
+
     def test_require_item_checks_the_list(self):
         fund = self.item("fund", name="General")
         self.assertEqual(lists.require_item(self.conn, fund, "fund")["name"], "General")
@@ -235,6 +259,17 @@ class ListsTest(CopyTestCase):
             lists.require_item(self.conn, fund, "status")
         with self.assertRaises(ValueError):
             lists.require_item(self.conn, 99999, "fund")
+        # B5: the sentence names the list with its glossary word, never "Item 99999"
+        for list_name, label in (("fund", "Fund"), ("spending_category", "Spending category"),
+                                 ("recipient", "Recipient"), ("purpose", "Purpose"), ("status", "Status"),
+                                 ("ministry", "Ministry")):
+            for bad in (99999, "99999", "abc", "", None, 0):
+                with self.assertRaises(ValueError) as ctx:
+                    lists.require_item(self.conn, bad, list_name)
+                self.assertEqual(str(ctx.exception), f"{label}: choose one from the list.", (list_name, bad))
+        with self.assertRaises(ValueError) as ctx:
+            lists.require_item(self.conn, fund, "spending_category")  # an item of another list
+        self.assertEqual(str(ctx.exception), "Spending category: choose one from the list.")
 
     def test_lists_have_no_delete(self):
         public = [n for n in dir(lists) if not n.startswith("_")]

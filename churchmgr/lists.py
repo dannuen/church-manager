@@ -11,6 +11,10 @@ from . import text
 from .schema import LIST_NAMES
 
 _CODE = re.compile(r"[a-z0-9_]+")
+# list name -> the glossary word the pastor reads
+LABELS = {"status": "Status", "ministry": "Ministry", "fund": "Fund", "spending_category": "Spending category",
+          "recipient": "Recipient", "purpose": "Purpose"}
+assert set(LABELS) == set(LIST_NAMES), "every list has a label"
 
 
 def _check_list_name(list_name):
@@ -51,19 +55,24 @@ def find_item(conn, list_name, *, code=None, name=None):
 
 
 def require_item(conn, item_id, list_name):
-    """Return the item, or raise ``ValueError`` if it is not in ``list_name``."""
+    """Return the item, or raise ``ValueError`` ("Fund: choose one from the list.") if it is not
+    in ``list_name`` (no such id, another list, or not a whole number)."""
     _check_list_name(list_name)
-    item = get_item(conn, item_id)
+    try:
+        item = get_item(conn, item_id)
+    except ValueError:  # not a whole number above 0
+        item = None
     if item is None or item["list_name"] != list_name:
-        raise ValueError(f"Item {item_id} is not in the {list_name} list.")
+        raise ValueError(f"{LABELS[list_name]}: choose one from the list.")
     return item
 
 
 def _name_taken(conn, list_name, name, except_id=None):
-    row = conn.execute(
-        "SELECT id FROM list_item WHERE list_name = ? AND name = ?", (list_name, name)
-    ).fetchone()
-    return row is not None and row["id"] != except_id
+    """True when another item of the list (hidden ones too) has this name, upper or lower case aside.
+    Python ``casefold`` of the NFC name: SQL ``lower`` folds only A-Z, not Vietnamese."""
+    key = text.nfc(name).casefold()
+    return any(text.nfc(r["name"]).casefold() == key and r["id"] != except_id
+               for r in conn.execute("SELECT id, name FROM list_item WHERE list_name = ?", (list_name,)))
 
 
 def add_item(conn, list_name, name, code=None):
@@ -73,7 +82,7 @@ def add_item(conn, list_name, name, code=None):
     if code is not None and not _CODE.fullmatch(code):
         raise ValueError("A code uses only a-z, 0-9 and _.")
     if _name_taken(conn, list_name, name):
-        raise ValueError(f'"{name}" is already in the {list_name} list.')
+        raise ValueError(f"{name} is already in the {LABELS[list_name]} list.")
     last = conn.execute(
         "SELECT COALESCE(MAX(sort_order), 0) FROM list_item WHERE list_name = ?", (list_name,)
     ).fetchone()[0]
@@ -83,7 +92,7 @@ def add_item(conn, list_name, name, code=None):
             (list_name, code, name, last + 1),
         )
     except sqlite3.IntegrityError as exc:
-        raise ValueError(f'"{name}" cannot be added to the {list_name} list: {exc}.') from exc
+        raise ValueError(f"{name} cannot be added to the {LABELS[list_name]} list: {exc}.") from exc
     return cur.lastrowid
 
 
@@ -94,7 +103,7 @@ def rename_item(conn, item_id, new_name):
         raise ValueError(f"No list item with id {item_id}.")
     name = text.clean_name(new_name, "Name")
     if _name_taken(conn, item["list_name"], name, except_id=item["id"]):
-        raise ValueError(f'"{name}" is already in the {item["list_name"]} list.')
+        raise ValueError(f"{name} is already in the {LABELS[item['list_name']]} list.")
     conn.execute("UPDATE list_item SET name = ? WHERE id = ?", (name, item["id"]))
 
 

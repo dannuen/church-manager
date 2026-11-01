@@ -60,6 +60,15 @@ class CleanTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 text.clean_name(bad)
 
+    def test_clean_name_at_most_120_characters(self):
+        """B3: 120 characters after cleaning are kept; 121 are refused with one sentence."""
+        name = "Nguyễn " + "a" * 113
+        self.assertEqual(len(name), 120)
+        self.assertEqual(text.clean_name("  " + nfd(name) + "  ", "Full name"), name)  # counted after NFC and strip
+        with self.assertRaises(ValueError) as ctx:
+            text.clean_name(name + "b", "Family name")
+        self.assertEqual(str(ctx.exception), "Family name: use at most 120 characters.")
+
     def test_clean_text(self):
         self.assertEqual(text.clean_text(nfd(" Hội Thánh ")), "Hội Thánh")
         self.assertIsNone(text.clean_text("   "))

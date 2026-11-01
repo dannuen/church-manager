@@ -73,6 +73,31 @@ class HandoverPagesTest(PagesTestBase):
         self.assertEqual(self.handovers(), before)  # no zip, no work folder left
         self.assertEqual(self.note_count(), notes)
 
+    def test_handover_is_refused_when_a_document_file_holds_private_note_text(self):
+        """B2: the refusal names the Document and whose it is, never the words of the Private note."""
+        conn = self.db()
+        owner = people.list_persons(conn)[2]
+        words = "B2 tư vấn hôn nhân của chị Tuyết 5307"
+        note_id = people.add_private_note(conn, owner["id"], words)
+        self.addCleanup(conn.execute, "DELETE FROM private_note WHERE id = ?", (note_id,))  # the next tests hand over
+        documents.add_document(conn, self.copy, f"Ghi chú: {words}\n".encode("utf-8"), "ghichu.txt",
+                               person_id=owner["id"])
+        before, notes, source_hash = self.handovers(), self.note_count(), sha(self.copy / db.DB_NAME)
+
+        status, _h, data = self.request("POST", "/copies/handover", {})
+        page = data.decode("utf-8")
+        self.assertEqual(status, 400)
+        refusal = section(page, "handover")
+        self.assertIn("Handover not made.", refusal)
+        self.assertRegex(refusal, rf'<li>The Private note of <a href="/people/{owner["id"]}">.*?</a> is also written '
+                                  rf'in the Document <span lang="vi">ghichu.txt</span> of '
+                                  rf'<a href="/people/{owner["id"]}" lang="vi">.*?</a>\.</li>')
+        self.assertNotIn(words, page)  # the Private note text is never shown
+        self.assertNotIn("tư vấn", page)
+        self.assertEqual(self.handovers(), before)  # no zip, no .partial file, no work folder
+        self.assertEqual(self.note_count(), notes)
+        self.assertEqual(sha(self.copy / db.DB_NAME), source_hash)  # the church copy is not changed
+
     def test_make_handover_removes_private_notes_and_keeps_the_copy(self):
         notes = self.note_count()
         self.assertGreater(notes, 0)

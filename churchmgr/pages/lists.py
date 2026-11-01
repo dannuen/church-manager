@@ -25,6 +25,7 @@ LIST_INFO = {
 }
 LIST_ORDER = tuple(LIST_INFO)
 assert set(LIST_ORDER) == set(LIST_NAMES), "every editable list has a section"
+assert all(LIST_INFO[n][0] == lists.LABELS[n] for n in LIST_ORDER), "one glossary word per list"
 
 # How many rows use each item: (item id, count). Status and Ministry count the People now.
 _USAGE_SQL = {
@@ -112,11 +113,6 @@ def lists_page(req):
     return _view(req)
 
 
-def _plain(message, list_name):
-    """The data layer names a list by its code (``spending_category``); the page uses the glossary word."""
-    return message.replace(f"the {list_name} list", f"the {LIST_INFO[list_name][0]} list")
-
-
 def _done(list_name, message):
     return Response.redirect(ui.url("/lists", msg=message) + "#" + anchor(list_name))
 
@@ -128,7 +124,7 @@ def add_post(req):
     try:
         lists.add_item(req.conn, list_name, req.form.get("name"))
     except ValueError as exc:
-        return _view(req, (f"add-{list_name}", _plain(str(exc), list_name)), 400)
+        return _view(req, (f"add-{list_name}", str(exc)), 400)
     name = lists.find_item(req.conn, list_name, name=req.form.get("name"))["name"]
     return _done(list_name, f"{name} added to {LIST_INFO[list_name][0]}.")
 
@@ -145,7 +141,7 @@ def rename_post(req):
     try:
         lists.rename_item(req.conn, item["id"], req.form.get("name"))
     except ValueError as exc:
-        return _view(req, (f"rename-{item['id']}", _plain(str(exc), item["list_name"])), 400)
+        return _view(req, (f"rename-{item['id']}", str(exc)), 400)
     new = lists.get_item(req.conn, item["id"])["name"]
     if new == item["name"]:
         return _done(item["list_name"], f"{new} kept its name. Nothing changed.")

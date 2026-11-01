@@ -13,6 +13,7 @@ _NOT_SLUG = re.compile(r"[^a-z0-9]+")
 _DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 _DATETIME = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}")
 _DIGITS = re.compile(r"[0-9]+")
+MAX_NAME_LENGTH = 120  # a name (Full name, Family, Chi phái, list item, title) has at most this many characters
 
 
 def nfc(s):
@@ -53,12 +54,15 @@ def clean_text(value):
 
 
 def clean_name(value, what="Name"):
-    """Required name: NFC, single spaces, strip. Empty raises ``ValueError``."""
+    """Required name: NFC, single spaces, strip. Empty or longer than ``MAX_NAME_LENGTH``
+    characters raises ``ValueError`` starting with ``what``."""
     if value is None or not isinstance(value, str):
         raise ValueError(f"{what} is required.")
     value = _SPACES.sub(" ", nfc(value)).strip()
     if not value:
         raise ValueError(f"{what} is required.")
+    if len(value) > MAX_NAME_LENGTH:
+        raise ValueError(f"{what}: use at most {MAX_NAME_LENGTH} characters.")
     return value
 
 

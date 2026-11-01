@@ -15,7 +15,7 @@ Rules kept here:
 import sqlite3
 from pathlib import Path
 
-from .. import db, handover, paths
+from .. import db, documents, handover, paths
 from .. import setup as church_setup
 from .. import text, ui
 from ..server import Response
@@ -104,11 +104,16 @@ def find_handover(copies_root, name):
     return next((p for p, _size in list_handovers(copies_root) if p.name == name), None)
 
 
+def _private_notes(conn, min_length):
+    """``[(person id, text), ...]`` of the Private notes long enough to search for."""
+    return [(r["person_id"], r["body"]) for r in conn.execute("SELECT person_id, body FROM private_note")
+            if isinstance(r["body"], str) and len(r["body"]) >= min_length]
+
+
 def private_text_places(conn, min_length=handover.MIN_CHECK_LENGTH):
     """Where the text of a Private note is also written in the church copy (the reason a Handover is
     refused). Returns sorted ``[(note person id, table, row id, column), ...]``; never the text itself."""
-    notes = [(r["person_id"], r["body"]) for r in conn.execute("SELECT person_id, body FROM private_note")
-             if isinstance(r["body"], str) and len(r["body"]) >= min_length]
+    notes = _private_notes(conn, min_length)
     if not notes:
         return []
     tables = [r[0] for r in conn.execute(
@@ -121,6 +126,20 @@ def private_text_places(conn, min_length=handover.MIN_CHECK_LENGTH):
                 for row in conn.execute(f'SELECT rowid FROM "{table_name}" WHERE instr("{col}", ?) > 0', (body,)):
                     places.add((person_id, table_name, row[0], col))
     return sorted(places)
+
+
+def private_text_documents(conn, copy_folder, min_length=handover.MIN_CHECK_LENGTH):
+    """Which Document files hold the text of a Private note, read as plain bytes like the Handover
+    check (``handover.private_text_files``). Returns sorted ``[(note person id, Document id, file name
+    on disk), ...]``; the Document id is ``None`` for a file of ``documents/`` with no Document row.
+    Never the text itself."""
+    notes = _private_notes(conn, min_length)
+    if not notes:
+        return []
+    ids = {r["stored_name"]: r["id"] for r in conn.execute("SELECT id, stored_name FROM document")}
+    files = documents.documents_on_disk(copy_folder)
+    found = {(person_id, ids.get(f.name), f.name) for f, person_id in handover.private_text_files(files, notes)}
+    return sorted(found, key=lambda t: (t[0], t[1] or 0, t[2]))
 
 
 def _safe_label(label, bodies, fallback):
@@ -203,27 +222,51 @@ _LABEL_SQL = {"person": "SELECT full_name FROM person WHERE id = ?", "family": "
               "calendar_item": "SELECT title FROM calendar_item WHERE id = ?"}
 
 
-def _refusal_html(conn, refusal):
-    """A refused Handover (a ``handover.HandoverError``) in plain words: what was found and where,
-    never the words of the Private note."""
+def _row_link(conn, table_name, rowid, bodies):
+    """A link to the Person, Family, Chi phái or Calendar item ``rowid``, named safely."""
+    word, href = _PLACES[table_name]
+    label = conn.execute(_LABEL_SQL[table_name], (rowid,)).fetchone()[0]
+    return (f'<a href="{h(href.format(rowid))}" lang="vi">'
+            f'{h(_safe_label(label, bodies, f"{word} {rowid}"))}</a>')
+
+
+def _db_place(conn, place, bodies):
+    _person_id, table_name, rowid, col = place
+    word, href = _PLACES.get(table_name, (table_name.replace("_", " "), "/"))
+    field = _FIELDS.get(col, col.replace("_", " "))
+    if table_name in _LABEL_SQL:
+        return f"the {h(field)} of the {h(word)} {_row_link(conn, table_name, rowid, bodies)}"
+    return f'a {h(field)} in <a href="{h(href)}">{h(word)}</a>'
+
+
+def _document_place(conn, place, bodies):
+    _person_id, doc_id, stored = place
+    if doc_id is None:  # a file in documents/ that no Document row names
+        return f'the file {path_html(stored)} of the documents folder'
+    doc = documents.get_document(conn, doc_id)
+    name = _safe_label(doc["original_name"], bodies, f"Document {doc_id}")
+    where = f'the Document <span lang="vi">{h(name)}</span>'
+    for col, table_name in (("person_id", "person"), ("family_id", "family"), ("calendar_item_id", "calendar_item")):
+        if doc[col] is not None:
+            return f"{where} of {_row_link(conn, table_name, doc[col], bodies)}"
+    return where
+
+
+def _refusal_html(conn, copy_folder, refusal):
+    """A refused Handover (a ``handover.HandoverError``) in plain words: what was found and where
+    (in the database or in a Document file), never the words of the Private note."""
     if not refusal.private_text_found:
         return (f'<div class="refusal" role="alert"><p><strong>Handover not made.</strong> {h(refusal)}</p>'
                 "<p>Nothing was changed. Fix this, then press Make Handover again.</p></div>")
     bodies = [r[0] for r in conn.execute("SELECT body FROM private_note") if len(r[0]) >= handover.MIN_CHECK_LENGTH]
-    places = private_text_places(conn)
+    places = ([(p, _db_place) for p in private_text_places(conn)]
+              + [(p, _document_place) for p in private_text_documents(conn, copy_folder)])
     lines = []
-    for person_id, table_name, rowid, col in places[:PLACE_ROWS]:
+    for place, where in places[:PLACE_ROWS]:
+        person_id = place[0]
         owner = conn.execute("SELECT full_name FROM person WHERE id = ?", (person_id,)).fetchone()[0]
         owner_html = person_link(person_id, _safe_label(owner, bodies, f"Person {person_id}"))
-        word, href = _PLACES.get(table_name, (table_name.replace("_", " "), "/"))
-        field = _FIELDS.get(col, col.replace("_", " "))
-        if table_name in _LABEL_SQL:
-            label = conn.execute(_LABEL_SQL[table_name], (rowid,)).fetchone()[0]
-            where = (f'the {h(field)} of the {h(word)} <a href="{h(href.format(rowid))}" lang="vi">'
-                     f'{h(_safe_label(label, bodies, f"{word} {rowid}"))}</a>')
-        else:
-            where = f'a {h(field)} in <a href="{h(href)}">{h(word)}</a>'
-        lines.append(f"<li>The Private note of {owner_html} is also written in {where}.</li>")
+        lines.append(f"<li>The Private note of {owner_html} is also written in {where(conn, place, bodies)}.</li>")
     if len(places) > PLACE_ROWS:
         lines.append(f"<li>And {len(places) - PLACE_ROWS} more places.</li>")
     found = f'<ul class="places">{"".join(lines)}</ul>' if lines else ""
@@ -250,7 +293,8 @@ def _handover_panel(req, refusal):
         listing = f'<h3 class="sub-head">Handovers made</h3><ul class="rows">{rows}</ul>'
     else:
         listing = ""
-    body = _handover_result(req) + (_refusal_html(req.conn, refusal) if refusal else "") + intro + form + where + listing
+    refusal_html = _refusal_html(req.conn, req.state.copy_folder, refusal) if refusal else ""
+    body = _handover_result(req) + refusal_html + intro + form + where + listing
     return panel("handover", "Handover", body)
 
 

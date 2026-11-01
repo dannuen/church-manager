@@ -2,15 +2,20 @@
 Host and Origin headers): a weekly repeat, people who serve or join, the Head count on the
 dashboard, the past-item rules, delete with a confirm step, and a Visit from /calendar/new."""
 
+import contextlib
 import datetime as dt
+import html
 import re
 import time
+import types
 import unittest
+from unittest import mock
 
 import _support  # noqa: F401 - puts the repo root on sys.path
 from churchmgr import calendar as cal
 from churchmgr import people
 from churchmgr.pages import calendar as cal_pages
+from churchmgr.pages import dashboard
 from test_pages_people import TODAY, PagesTestBase, section, shown
 from test_server import parse_panels
 
@@ -22,6 +27,24 @@ def at(day, hm="19:00"):
 
 def days(n):
     return TODAY + dt.timedelta(days=n)
+
+
+class _FixedDate(dt.date):
+    """``date`` whose ``today()`` is ``_FixedDate.fixed``."""
+    fixed = None
+
+    @classmethod
+    def today(cls):
+        return cls.fixed
+
+
+@contextlib.contextmanager
+def today_is(day):
+    """While in this ``with`` block, the Dashboard and the Calendar pages see ``day`` as today."""
+    _FixedDate.fixed = day
+    fake_dt = types.SimpleNamespace(date=_FixedDate, timedelta=dt.timedelta, datetime=dt.datetime)
+    with mock.patch.object(dashboard, "_dt", fake_dt), mock.patch.object(cal_pages, "_dt", fake_dt):
+        yield
 
 
 class CalendarPagesTest(PagesTestBase):
@@ -195,6 +218,38 @@ class CalendarPagesTest(PagesTestBase):
         self.assertIn('action="/documents/new"', section(self.page(f"/calendar/{iid}"), "documents"))  # card C3
         self.assertIn("Month must be written YYYY-MM", self.page("/calendar?month=2026-13", expect=400))
         self.assertIn('type="datetime-local"', self.page("/calendar/new"))
+
+    def test_dashboard_view_all_opens_the_same_7_days(self):
+        """B1: on a Sunday and on a Wednesday, the count on the Dashboard link is the count of the
+        Calendar page it opens (``?from=`` today, 7 days), not of the Monday-to-Sunday week."""
+        sunday = dt.date(2031, 6, 1)  # far from the fake church's Calendar items
+        self.assertEqual(sunday.weekday(), 6)
+        for n in range(-1, 11):  # one Meeting a day, from the Saturday before to 10 days after
+            self.new_item(kind="Meeting", title=f"B1 Họp ngày {n}", starts_at=at(sunday + dt.timedelta(days=n), "18:00"))
+        for today in (sunday, sunday + dt.timedelta(days=3)):  # a Sunday and a Wednesday
+            with today_is(today):
+                week = section(self.page("/"), "this-week")
+                m = re.search(r'<a class="card-link" href="([^"]+)">View all (\d+) in Calendar</a>', week)
+                self.assertIsNotNone(m, week)
+                href, count = html.unescape(m.group(1)), int(m.group(2))
+                self.assertEqual(href, f"/calendar?from={today.isoformat()}")
+                page = self.page(href)
+            last = today + dt.timedelta(days=6)
+            self.assertIn(f'<p class="sub">{today:%d/%m} – {last:%d/%m/%Y} · {count} Calendar items · ', page)
+            listing = section(page, "calendar-list")
+            self.assertEqual(listing.count('class="row cal-row"'), count)
+            self.assertEqual(listing.count('class="cal-day'), 7)  # every day is listed
+            first = (today - sunday).days
+            self.assertEqual(sorted(int(n) for n in re.findall(r"B1 Họp ngày (-?\d+)", listing)),
+                             list(range(first, first + 7)))
+            self.assertEqual(count, 7)
+            # Previous and Next move 7 days and keep ?from=
+            self.assertIn(f'href="/calendar?from={today - dt.timedelta(days=7)}"', page)
+            self.assertIn(f'href="/calendar?from={today + dt.timedelta(days=7)}"', page)
+        self.assertIn("First day must be a real date written YYYY-MM-DD",
+                      self.page("/calendar?from=2031-02-30", expect=400))
+        # the week mode is not changed: Monday to Sunday, so that Sunday's week holds only 2 of them
+        self.assertIn("Week 26/05 – 01/06/2031 · 2 Calendar items", self.page(f"/calendar?week={sunday}"))
 
 
 class SmallLogicTest(unittest.TestCase):

@@ -263,7 +263,7 @@ details.change .form { max-width: none; }
 
 /* ---------- card C2: Calendar and Money pages ----------
    Grid sum at 1440px: canvas 1160 = 8 columns (agenda, item page) + 4 columns (side), 16px gutter;
-   Money: 7 columns (Offerings) + 5 columns (Expenses, Giving statement). Below 1024px one column. */
+   Money: 6 columns (Offerings) + 6 columns (Expenses, Giving statement). Below 1024px one column. */
 .grid.calendar, .grid.calendar-item, .grid.money-month { align-items: start; }
 .span-5.stack, .span-7.stack { min-width: 0; }
 
@@ -411,4 +411,27 @@ table.money td.edit a { color: var(--text); font-weight: 600; }
   table.money td.edit { flex: 0 0 36px; order: 1; }
   table.money tr.total td.edit { display: none; }
   table.money td.edit a { display: inline-block; padding: 12px 0 12px 8px; margin: -12px 0 -12px -8px; }   /* a 44px tap */
+}
+
+/* ---------- FIX-T 1b ----------
+   B10: an identity text (a Sent document subject, a Care log name or note) wraps to 2 lines at most and
+   then ends with "…"; the full text is in its title. Numbers and dates stay on one line. */
+.row .what.wrap { white-space: normal; }
+.clamp-2, .row .what .clamp-2 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; white-space: normal; overflow-wrap: break-word; }
+.nowrap, .row .figure { white-space: nowrap; }
+@media print {   /* paper has no title tooltip: print the whole text */
+  .clamp-2, .row .what .clamp-2 { display: block; -webkit-line-clamp: unset; line-clamp: none; overflow: visible; }
+}
+
+/* B11: the Services, Money and Sent documents panels keep their own height (no blank band in a card) */
+.dashboard > [data-panel="services"], .dashboard > [data-panel="money-month"], .dashboard > [data-panel="sent-documents"] { align-self: start; }
+
+/* B9: in the money tables a date stays on one line and the Note keeps about 16 characters, wrapping by
+   words; amounts stay right-aligned in tabular figures (td.n). The Expenses table then needs about 450px:
+   Money is 6 + 6 columns from 1250px and one column below. */
+table.money td.date { white-space: nowrap; }
+table.money th.note, table.money td.note { min-width: 16ch; }
+table.money th.category { white-space: normal; line-height: 16px; }
+@media (max-width: 1249px) {
+  .grid.money-month > .span-6 { grid-column: 1 / -1; }
 }
