@@ -345,7 +345,10 @@ class CodeRulesTest(unittest.TestCase):
 
     TESTS = pathlib.Path(_support.ROOT) / "tests"
     # Names from outside this project that hold an Avoid word. They cannot be renamed.
-    OUTSIDE_NAMES = ("user_version",)  # SQLite: PRAGMA user_version
+    OUTSIDE_NAMES = (
+        "user_version",  # SQLite: PRAGMA user_version
+        "attachment; filename",  # HTTP: the Content-Disposition header value for a download
+    )
 
     def package_sources(self):
         return {p.name: p.read_text(encoding="utf-8") for p in sorted(self.PACKAGE.glob("*.py"))}

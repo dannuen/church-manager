@@ -1,0 +1,21 @@
+/* Print view (the Giving statement, and any page): ink on white, one face, no navigation,
+   no buttons or forms, table rules only, money right-aligned. Private notes sit in .no-print.
+   Tip for the pastor: untick "Headers and footers" once in the print dialog. */
+@page { size: A4; margin: 15mm 15mm 18mm; }
+
+@media print {
+  .sidebar, nav, .no-print, button, .btn, form, .flash, .title-row .actions, .title-search { display: none !important; }
+  html, body { background: #fff; color: #000; }
+  body { font: 11pt/1.4 "Segoe UI", Arial, sans-serif; }
+  .app { display: block; }
+  .canvas { padding: 0; }
+  .panel { border: 0; padding: 0; }
+  .title-row { margin-bottom: 6mm; }
+  h1, h2 { break-after: avoid; }
+  a { color: inherit; text-decoration: none; }
+  table { width: 100%; border-collapse: collapse; }
+  thead { display: table-header-group; }   /* the header row repeats on each page */
+  tr { break-inside: avoid; }              /* a row is never split */
+  th, td { padding: 2mm 1.5mm; border-bottom: 0.3mm solid #888; color: #000; }
+  .num, th.n, td.n { text-align: right; font-variant-numeric: tabular-nums; }
+}
