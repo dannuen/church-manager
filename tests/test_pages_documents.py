@@ -6,7 +6,7 @@ import unicodedata
 import unittest
 
 import _support  # noqa: F401 - puts the repo root on sys.path
-from churchmgr import documents, fake, people
+from churchmgr import documents, fake, people, sent
 from churchmgr.pages import documents as doc_pages
 from test_pages_people import ROOT, PagesTestBase, section
 from test_server import parse_panels
@@ -177,6 +177,66 @@ class DocumentsPagesTest(MultipartMixin, PagesTestBase):
         documents.document_path(conn, self.copy, doc_id).unlink()
         page = self.page(f"/documents/{doc_id}/file", expect=404)
         self.assertIn("is missing from the documents folder", page)
+
+    def test_delete_a_document_after_one_question(self):
+        """FIX-T 3b (B22): the list's Delete link -> the question (name, size, link, one danger button)
+        -> POST without confirm deletes nothing -> POST confirm=yes deletes the row and the file."""
+        conn = self.db()
+        pid = self.person_id()
+        name = "Xóa tôi B22.txt"
+        did = documents.add_document(conn, self.copy, b"B22 delete me", name, person_id=pid)
+        path = documents.document_path(conn, self.copy, did)
+        listing = section(self.page("/documents"), "documents-list")
+        self.assertIn(f'<a href="/documents/{did}/delete" aria-label="Delete the Document {name}">Delete</a>', listing)
+        self.assertEqual(listing.count(">Delete</a>"), len(self.doc_rows()))  # one on every row
+        self.assertNotIn('class="btn', listing)  # a quiet text link, not a button
+
+        page = self.page(f"/documents/{did}/delete")
+        box = section(page, "confirm")
+        self.assertIn(f'Delete the Document <strong class="confirm-name" lang="vi">{name}</strong>?', box)
+        self.assertIn(f'<span class="num">{doc_pages.fmt_size(len(b"B22 delete me"))}</span>', box)
+        self.assertIn(f'<span class="faint">Person</span> <a href="/people/{pid}">', box)  # what it is linked to
+        self.assertIn(fake.FIRST_PERSON, box)
+        self.assertIn("The file is removed from this church copy. This cannot be undone.", box)
+        self.assertIn(f'action="/documents/{did}/delete"', box)
+        self.assertIn('name="confirm" value="yes"', box)
+        self.assertIn('<button class="btn danger" type="submit">Yes, delete it</button>', box)
+        self.assertIn('href="/documents">Cancel</a>', box)
+        self.assertNotIn('class="btn primary"', page)  # no filled button: the danger one is the only action
+
+        _h, again = self.post(f"/documents/{did}/delete", {}, expect=200)  # no confirm=yes: the question again
+        self.assertIn("Yes, delete it", again)
+        self.assertTrue(path.is_file())
+        self.assertIsNotNone(documents.get_document(self.db(), did))
+
+        headers, _ = self.post(f"/documents/{did}/delete", {"confirm": "yes"})
+        self.assertTrue(headers["location"].startswith("/documents?msg="), headers["location"])
+        page = self.page(headers["location"])
+        self.assertIn(f"Document deleted: {name}.", page)
+        self.assertNotIn(f'href="/documents/{did}/', page)
+        self.assertFalse(path.exists())
+        self.assertIsNone(documents.get_document(self.db(), did))
+        # a Document that is not there: the normal not-found page, for GET and POST
+        self.assertIn("There is no Document with this number.", self.page(f"/documents/{did}/delete", expect=404))
+        self.post(f"/documents/{did}/delete", {"confirm": "yes"}, expect=404)
+        self.page("/documents/999999/delete", expect=404)
+
+    def test_delete_the_file_of_a_sent_document_keeps_the_sent_document(self):
+        conn = self.db()
+        did = documents.add_document(conn, self.copy, b"B22 sent file", "Thư mời B22.txt")
+        r, pu = self.item("recipient", name="Hội Thánh"), self.item("purpose", name="Invitation")
+        day = "2025-03-04"
+        sid, number = sent.add_sent_document(conn, day, r, pu, "Mời dự lễ B22", document_id=did)
+        box = section(self.page(f"/documents/{did}/delete"), "confirm")
+        self.assertIn(f'<span class="faint">Sent document</span> <a class="num" href="/sent?year=2025">{number}</a>', box)
+        self.assertIn(f"The Sent document {number} stays, with its number, date, Recipient and Purpose, but no file.",
+                      box)
+        self.post(f"/documents/{did}/delete", {"confirm": "yes"})
+        row = self.db().execute("SELECT * FROM sent_document WHERE id = ?", (sid,)).fetchone()
+        self.assertEqual((row["document_id"], row["date"], row["subject"]), (None, day, "Mời dự lễ B22"))
+        listing = section(self.page("/sent?year=2025"), "sent-list")
+        self.assertIn("Mời dự lễ B22", listing)
+        self.assertNotIn("Thư mời B22.txt", listing)  # the Sent page shows it with no file
 
 
 class SmallLogicTest(unittest.TestCase):

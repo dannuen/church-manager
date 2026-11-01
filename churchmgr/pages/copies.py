@@ -230,44 +230,54 @@ def _row_link(conn, table_name, rowid, bodies):
             f'{h(_safe_label(label, bodies, f"{word} {rowid}"))}</a>')
 
 
-def _db_place(conn, place, bodies):
+def _db_place(conn, place, bodies, _docs_folder):
     _person_id, table_name, rowid, col = place
     word, href = _PLACES.get(table_name, (table_name.replace("_", " "), "/"))
     field = _FIELDS.get(col, col.replace("_", " "))
     if table_name in _LABEL_SQL:
-        return f"the {h(field)} of the {h(word)} {_row_link(conn, table_name, rowid, bodies)}"
-    return f'a {h(field)} in <a href="{h(href)}">{h(word)}</a>'
+        return f"the {h(field)} of the {h(word)} {_row_link(conn, table_name, rowid, bodies)}."
+    return f'a {h(field)} in <a href="{h(href)}">{h(word)}</a>.'
 
 
-def _document_place(conn, place, bodies):
+def _document_place(conn, place, bodies, docs_folder):
+    """Where a Document file holds the words, then what to do about it: Delete for a Document. A file
+    of the documents folder that no Document row names cannot be deleted in the app: File Explorer."""
     _person_id, doc_id, stored = place
-    if doc_id is None:  # a file in documents/ that no Document row names
-        return f'the file {path_html(stored)} of the documents folder'
+    if doc_id is None:
+        shown = _safe_label(stored, bodies, "")
+        file_html = f"the file {path_html(shown)}" if shown else "a file"
+        return (f"{file_html} of the documents folder. No Document in the app has this file: remove it from "
+                f"the folder {path_html(docs_folder)} in File Explorer.")
     doc = documents.get_document(conn, doc_id)
     name = _safe_label(doc["original_name"], bodies, f"Document {doc_id}")
     where = f'the Document <span lang="vi">{h(name)}</span>'
     for col, table_name in (("person_id", "person"), ("family_id", "family"), ("calendar_item_id", "calendar_item")):
         if doc[col] is not None:
-            return f"{where} of {_row_link(conn, table_name, doc[col], bodies)}"
-    return where
+            where += f" of {_row_link(conn, table_name, doc[col], bodies)}"
+            break
+    return (f'{where}. <a href="/documents/{int(doc_id)}/delete" aria-label="Delete the Document {h(name)}">'
+            "Delete</a>")
 
 
 def _refusal_html(conn, copy_folder, refusal):
     """A refused Handover (a ``handover.HandoverError``) in plain words: what was found and where
-    (in the database or in a Document file), never the words of the Private note."""
+    (in the database or in a Document file, each Document with its Delete link), never the words of
+    the Private note. Changing the Private note does not change a Document file, so the page says so."""
     if not refusal.private_text_found:
         return (f'<div class="refusal" role="alert"><p><strong>Handover not made.</strong> {h(refusal)}</p>'
                 "<p>Nothing was changed. Fix this, then press Make Handover again.</p></div>")
     bodies = [r[0] for r in conn.execute("SELECT body FROM private_note") if len(r[0]) >= handover.MIN_CHECK_LENGTH]
     places = ([(p, _db_place) for p in private_text_places(conn)]
               + [(p, _document_place) for p in private_text_documents(conn, copy_folder)])
+    docs_folder = db.documents_folder(copy_folder)
     lines = []
     for place, where in places[:PLACE_ROWS]:
         person_id = place[0]
         owner = conn.execute("SELECT full_name FROM person WHERE id = ?", (person_id,)).fetchone()[0]
         # whose Private note: the link opens their Private note panel, where each note has its Edit link
         owner_html = person_link(person_id, _safe_label(owner, bodies, f"Person {person_id}"), "#private-note")
-        lines.append(f"<li>The Private note of {owner_html} is also written in {where(conn, place, bodies)}.</li>")
+        lines.append(f"<li>The Private note of {owner_html} is also written in "
+                     f"{where(conn, place, bodies, docs_folder)}</li>")
     if len(places) > PLACE_ROWS:
         lines.append(f"<li>And {len(places) - PLACE_ROWS} more places.</li>")
     found = f'<ul class="places">{"".join(lines)}</ul>' if lines else ""
@@ -275,9 +285,10 @@ def _refusal_html(conn, copy_folder, refusal):
             "<p><strong>Handover not made.</strong> The words of a Private note are also written somewhere else "
             "in this church copy, so they would go to the next pastor.</p>"
             f"{found}"
-            "<p>Change the Private note so it is not the same (open the Person, then Edit next to the note), "
-            "or change the other text. A Document file cannot be changed in the app, so for a Document change "
-            "the Private note. Then press Make Handover again. Nothing was changed and no zip was saved.</p></div>")
+            "<p>To fix it, take the private words out of each place above. For a Document, press Delete: "
+            "changing the Private note does not change a Document file, and the file still goes to the next "
+            "pastor. For other text, open it and change it. Then press Make Handover again. "
+            "Nothing was changed and no zip was saved.</p></div>")
 
 
 def _handover_panel(req, refusal):

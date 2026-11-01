@@ -2,7 +2,8 @@
 
 The file on disk gets a random name (``uuid4().hex`` + a safe extension), so a
 file name given by a person can never point outside ``documents/``. The name a
-person sees (``original_name``) is kept only in the database.
+person sees (``original_name``) is kept only in the database. A Document is deleted only by
+``delete_document`` (the row, then its file).
 """
 
 import hashlib
@@ -126,6 +127,28 @@ def document_path(conn, copy_folder, doc_id):
     if path.parent != folder or not path.is_relative_to(folder):
         raise ValueError(f"Document {row['id']} points outside the documents folder and is not opened.")
     return path
+
+
+def delete_document(conn, copy_folder, doc_id):
+    """Delete a Document: its row, then its file in ``documents/``. No old copy is kept (a Document is
+    not one of the dated links).
+
+    In one transaction a Sent document that used the file loses only the link (``document_id`` NULL;
+    its number, date, Recipient and Purpose stay), and the Document row goes. The file is removed
+    after the commit, by the path of :func:`document_path` only. An unknown id or a bad stored name
+    raises ``ValueError`` and nothing changes. Returns ``None``, or the path of the file when it could
+    not be removed (for example it is open in another program): the row is gone, the file stays.
+    """
+    path = document_path(conn, copy_folder, doc_id)
+    doc = text.to_id(doc_id, "Document")
+    with transaction(conn):
+        conn.execute("UPDATE sent_document SET document_id = NULL WHERE document_id = ?", (doc,))
+        conn.execute("DELETE FROM document WHERE id = ?", (doc,))
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        return path
+    return None
 
 
 def list_documents(conn, person_id=None, family_id=None, calendar_item_id=None):
