@@ -1,11 +1,15 @@
 /* Print view (the Giving statement, and any page): ink on white, one face, no navigation,
    no buttons or forms, table rules only, money right-aligned. Private notes sit in .no-print.
+   No action words on paper (B25): every text action (a panel's foot link, a row's Plan or Record, Edit,
+   Rename, Cancel) and every column of text actions only (td.act, td.edit) is left off; links that are
+   data (a Person name, a Calendar item title) stay as plain ink text.
    Tip for the pastor: untick "Headers and footers" once in the print dialog. */
 @page { size: A4; margin: 15mm 15mm 18mm; }
 
 @media print {
   .sidebar, nav, .no-print, button, .btn, form, .flash, .title-row .actions, .title-search,
-  .list-toolbar, details.change { display: none !important; }
+  .list-toolbar, details.change, details.rename, .card-link, .row-action, .note-edit, .form-actions,
+  td.edit, th.edit, td.act, th.act, .list-head .spacer { display: none !important; }
   html, body { background: #fff; color: #000; }
   body { font: 11pt/1.4 "Segoe UI", Arial, sans-serif; }
   .app { display: block; }

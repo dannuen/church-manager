@@ -72,6 +72,17 @@ class SentDocumentTest(CopyTestCase):
         with self.assertRaises(ValueError):
             sent.next_number(self.conn, 26.5)
 
+    def test_a_date_needs_a_year_from_1900_to_9999(self):
+        """B24: a row dated 1899 got a number but showed in no Sent documents year."""
+        for day in ("1899-12-31", "0001-01-01"):
+            with self.assertRaisesRegex(ValueError, r"^Date: use a year from 1900 to 9999\.$", msg=day):
+                self.add(day)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM sent_document").fetchone()[0], 0)  # nothing saved
+        self.assertEqual(self.add("1900-01-01")[1], "01/1900")
+        self.assertEqual(self.add("9999-12-31")[1], "01/9999")
+        self.assertEqual([r["number"] for r in sent.list_sent_documents(self.conn, 1900)], ["01/1900"])
+        self.assertEqual([r["number"] for r in sent.list_sent_documents(self.conn, 9999)], ["01/9999"])
+
     def test_database_keeps_the_rule_too(self):
         self.add("2026-01-05")
         with self.assertRaises(sqlite3.IntegrityError):

@@ -80,7 +80,7 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .row { display: flex; align-items: center; gap: 12px; min-height: var(--row); padding: 8px 0; min-width: 0; }
 .row + .row { border-top: 1px solid var(--rule); }
 .row .what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
-.row .side { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--fs-meta); }
+.row .side { flex: 0 1 auto; max-width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--fs-meta); }
 .row .day { flex: none; width: 92px; font-size: var(--fs-meta); }
 .row .time { flex: none; width: 44px; color: var(--muted); font-size: var(--fs-meta); }
 .row .figure { flex: none; width: 96px; text-align: right; font-size: var(--fs-meta); }
@@ -474,3 +474,12 @@ table.documents td:last-child a { color: var(--text); font-weight: 600; }
   table.documents tr[data-row] > td:last-child { flex: 0 0 auto; width: auto; order: 1; margin-left: auto; }
   table.documents td:last-child a { display: inline-block; padding: 12px 0 12px 8px; margin: -12px 0 -12px -8px; }   /* a 44px tap */
 }
+
+/* ---------- FIX-T 4b ----------
+   B26: in every row list the title (.what, the row identity) wraps to 2 lines at most and then ends with
+   "…" (ui.clamp2: the full text in its title). The grey .side gets the width after it: one line with "…",
+   at most 30% of the row (.row .side above), its full text in its title. A row whose title may wrap sets
+   each part on the baseline of the title's first line (the day, time, kind and date read with it, as in
+   the Calendar agenda); times, dates and numbers stay on one line. */
+.row:has(> .what.wrap) { align-items: baseline; }
+.row .day, .row .time { white-space: nowrap; }

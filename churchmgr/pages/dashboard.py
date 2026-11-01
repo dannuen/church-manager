@@ -10,8 +10,7 @@ import traceback
 from .. import calendar as cal
 from .. import care, money, sent, ui
 from ..server import Response
-from ..ui import h, vi
-from .people import clamp2
+from ..ui import clamp2, h, vi
 
 WEEK_ROWS = 6  # Calendar items shown before "View all"
 VISIT_ROWS = 6  # Persons shown in Needs a visit (the card allows up to 10; the design rule caps lists at 4-6)
@@ -110,7 +109,8 @@ def _panel(name, title, body, meta="", head_link="", foot="", span=""):
 
 
 def _failed(name, title, span):
-    return _panel(name, title, f'<p class="empty">Could not load {h(title)}. <a href="/">Retry</a></p>', span=span)
+    return _panel(name, title, f'<p class="empty">Could not load {h(title)}. <a class="no-print" href="/">Retry</a></p>',
+                  span=span)
 
 
 def _empty(sentence):
@@ -138,17 +138,21 @@ def _this_week(items, today, span):
     rows = []
     for it in items[:WEEK_ROWS]:
         day = _dt.date.fromisoformat(it["starts_at"][:10])
-        sub = [h(it["kind"])]
+        sub, words = [h(it["kind"])], [it["kind"]]
         if it["kind"] == "Visit" and it["visit_name"] and it["visit_name"] not in it["title"]:
             sub.append(vi(it["visit_name"]))
+            words.append(it["visit_name"])
         elif it["place"]:
             sub.append(vi(it["place"]))
+            words.append(it["place"])
+        # B26: the title wraps to 2 lines (full text in its title) and gets the width before the place
+        link = f'<a href="/calendar/{it["id"]}">{h(it["title"])}</a>'
         rows.append(
             '<li class="row" data-row>'
             f'<span class="day">{h(_day_label(day, today))}</span>'
             f'<span class="time num">{h(ui.fmt_time(it["starts_at"]))}</span>'
-            f'<a class="what" href="/calendar/{it["id"]}">{vi(it["title"])}</a>'
-            f'<span class="side">{" · ".join(sub)}</span></li>'
+            f'<span class="what wrap">{clamp2(link, it["title"], lang="vi")}</span>'
+            f'{ui.row_side(sub, words)}</li>'
         )
     body = f'<ul class="rows">{"".join(rows)}</ul>' if rows else _empty("Nothing this week.")
     more = f"View all {len(items)} in Calendar" if len(items) > WEEK_ROWS else "Open Calendar"
@@ -166,10 +170,12 @@ def _needs_visit(people, months, span):
     rows = []
     for p in people[:VISIT_ROWS]:
         last = ui.fmt_date(p["last_visit"]) if p["last_visit"] else "never"
+        link = f'<a href="/people/{p["person_id"]}">{h(p["full_name"])}</a>'
+        status = h(p["status_name"]) if p["status_name"] else ui.DASH
         rows.append(
             '<li class="row" data-row>'
-            f'<a class="what" href="/people/{p["person_id"]}">{vi(p["full_name"])}</a>'
-            f'<span class="side">{h(p["status_name"]) if p["status_name"] else ui.DASH}</span>'
+            f'<span class="what wrap">{clamp2(link, p["full_name"], lang="vi")}</span>'
+            f'{ui.row_side([status], [p["status_name"]])}'
             f'<span class="figure num{" faint" if not p["last_visit"] else ""}" '
             f'title="Last Visit">{h(last)}</span></li>'
         )

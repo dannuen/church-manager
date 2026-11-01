@@ -63,6 +63,23 @@ def vi(value):
     return f'<span lang="vi">{h(value)}</span>'
 
 
+def clamp2(inner_html, full_text, lang=None, cls=""):
+    """Text that wraps to 2 lines at most and then ends with "…" (``.clamp-2`` in style.css), never
+    one cut line. The full text is in the ``title``. ``inner_html`` is trusted HTML (escape its values).
+    In a row list put it in ``<span class="what wrap">``: the title of the row gets the width first."""
+    lang_attr = f' lang="{h(lang)}"' if lang else ""
+    return f'<span class="clamp-2{" " + cls if cls else ""}"{lang_attr} title="{h(full_text)}">{inner_html}</span>'
+
+
+def row_side(html_parts, text_parts):
+    """The grey ``<span class="side">`` of a row: one line with "…" (at most 30% of the row, style.css),
+    its full text in the ``title``. ``html_parts`` are trusted HTML; ``text_parts`` are the same words as
+    plain text (an empty one is left out of the title)."""
+    full = " · ".join(t for t in text_parts if t)
+    title = f' title="{h(full)}"' if full else ""
+    return f'<span class="side"{title}>{" · ".join(html_parts)}</span>'
+
+
 def url(path, **params):
     """``url("/money/statement", person_id=5, year=2026)`` -> ``/money/statement?person_id=5&year=2026``.
     ``None`` values are left out. Use ``msg=`` for the flash message on the next page."""

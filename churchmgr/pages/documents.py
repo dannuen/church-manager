@@ -82,7 +82,7 @@ def _doc_row(row):
     name = row["original_name"]
     link = f'<a href="/documents/{int(row["id"])}/file">{h(name)}</a>'
     return ('<li class="row" data-row><span class="what wrap">'
-            f'{person_pages.clamp2(link, name, lang="vi")}'
+            f'{ui.clamp2(link, name, lang="vi")}'
             f'<span class="sub num">{h(meta)}</span></span></li>')
 
 
@@ -130,7 +130,8 @@ def _linked(r):
 
 
 def _delete_link(r):
-    """The quiet Delete text action that ends a row of the list: it opens the one question."""
+    """The quiet Delete text action that ends a row of the list: it opens the one question.
+    Its column has the class ``act``: print.css leaves the whole column off paper."""
     return (f'<a href="/documents/{int(r["id"])}/delete" aria-label="Delete the Document {h(r["original_name"])}">'
             "Delete</a>")
 
@@ -142,10 +143,10 @@ def list_page(req):
              for r in rows]
     if lines:
         body = person_pages.table([("Document", False), ("Linked to", False), ("Size", True), ("Added", True),
-                                   ("", False)], lines, "documents")
+                                   ("", False, "act")], lines, "documents")
     else:
         body = person_pages.empty("No Document yet.")
-    hint = ('<p class="hint list-foot">To add a Document, open its Person, Family or Calendar item '
+    hint = ('<p class="hint list-foot no-print">To add a Document, open its Person, Family or Calendar item '
             "and press Add document there.</p>")
     total = sum(r["size"] for r in rows)
     sub = h(f"{ui.plural(len(rows), 'Document', 'Documents')} · {fmt_size(total)} in this church copy · newest first")

@@ -11,6 +11,7 @@ import io
 import json
 import os
 import pathlib
+import re
 import socket
 import tempfile
 import unicodedata
@@ -289,6 +290,51 @@ class FakeChurchServerTest(LiveServer, unittest.TestCase):
         self.assertEqual(seen, {"id": 42, "name": "Huệ", "q": "a"})
         self.assertEqual(self.request("GET", "/thing/abc/x")[0], 404)
         self.assertEqual(self.request("POST", "/thing/1/x", {"a": "b"})[0], 405)
+
+    def test_huge_id_in_a_path_is_not_found(self):
+        """B23: an ``<int:...>`` part above SQLite's largest INTEGER gave 500 (OverflowError).
+        Every such route of every page, each id part in turn, GET or a same-Origin POST."""
+        from churchmgr import pages
+        max_id = "9223372036854775807"  # text.MAX_ID: SQLite's largest INTEGER
+        routes = [(m, p) for m, _rx, _conv, _h, p in server.build_routes(pages.PAGES) if "<int:" in p]
+        self.assertGreaterEqual(len(routes), 34)  # 11 GET + 23 POST when this was written
+        self.assertEqual({m for m, _p in routes}, {"GET", "POST"})
+        part = re.compile(r"<int:[A-Za-z_]+>")
+        big_ids = ["99999999999999999999", "9223372036854775808", "9" * 5000]  # 5000 digits: more than int() reads
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            for method, pattern in routes:
+                for k in range(len(part.findall(pattern))):
+                    for big in big_ids + [max_id]:
+                        n = iter(range(99))
+                        path = part.sub(lambda _m: big if next(n) == k else "1", pattern)
+                        status, _h, data = self.request(method, path, {} if method == "POST" else None)
+                        page = data.decode("utf-8")
+                        if big == max_id:  # reaches the page: its own "<word> not found" (a few POSTs: 400)
+                            self.assertIn(status, (404,) if method == "GET" else (400, 404), (method, pattern, k))
+                            self.assertNotIn("Something went wrong", page, (method, pattern, k))
+                            continue
+                        self.assertEqual(status, 404, (method, pattern, k, big[:25], page[:300]))
+                        self.assertIn("Page not found", page, (method, pattern, big[:25]))
+        self.assertNotIn("Traceback", err.getvalue())
+        # the same-Origin check still comes first
+        status, _h, _d = self.request("POST", "/people/99999999999999999999/edit", {}, origin=False)
+        self.assertEqual(status, 403)
+
+    def test_huge_id_in_a_query_is_a_plain_refusal(self):
+        """B23: a query id above SQLite's largest INTEGER gets a plain sentence, never 500 or Python words."""
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            for big in ("99999999999999999999", "9223372036854775808", "9" * 5000):
+                for path, word in ((f"/money/statement?person_id={big}", "Person"),
+                                   (f"/money/statement?family_id={big}", "Family"),
+                                   (f"/documents/new?person_id={big}", "Person")):
+                    status, _h, page = self.get_text(path)
+                    self.assertIn(status, (400, 404), (path[:60], page[:300]))
+                    self.assertIn(f"No {word} with that id.", page, path[:60])
+                    for raw in ("Overflow", "Traceback", "int too large", "4300", "Something went wrong"):
+                        self.assertNotIn(raw, page, path[:60])
+        self.assertNotIn("Traceback", err.getvalue())
 
     def test_post_redirect_and_forms(self):
         got = {}

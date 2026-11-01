@@ -10,7 +10,8 @@ Safety rules (card B):
 
 A page module has ``ROUTES = [("GET", "/people/<int:id>", handler), ...]``. A handler takes a
 :class:`Request` and returns a :class:`Response`. Path parts ``<int:name>`` and ``<name>`` land in
-``req.params``. A ``ValueError`` that leaves a handler is shown as a plain 400 page with its message.
+``req.params``. An ``<int:name>`` part above ``text.MAX_ID`` gets the 404 page before any handler runs.
+A ``ValueError`` that leaves a handler is shown as a plain 400 page with its message.
 """
 
 import html
@@ -26,7 +27,7 @@ from email.parser import BytesParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import db, paths, settings, ui
+from . import db, paths, settings, text, ui
 
 HOST = "127.0.0.1"
 MAX_BODY = 60 * 1024 * 1024  # bytes
@@ -182,7 +183,7 @@ def compile_route(method, pattern, handler):
         regex += re.escape(pattern[pos:m.start()])
         kind, name = m.group(1), m.group(2)
         regex += f"(?P<{name}>[0-9]+)" if kind == "int" else f"(?P<{name}>[^/]+)"
-        converters[name] = int if kind == "int" else str
+        converters[name] = text.digits_to_int if kind == "int" else str
         pos = m.end()
     regex += re.escape(pattern[pos:])
     return (method.upper(), re.compile(f"^{regex}$"), converters, handler, pattern)
@@ -383,6 +384,8 @@ class _Handler(BaseHTTPRequestHandler):
                 allowed.append(r_method)
                 continue
             req.params = {k: converters[k](v) for k, v in m.groupdict().items()}
+            if any(type(v) is int and v > text.MAX_ID for v in req.params.values()):
+                return _error_page(req, 404)  # no row has an id above SQLite's largest INTEGER
             try:
                 return handler(req)
             except (ValueError, db.ChurchCopyError) as exc:

@@ -41,9 +41,11 @@ def add_months(day, months):
 def check_year(year):
     """Return the year as an int (from an int or digit text, 1900 to 9999), or raise ``ValueError``."""
     if isinstance(year, str) and year.strip().isascii() and year.strip().isdigit():
-        year = int(year.strip())
-    if type(year) is not int or not 1900 <= year <= 9999:
+        year = text.digits_to_int(year.strip())
+    if type(year) is not int:
         raise ValueError("Year must be a whole number like 2026.")
+    if not 1900 <= year <= 9999:
+        raise ValueError("Year: use a year from 1900 to 9999.")
     return year
 
 

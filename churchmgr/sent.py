@@ -30,7 +30,7 @@ def next_number(conn, year):
 def add_sent_document(conn, date, recipient_id, purpose_id, subject=None, document_id=None):
     """Record a Sent document. The year is the year of ``date``.
     Returns ``(id, number_text)``, for example ``(12, "06/2026")``."""
-    day = text.check_date(date, "Date")
+    day = text.check_date_years(date, "Date")  # a year from 1900 to 9999, like an Offering
     year = int(day[:4])
     with transaction(conn):  # BEGIN IMMEDIATE: no one else can take the same number
         recipient = lists.require_item(conn, recipient_id, "recipient")["id"]

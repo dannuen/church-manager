@@ -49,8 +49,9 @@ def _year_chips(year, today):
         mark = ' aria-current="true"' if current else ""
         href = "/sent" if y == today.year else ui.url("/sent", year=y)
         return f'<a class="chip" href="{h(href)}"{mark}>{h(label)}</a>'
-    links = (chip(f"‹ {year - 1}", year - 1) + chip("This year", today.year, year == today.year)
-             + chip(f"{year + 1} ›", year + 1))
+    links = ((chip(f"‹ {year - 1}", year - 1) if year > 1900 else "")  # a Sent documents year is 1900 to 9999
+             + chip("This year", today.year, year == today.year)
+             + (chip(f"{year + 1} ›", year + 1) if year < 9999 else ""))
     return f'<div class="list-toolbar"><nav class="chips" aria-label="Years">{links}</nav></div>'
 
 
@@ -112,7 +113,7 @@ def _new_form(req, values=None, error=None, status=200):
     errors = field_errors(error, "new", _LABELS)
     year = _dt.date.today().year
     inner = (
-        date_field("Date", "date", "f-date", v("date"), errors.get("date"),
+        date_field("Date", "date", "f-date", v("date"), errors.get("date"), min_date="1900-01-01",
                    hint="The date written on the Sent document. Its year gives the number.")
         + '<div class="inline-fields two">'
         + ui.select_field("Recipient", "recipient_id", _options(conn, "recipient"), selected=v("recipient_id", ""),

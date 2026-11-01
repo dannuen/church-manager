@@ -164,7 +164,9 @@ class MoneyPagesTest(PagesTestBase):
         fid = people.list_families(self.db())[0]["id"]
         page = self.page(f"/money/statement?person_id={pid}&family_id={fid}&year={TODAY.year}", expect=400)
         self.assertIn("one Person or one Family", page)
-        self.assertIn("Year must be", self.page(f"/money/statement?person_id={pid}&year=12", expect=400))
+        self.assertIn("Year: use a year from 1900 to 9999.",
+                      self.page(f"/money/statement?person_id={pid}&year=12", expect=400))
+        self.assertIn("Year must be", self.page(f"/money/statement?person_id={pid}&year=abc", expect=400))
         self.assertIn("No Person with id", self.page("/money/statement?person_id=999999", expect=400))
 
     def test_offering_with_a_giver_and_the_month_pages(self):

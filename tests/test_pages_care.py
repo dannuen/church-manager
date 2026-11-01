@@ -117,8 +117,8 @@ class CarePageTest(PagesTestBase):
         self.assertNotIn("Last Visit", sub.group(1))
         self.assertIn("No Visit done yet.", section(page, "care-log"))
         self.assertNotIn("Visit done", section(page, "story"))
-        row = re.search(rf'<li class="row" data-row><span class="what"><a href="/people/{joined}">.*?</li>',
-                        section(self.page("/care"), "needs-visit"), re.S)
+        row = re.search(rf'<li class="row" data-row><span class="what wrap"><span class="clamp-2" title="[^"]*">'
+                        rf'<a href="/people/{joined}">.*?</li>', section(self.page("/care"), "needs-visit"), re.S)
         self.assertIsNotNone(row)
         self.assertIn('title="Last Visit">never</span>', row.group(0))
         # in the Family on the day of the Visit: it counts

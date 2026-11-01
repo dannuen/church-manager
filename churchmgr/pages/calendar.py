@@ -18,7 +18,7 @@ from .. import care, people, text, ui
 from ..db import transaction
 from ..schema import CALENDAR_KINDS
 from ..server import Response
-from ..ui import h, vi
+from ..ui import clamp2, h, vi
 from . import documents as document_pages  # card C3: the shared Documents block
 from .care import default_start
 from .people import (change_box, empty, family_link, field_errors, form_error, not_found, num, panel,
@@ -169,19 +169,25 @@ def _kind(kind):
 # ---------------------------------------------------------------- /calendar
 
 def _item_row(it):
-    sub = [_kind(it["kind"])]
+    sub, words = [_kind(it["kind"])], [it["kind"]]
     if it["kind"] == "Visit" and it["visit_name"] and it["visit_name"] not in it["title"]:
         sub.append(vi(it["visit_name"]))
+        words.append(it["visit_name"])
     if it["place"]:
         sub.append(vi(it["place"]))
+        words.append(it["place"])
     if it["kind"] == "Service" and it["head_count"] is not None:
         sub.append(f'Head count <span class="num">{it["head_count"]}</span>')
+        words.append(f'Head count {it["head_count"]}')
     if it["kind"] == "Visit" and it["visit_done"]:
         sub.append("done")
+        words.append("done")
+    # B26: the title wraps to 2 lines (full text in its title); the grey line under it keeps one line
+    link = f'<a href="/calendar/{it["id"]}">{h(it["title"])}</a>'
     return ('<li class="row cal-row" data-row>'
             f'<span class="time num">{h(time_span(it["starts_at"], it["ends_at"]))}</span>'
-            f'<span class="what"><a href="/calendar/{it["id"]}">{vi(it["title"])}</a>'
-            f'<span class="sub">{" · ".join(sub)}</span></span></li>')
+            f'<span class="what wrap">{clamp2(link, it["title"], lang="vi")}'
+            f'<span class="sub" title="{h(" · ".join(words))}">{" · ".join(sub)}</span></span></li>')
 
 
 def _day_block(day, items, today):
@@ -254,9 +260,9 @@ def _to_record_panel(conn, today):
     rows = [it for it in cal.items_between(conn, since, today)
             if it["kind"] == "Service" and it["head_count"] is None]
     lines = "".join(
-        '<li class="row" data-row><span class="what">'
-        f'<a href="/calendar/{it["id"]}#head-count">{vi(it["title"])}</a>'
-        f'<span class="sub num">{h(ui.fmt_weekday(it["starts_at"]))} {h(ui.fmt_datetime(it["starts_at"]))}</span></span>'
+        '<li class="row" data-row><span class="what wrap">'
+        + clamp2(f'<a href="/calendar/{it["id"]}#head-count">{h(it["title"])}</a>', it["title"], lang="vi")
+        + f'<span class="sub num">{h(ui.fmt_weekday(it["starts_at"]))} {h(ui.fmt_datetime(it["starts_at"]))}</span></span>'
         f'<a class="row-action" href="/calendar/{it["id"]}#head-count">Record</a></li>'
         for it in reversed(rows)
     )
@@ -413,7 +419,7 @@ def _details_panel(conn, row):
             rows.append(("Visit", f'Done on <span class="num">{h(ui.fmt_date(row["visit_done_date"]))}</span>'))
             rows.append(("Care note", vi(row["care_note"])))
         else:
-            rows.append(("Visit", 'Not done yet. <a href="/care">Mark it done in Care</a>'))
+            rows.append(("Visit", 'Not done yet.<span class="no-print"> <a href="/care">Mark it done in Care</a></span>'))
     if row["series_id"] is not None:
         series = cal.series_items(conn, row["series_id"])
         k = next(i for i, s in enumerate(series) if s["id"] == iid)
@@ -465,8 +471,8 @@ def _people_panel(conn, row, error, vals, today):
     past = row["starts_at"][:10] < today
     lines = "".join(
         '<li class="row" data-row>'
-        f'<span class="what">{person_link(p["person_id"], p["full_name"])}</span>'
-        f'<span class="side">{h(PART_WORDS[p["part"]])}</span>'
+        f'<span class="what wrap">{clamp2(person_link(p["person_id"], p["full_name"]), p["full_name"])}</span>'
+        f'{ui.row_side([h(PART_WORDS[p["part"]])], [PART_WORDS[p["part"]]])}'
         f'<form class="row-form" action="/calendar/{iid}/people/remove" method="post">'
         f'{ui.hidden("person_id", p["person_id"])}{ui.hidden("part", p["part"])}'
         f'<button class="link-btn" type="submit" aria-label="Remove {h(p["full_name"])} ({h(PART_WORDS[p["part"]])})">'
