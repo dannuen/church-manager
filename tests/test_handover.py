@@ -122,6 +122,21 @@ class HandoverTest(CopyTestCase):
                 self.make()
         self.assertEqual(list(self.out.iterdir()), [])
 
+    def test_only_the_private_text_refusal_says_private_text_found(self):
+        """The Copies page picks its layout by this flag, not by the words of the message."""
+        with self.assertRaises(handover.HandoverError) as ctx:
+            handover.check_no_private_text(b"xx " + "Cầu nguyện".encode("utf-8"), [(1, "Cầu nguyện".encode("utf-8"))])
+        self.assertTrue(ctx.exception.private_text_found)
+        with mock.patch.object(handover, "_strip_private", lambda path: None):  # the count check says "Private note"
+            with self.assertRaises(handover.HandoverError) as ctx:
+                self.make()
+        self.assertIn("Private note", str(ctx.exception))
+        self.assertFalse(ctx.exception.private_text_found)
+        with self.assertRaises(handover.HandoverError) as ctx:
+            handover.make_handover(self.folder, self.tmp / "OneDrive - Personal" / "out")
+        self.assertFalse(ctx.exception.private_text_found)
+        self.assertFalse(handover.HandoverError("plain").private_text_found)
+
 
 class NewChurchSetupTest(unittest.TestCase):
     def setUp(self):

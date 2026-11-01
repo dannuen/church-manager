@@ -194,6 +194,44 @@ class ItemTest(CopyTestCase):
         with self.assertRaises(ValueError):
             calendar.delete_calendar_item(self.conn, past, today="01/05/2026")
 
+    def test_delete_refusal_gives_the_reason_and_writes_nothing(self):
+        sid = self.service()
+        calendar.set_head_count(self.conn, sid, 40)
+        event = calendar.add_calendar_item(self.conn, "Event", "Tiệc", "2026-05-03 19:00")[0]
+        documents.add_document(self.conn, self.folder, b"plan", "plan.txt", calendar_item_id=event)
+        visit = care.plan_visit(self.conn, "2026-05-04 10:00", person_id=self.a)
+        care.mark_visit_done(self.conn, visit, "2026-05-04")
+        past = calendar.add_calendar_item(self.conn, "Event", "Lễ Tạ Ơn", "2026-04-30 09:00")[0]
+        calendar.add_person_to_item(self.conn, past, self.a, "serves")
+        plain = calendar.add_calendar_item(self.conn, "Meeting", "Họp", "2026-04-01 19:00")[0]  # past, nobody listed
+        expected = {
+            sid: "This Service has a Head count, so it is kept.",
+            event: "This Calendar item has a Document, so it is kept.",
+            visit: "This Visit is done and is part of the Care log, so it is kept.",
+            past: "This Calendar item is in the past and people joined or served it, so it is kept.",
+            plain: None,
+        }
+        changes = self.conn.total_changes
+        for iid, reason in expected.items():
+            self.assertEqual(calendar.delete_refusal(self.conn, iid, today="2026-05-01"), reason, iid)
+            self.assertFalse(self.conn.in_transaction)  # a read only: no BEGIN, so no write lock
+        self.assertEqual(self.conn.total_changes, changes)  # nothing written
+        self.assertIsNone(calendar.delete_refusal(self.conn, past, today="2026-04-30"))  # on its own day it may go
+        with self.assertRaises(ValueError):
+            calendar.delete_refusal(self.conn, 999999)
+        with self.assertRaises(ValueError):
+            calendar.delete_refusal(self.conn, plain, today="01/05/2026")
+        # delete_calendar_item refuses with the same sentence, and deletes what may go
+        for iid, reason in expected.items():
+            if reason is None:
+                calendar.delete_calendar_item(self.conn, iid, today="2026-05-01")
+                self.assertIsNone(calendar.get_calendar_item(self.conn, iid))
+            else:
+                with self.assertRaises(ValueError) as ctx:
+                    calendar.delete_calendar_item(self.conn, iid, today="2026-05-01")
+                self.assertEqual(str(ctx.exception), reason)
+                self.assertIsNotNone(calendar.get_calendar_item(self.conn, iid))
+
     def test_people_on_an_item(self):
         sid = self.service()
         self.assertTrue(calendar.add_person_to_item(self.conn, sid, self.b, "joins"))

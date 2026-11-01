@@ -128,26 +128,27 @@ class _Fake:
             head_age = rng.randint(38, 66)
             head_name = FIRST_PERSON if i == 0 else self.name(surname, "M")
             fid = people_data.add_family(self.conn, f"Gia đình {head_name}", address=self.address())
-            fam = {"id": fid, "name": f"Gia đình {head_name}", "founded": founded, "members": []}
+            fam = {"id": fid, "name": f"Gia đình {head_name}", "founded": founded, "persons": []}
             self.families.append(fam)
-            members = [(head_name, "M", self.birth(head_age), "Head")]
+            family_people = [(head_name, "M", self.birth(head_age), "Head")]
             spouse_surname = rng.choice(SURNAMES)
-            members.append((self.name(spouse_surname, "F"), "F", self.birth(head_age - rng.randint(0, 5)), "Spouse"))
+            family_people.append((self.name(spouse_surname, "F"), "F", self.birth(head_age - rng.randint(0, 5)),
+                                  "Spouse"))
             for k in range(size - 2):
                 if size >= 5 and k == size - 3:
-                    members.append((self.name(surname, "F"), "F", self.birth(rng.randint(72, 88)), "Other"))
+                    family_people.append((self.name(surname, "F"), "F", self.birth(rng.randint(72, 88)), "Other"))
                     continue
                 gender = rng.choice("MF")
                 age = 26 if (i == 1 and k == 0) else rng.randint(1, max(1, head_age - 22))
-                members.append((self.name(surname, gender), gender, self.birth(age), "Child"))
-            for full, gender, birth, role in members:
+                family_people.append((self.name(surname, gender), gender, self.birth(age), "Child"))
+            for full, gender, birth, role in family_people:
                 pid = self.person(full, gender, birth)
                 start = max(founded, birth)
                 people_data.set_family(self.conn, pid, fid, role, start.isoformat())
-                fam["members"].append({"id": pid, "role": role, "start": start})
-        member_ids = {m["id"] for f in self.families for m in f["members"]}
+                fam["persons"].append({"id": pid, "role": role, "start": start})
+        family_person_ids = {p["id"] for f in self.families for p in f["persons"]}
         self.singles = []
-        n_singles = n - len(member_ids)
+        n_singles = n - len(family_person_ids)
         for k in range(n_singles):
             gender = rng.choice("MF")
             age = rng.randint(62, 75) if k == n_singles - 1 else rng.randint(19, 60)
@@ -155,7 +156,7 @@ class _Fake:
             self.singles.append(pid)
         # A grown-up child of Family 1 marries one single Person and they start a new Family.
         self.move_date = self.ago(100)
-        mover = self.families[1]["members"][2]["id"]
+        mover = self.families[1]["persons"][2]["id"]
         spouse = self.singles[0]
         mover_name = next(p["name"] for p in self.people if p["id"] == mover)
         fid = people_data.add_family(self.conn, f"Gia đình {mover_name}", address=self.address())
@@ -163,7 +164,7 @@ class _Fake:
         people_data.set_family(self.conn, spouse, fid, "Spouse", self.move_date)
         self.families.append({"id": fid, "name": f"Gia đình {mover_name}",
                               "founded": _dt.date.fromisoformat(self.move_date),
-                              "members": [{"id": mover, "role": "Head"}, {"id": spouse, "role": "Spouse"}]})
+                              "persons": [{"id": mover, "role": "Head"}, {"id": spouse, "role": "Spouse"}]})
         self.mover = mover
         self.add_count("persons", len(self.people))
         self.add_count("families", len(self.families))
@@ -172,7 +173,7 @@ class _Fake:
         rng, st = self.rng, self.status
         ids = [p["id"] for p in self.people]
         first = ids[0]
-        heads = {f["members"][0]["id"] for f in self.families}  # heads (and Trưởng Chi phái) stay Members
+        heads = {f["persons"][0]["id"] for f in self.families}  # heads (and Trưởng Chi phái) stay Members
         others = [pid for pid in ids if pid not in heads]
         rng.shuffle(others)
         n_left = max(1, self.n // 16)
@@ -216,7 +217,7 @@ class _Fake:
         people_data.set_family_chi_phai(self.conn, self.families[-1]["id"], cps[0], self.move_date)
         for j, cid in enumerate(cps):
             fams = [f for i, f in enumerate(regular) if i % 3 == j and i != moved]
-            head = fams[0]["members"][0]["id"]
+            head = fams[0]["persons"][0]["id"]
             if j == 0:  # one past Trưởng Chi phái
                 people_data.set_truong_chi_phai(self.conn, cid, self.singles[-1], self.ago(2200))
                 people_data.set_truong_chi_phai(self.conn, cid, head, self.ago(500))

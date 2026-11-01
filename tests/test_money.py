@@ -203,5 +203,134 @@ class GivingStatementTest(CopyTestCase):
         self.assertEqual((empty["rows"], empty["total"]), ([], 0))
 
 
+class CorrectAndDeleteTest(CopyTestCase):
+    """A mistyped Offering or Expense is corrected in place or deleted (a typo is not history)."""
+
+    OLD = "2026-05-03 09:00:00"
+
+    def setUp(self):
+        super().setUp()
+        c = self.conn
+        self.general = self.item("fund", name="General")
+        self.building = self.item("fund", name="Building")
+        self.rent = self.item("spending_category", name="Rent")
+        self.events = self.item("spending_category", name="Events")
+        self.p = people.add_person(c, "Lê Văn An")
+        self.f = people.add_family(c, "Gia đình Lê")
+        # 10.000.000 typed instead of 1.000.000
+        self.oid = money.add_offering(c, "2026-05-03", 10_000_000, self.general, giver_person_id=self.p, note="gõ nhầm")
+        self.eid = money.add_expense(c, "2026-05-10", 6_500_000, self.rent, note="Thuê hội trường")
+        for table in ("offering", "expense"):  # an old created_at, so a changed one would show
+            c.execute(f"UPDATE {table} SET created_at = ?", (self.OLD,))
+
+    def row(self, table, rid):
+        return self.conn.execute(f"SELECT * FROM {table} WHERE id = ?", (rid,)).fetchone()
+
+    def count(self, table):
+        return self.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+
+    def statement_total(self, **giver):
+        return money.giving_statement(self.conn, 2026, **giver)["total"]
+
+    def test_update_offering_fixes_the_row_in_place(self):
+        self.assertEqual(self.statement_total(person_id=self.p), 10_000_000)
+        money.update_offering(self.conn, self.oid, date="2026-05-04", amount=1_000_000, fund_id=self.building,
+                              giver_person_id=self.p, note="đã sửa")
+        row = self.row("offering", self.oid)
+        self.assertEqual((row["date"], row["amount"], row["fund_id"], row["giver_person_id"], row["giver_family_id"],
+                          row["note"], row["created_at"]),
+                         ("2026-05-04", 1_000_000, self.building, self.p, None, "đã sửa", self.OLD))
+        self.assertIs(type(row["amount"]), int)
+        self.assertEqual(self.count("offering"), 1)  # no second row, no correcting entry
+        self.assertEqual(money.month_totals(self.conn, 2026, 5),
+                         {"offerings": 1_000_000, "expenses": 6_500_000, "balance": -5_500_000})
+        st = money.giving_statement(self.conn, 2026, person_id=self.p)
+        self.assertEqual(([(r["date"], r["fund"], r["amount"]) for r in st["rows"]], st["total"]),
+                         ([("2026-05-04", "Building", 1_000_000)], 1_000_000))
+        # the Giver moves to the Family, then to nobody (a no-name offering); the note is cleared
+        money.update_offering(self.conn, self.oid, date="2026-05-04", amount=1_000_000, fund_id=self.building,
+                              giver_family_id=self.f)
+        self.assertEqual((self.statement_total(person_id=self.p), self.statement_total(family_id=self.f)),
+                         (0, 1_000_000))
+        money.update_offering(self.conn, self.oid, date="2026-05-04", amount=1_000_000, fund_id=self.building)
+        row = self.row("offering", self.oid)
+        self.assertEqual((row["giver_person_id"], row["giver_family_id"], row["note"]), (None, None, None))
+        self.assertEqual(self.statement_total(family_id=self.f), 0)
+        # a new date in June: May loses it, June gets it
+        money.update_offering(self.conn, self.oid, date="2026-06-01", amount=1_000_000, fund_id=self.building)
+        self.assertEqual(money.month_totals(self.conn, 2026, 5)["offerings"], 0)
+        self.assertEqual(money.month_totals(self.conn, 2026, 6)["offerings"], 1_000_000)
+
+    def test_update_offering_refuses_what_add_offering_refuses(self):
+        before = tuple(self.row("offering", self.oid))
+        good = dict(date="2026-05-03", amount=1000, fund_id=self.general)
+        bad = [
+            dict(amount=1.5), dict(amount="1.000"), dict(amount=True), dict(amount=0), dict(amount=-1),
+            dict(amount=10 ** 16), dict(fund_id=self.rent), dict(fund_id=9999), dict(date="03/05/2026"),
+            dict(giver_person_id=self.p, giver_family_id=self.f), dict(giver_person_id=9999),
+            dict(giver_family_id=9999),
+        ]
+        for kwargs in bad:
+            with self.assertRaises(ValueError, msg=kwargs):
+                money.update_offering(self.conn, self.oid, **{**good, **kwargs})
+        with self.assertRaisesRegex(ValueError, "one Giver"):
+            money.update_offering(self.conn, self.oid, **good, giver_person_id=self.p, giver_family_id=self.f)
+        self.assertEqual(tuple(self.row("offering", self.oid)), before)  # nothing changed
+        with self.assertRaisesRegex(ValueError, r"^No Offering with id 9999\.$"):
+            money.update_offering(self.conn, 9999, **good)
+        with self.assertRaisesRegex(ValueError, r"^No Offering with id 9999\.$"):
+            money.delete_offering(self.conn, 9999)
+        with self.assertRaisesRegex(ValueError, "Offering must be a whole number"):
+            money.delete_offering(self.conn, "abc")
+        self.assertEqual(self.count("offering"), 1)
+
+    def test_delete_offering(self):
+        keep = money.add_offering(self.conn, "2026-05-20", 300_000, self.general, giver_person_id=self.p)
+        money.delete_offering(self.conn, self.oid)
+        self.assertIsNone(money.get_offering(self.conn, self.oid))
+        self.assertEqual(money.get_offering(self.conn, keep)["amount"], 300_000)
+        self.assertEqual(money.month_totals(self.conn, 2026, 5)["offerings"], 300_000)
+        st = money.giving_statement(self.conn, 2026, person_id=self.p)
+        self.assertEqual(([r["amount"] for r in st["rows"]], st["total"]), ([300_000], 300_000))
+        with self.assertRaisesRegex(ValueError, "No Offering with id"):
+            money.delete_offering(self.conn, self.oid)  # already gone
+
+    def test_update_and_delete_expense(self):
+        money.update_expense(self.conn, self.eid, date="2026-05-11", amount=650_000, spending_category_id=self.events,
+                             note="Hoa cho Lễ Tạ Ơn")
+        row = self.row("expense", self.eid)
+        self.assertEqual((row["date"], row["amount"], row["spending_category_id"], row["note"], row["created_at"]),
+                         ("2026-05-11", 650_000, self.events, "Hoa cho Lễ Tạ Ơn", self.OLD))
+        self.assertIs(type(row["amount"]), int)
+        self.assertEqual(money.month_totals(self.conn, 2026, 5),
+                         {"offerings": 10_000_000, "expenses": 650_000, "balance": 9_350_000})
+        before = tuple(row)
+        good = dict(date="2026-05-11", amount=1000, spending_category_id=self.rent)
+        for kwargs in (dict(amount=2.5), dict(amount="650000"), dict(amount=0), dict(amount=False),
+                       dict(spending_category_id=self.general), dict(spending_category_id=9999),
+                       dict(date="2026-13-01")):
+            with self.assertRaises(ValueError, msg=kwargs):
+                money.update_expense(self.conn, self.eid, **{**good, **kwargs})
+        self.assertEqual(tuple(self.row("expense", self.eid)), before)
+        with self.assertRaisesRegex(ValueError, r"^No Expense with id 9999\.$"):
+            money.update_expense(self.conn, 9999, **good)
+        with self.assertRaisesRegex(ValueError, r"^No Expense with id 9999\.$"):
+            money.delete_expense(self.conn, 9999)
+        money.delete_expense(self.conn, self.eid)
+        self.assertIsNone(money.get_expense(self.conn, self.eid))
+        self.assertEqual(self.count("expense"), 0)
+        self.assertEqual(money.month_totals(self.conn, 2026, 5),
+                         {"offerings": 10_000_000, "expenses": 0, "balance": 10_000_000})
+
+    def test_get_offering_and_get_expense(self):
+        o = money.get_offering(self.conn, self.oid)
+        self.assertEqual((o["amount"], o["fund_name"], o["giver_name"], o["note"]),
+                         (10_000_000, "General", "Lê Văn An", "gõ nhầm"))
+        e = money.get_expense(self.conn, self.eid)
+        self.assertEqual((e["amount"], e["spending_category_name"]), (6_500_000, "Rent"))
+        self.assertIsNone(money.get_offering(self.conn, 9999))
+        self.assertIsNone(money.get_expense(self.conn, 9999))
+
+
 if __name__ == "__main__":
     unittest.main()
