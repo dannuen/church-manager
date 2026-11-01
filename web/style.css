@@ -176,3 +176,87 @@ th.n, td.n { text-align: right; }
   .list-head { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+
+/* ---------- card C1: People, Families, Chi phái and Care pages ----------
+   Grid sum at 1440px: canvas 1160 = 8 columns (main) + 4 columns (side), 16px gutter (Care: 7 + 5).
+   Below 1024px every column takes the full width. */
+.span-8 { grid-column: span 8; }
+.side-4 { grid-column: span 4; }
+.stack { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+.grid.person, .grid.family, .grid.chi-phai, .grid.care { align-items: start; }
+.panel .table-wrap { margin: 0 -12px; }          /* cell text lines up with the panel title */
+.table-wrap + .hint, .empty + .hint, .kv + .table-wrap, .kv + .empty { margin-top: 12px; }
+table.list td { font-size: var(--fs-meta); line-height: 20px; padding: 8px 12px; }
+table.list td:first-child { font-weight: 500; }
+table.list td.n, table.list th.n { white-space: nowrap; }
+table.history th.n, table.history td.n { width: 112px; }   /* From / To sit together at the right */
+table.story td:first-child { width: 104px; white-space: nowrap; font-weight: 400; color: var(--muted); }
+.list-panel { padding-top: 8px; padding-bottom: 8px; }
+
+/* key-value rows (Details, the current Family) */
+.kv { display: grid; margin: 0; }
+.kv > div { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px; padding: 6px 0; font-size: var(--fs-meta); line-height: 20px; }
+.kv > div + div { border-top: 1px solid var(--rule); }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; overflow-wrap: anywhere; }
+
+/* a change form folded under one click; it opens by itself when it shows an error */
+details.change { margin-top: 12px; }
+details.change > summary { display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); font-size: var(--fs-meta); font-weight: 600; cursor: pointer; list-style: none; }
+details.change > summary::-webkit-details-marker { display: none; }
+details.change > summary::after { content: "+"; margin-left: 8px; color: var(--muted); }
+details.change[open] > summary::after { content: "−"; }
+details.change > summary:hover { background: var(--raised); }
+details.change[open] > summary { margin-bottom: 16px; }
+details.change .form { max-width: none; }
+
+/* Status filter and the quick search above the People list, on one row */
+.list-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; margin-bottom: 16px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); color: var(--muted); font-size: var(--fs-meta); }
+.chip:hover { background: var(--raised); color: var(--text); text-decoration: none; }
+.chip[aria-current="true"] { background: var(--active); border-color: var(--active); color: var(--text); font-weight: 600; }
+.toolbar { flex: 0 1 440px; }
+.toolbar .input { flex: 1; }
+
+/* the Private note box: a tone step, no border; print.css hides .no-print */
+.panel.private { background: var(--raised); border-color: var(--raised); }
+.notes { list-style: none; padding: 0; margin-bottom: 16px; display: grid; }
+.note { padding: 8px 0; }
+.note + .note { border-top: 1px solid var(--border); }
+.note .when { display: block; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.note p { font-size: var(--fs-meta); line-height: 20px; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Care: Needs a visit rows end with "Plan"; each planned Visit holds its "Mark Visit done" form */
+.row .row-action { flex: none; width: 48px; text-align: right; font-size: var(--fs-meta); font-weight: 600; }
+.care .list-head span:nth-child(2) { width: 96px; text-align: right; }
+.care .list-head .spacer { width: 48px; }
+.visits { list-style: none; padding: 0; display: grid; }
+.visit { padding: 12px 0; }
+.visit + .visit { border-top: 1px solid var(--rule); }
+.visit-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.visit-head .when { color: var(--muted); font-size: var(--fs-meta); }
+.visit-head .what { font-weight: 500; }
+.visit > .sub { color: var(--muted); font-size: var(--fs-meta); line-height: 20px; }
+.done-form { margin-top: 8px; }
+.done-form .form { gap: 12px; max-width: none; }
+.inline-fields { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 12px; }
+
+@media (max-width: 1023px) {
+  .grid.person > *, .grid.family > *, .grid.chi-phai > *, .grid.care > * { grid-column: 1 / -1; }
+}
+@media (max-width: 640px) {
+  /* tables become two-line rows: the name on line 1, the other fields on line 2 */
+  table.list thead { display: none; }
+  table.list, table.list tbody { display: block; }
+  table.list tr { display: flex; flex-wrap: wrap; gap: 2px 12px; padding: 8px 12px; border-bottom: 1px solid var(--rule); }
+  table.list tbody tr:last-child { border-bottom: 0; }
+  table.list td { display: block; padding: 0; border: 0; color: var(--muted); }
+  table.list td:first-child { flex-basis: 100%; color: var(--text); }
+  table.list td.n { text-align: left; }
+  table.list td.n + td.n::before { content: "– "; }
+  table.story td:first-child { width: auto; }
+  .inline-fields { grid-template-columns: minmax(0, 1fr); }
+  .kv > div { grid-template-columns: 96px minmax(0, 1fr); }
+  .chip, details.change > summary { min-height: 44px; }
+}
