@@ -101,6 +101,34 @@ class CleanTest(unittest.TestCase):
             with self.assertRaises(ValueError, msg=repr(bad)):
                 text.to_id(bad)
 
+    def test_to_id_above_max_id(self):
+        """B23: SQLite has no INTEGER above 2**63-1, so a bigger id is "no such row", not a crash."""
+        self.assertEqual(text.MAX_ID, 9223372036854775807)
+        self.assertEqual(text.to_id(str(text.MAX_ID)), text.MAX_ID)
+        self.assertEqual(text.to_id(" 000000000000000000000042 "), 42)  # leading zeros are not "too big"
+        for big in (text.MAX_ID + 1, 10**30, "9223372036854775808", "99999999999999999999", "9" * 5000):
+            with self.assertRaisesRegex(ValueError, r"^No Person with that id\.$", msg=str(big)[:30]):
+                text.to_id(big, "Person")
+
+    def test_digits_to_int(self):
+        self.assertEqual(text.digits_to_int("0"), 0)
+        self.assertEqual(text.digits_to_int("007"), 7)
+        self.assertEqual(text.digits_to_int("9223372036854775807"), text.MAX_ID)
+        self.assertEqual(text.digits_to_int("9999999999999999999"), 9999999999999999999)  # 19 digits: exact
+        self.assertEqual(text.digits_to_int("99999999999999999999"), text.MAX_ID + 1)
+        self.assertEqual(text.digits_to_int("1" * 5000), text.MAX_ID + 1)  # int() would refuse 5000 digits
+
+    def test_check_date_years(self):
+        """B24: the date of an Offering, Expense or Sent document has a year from 1900 to 9999."""
+        for day, want in (("1900-01-01", "1900-01-01"), (" 9999-12-31 ", "9999-12-31"),
+                          (datetime.date(2026, 5, 31), "2026-05-31")):
+            self.assertEqual(text.check_date_years(day), want)
+        for day in ("1899-12-31", "0001-01-01", datetime.date(1, 1, 1)):
+            with self.assertRaisesRegex(ValueError, r"^Date: use a year from 1900 to 9999\.$", msg=str(day)):
+                text.check_date_years(day)
+        with self.assertRaisesRegex(ValueError, r"^Date must be a real date"):
+            text.check_date_years("2026-02-30")
+
 
 if __name__ == "__main__":
     unittest.main()

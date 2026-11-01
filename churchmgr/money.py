@@ -108,11 +108,8 @@ def _sum(conn, sql, params):
 
 def _money_date(value):
     """The date of an Offering or Expense as ``YYYY-MM-DD``: a real date with a year from 1900 to
-    9999, the same years as a Money month and a Giving statement (so every row is in a month)."""
-    day = text.check_date(value, "Date")
-    if not 1900 <= int(day[:4]) <= 9999:
-        raise ValueError("Date: use a year from 1900 to 9999.")
-    return day
+    9999 (:func:`text.check_date_years`, shared with a Sent document)."""
+    return text.check_date_years(value, "Date")
 
 
 def _offering_values(conn, date, amount, fund_id, giver_person_id, giver_family_id, note):

@@ -14,6 +14,7 @@ _DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 _DATETIME = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}")
 _DIGITS = re.compile(r"[0-9]+")
 MAX_NAME_LENGTH = 120  # a name (Full name, Family, Chi phái, list item, title) has at most this many characters
+MAX_ID = 2**63 - 1  # 9223372036854775807, SQLite's largest INTEGER: no row has a bigger id
 
 
 def nfc(s):
@@ -86,6 +87,16 @@ def check_date(value, what="Date"):
     raise ValueError(f"{what} must be a real date written YYYY-MM-DD, for example 2026-05-31.")
 
 
+def check_date_years(value, what="Date"):
+    """:func:`check_date`, and the year must be from 1900 to 9999. The date of an Offering, Expense or
+    Sent document uses it: the same years as a Money month, a Giving statement and a Sent documents
+    year, so every row shows in one of them."""
+    day = check_date(value, what)
+    if not 1900 <= int(day[:4]) <= 9999:
+        raise ValueError(f"{what}: use a year from 1900 to 9999.")
+    return day
+
+
 def check_datetime(value, what="Date and time"):
     """Return the date-time as ``YYYY-MM-DD HH:MM`` text (local time), or raise ``ValueError``."""
     if isinstance(value, _dt.datetime):
@@ -111,16 +122,25 @@ def now_text():
     return _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
 
 
+def digits_to_int(digits):
+    """ASCII digit text as an int. Text with more digits than ``MAX_ID`` gives ``MAX_ID + 1``:
+    ``int()`` refuses more than 4300 digits, and every caller refuses a number that big anyway."""
+    digits = digits.lstrip("0") or "0"
+    return int(digits) if len(digits) <= len(str(MAX_ID)) else MAX_ID + 1
+
+
 def to_id(value, what="id"):
-    """Return a positive integer id from an int or digit text, or raise ``ValueError``."""
+    """Return a positive integer id (1 to ``MAX_ID``) from an int or digit text, or raise ``ValueError``."""
     if isinstance(value, bool):
         raise ValueError(f"{what} must be a whole number.")
     if isinstance(value, int):
         number = value
     elif isinstance(value, str) and _DIGITS.fullmatch(value.strip()):
-        number = int(value.strip())
+        number = digits_to_int(value.strip())
     else:
         raise ValueError(f"{what} must be a whole number.")
     if number <= 0:
         raise ValueError(f"{what} must be a whole number above 0.")
+    if number > MAX_ID:  # SQLite cannot even look it up (OverflowError)
+        raise ValueError(f"No {what} with that id.")
     return number

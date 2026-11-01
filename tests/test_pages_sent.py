@@ -2,6 +2,7 @@
 temp folder for each test, the Host header on every request, the Origin header on every POST)."""
 
 import pathlib
+import re
 import tempfile
 import unittest
 
@@ -132,6 +133,37 @@ class SentPagesTest(BlankCopyTest):
         self.assertIn(f"01/{YEAR}", form)
         self.assertIn('enctype="multipart/form-data"', form)
         self.assertIn(f'value="{TODAY.isoformat()}"', form)  # today by default
+
+    def test_years_from_1900_to_9999(self):
+        """B24: a Sent document date and the year pages stay in 1900 to 9999, like Money."""
+        sentence = '<p class="error" id="f-date-error">Date: use a year from 1900 to 9999.</p>'
+        for day in ("1899-12-31", "0001-01-01"):
+            _h, page = self.record("C4 năm cũ", day=day, file=("thư cũ.txt", b"C4 file"), expect=400)
+            self.assertIn(sentence, page, day)
+            self.assertNotIn("Saved as", page, day)
+        self.assertEqual(self.sent_rows(), [])  # no row, no Document, no file left behind
+        self.assertEqual(self.db().execute("SELECT COUNT(*) FROM document").fetchone()[0], 0)
+        self.assertEqual(list((self.copy / "documents").iterdir()), [])
+        headers, _ = self.record("C4 năm 1900", day="1900-01-01")
+        self.assertIn("Saved as 01/1900.", self.page(headers["location"]))
+        self.assertEqual([(r["year"], r["seq"]) for r in self.sent_rows()], [(1900, 1)])
+
+        def chips(year):
+            page = self.page(f"/sent?year={year}")
+            start = page.index('aria-label="Years"')
+            return page[start:page.index("</nav>", start)]
+        first, last = chips(1900), chips(9999)
+        self.assertNotIn("1899", first)  # no chip to a year that cannot be opened
+        self.assertIn("1901 ›", first)
+        self.assertNotIn("10000", last)
+        self.assertIn("‹ 9998", last)
+        for nav in (first, last):
+            self.assertIn(">This year</a>", nav)
+        for bad in ("1899", "10000", "0"):
+            self.assertIn("Year: use a year from 1900 to 9999.", self.page(f"/sent?year={bad}", expect=400), bad)
+        tag = re.search(r'<input[^>]*name="date"[^>]*>', self.page("/sent/new")).group(0)
+        self.assertIn('min="1900-01-01"', tag)
+        self.assertIn(f'max="{TODAY.isoformat()}"', tag)  # never after today, so never after 9999-12-31
 
 
 class ListsPagesTest(BlankCopyTest):

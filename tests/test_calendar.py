@@ -24,8 +24,12 @@ class MonthMathTest(unittest.TestCase):
     def test_check_year(self):
         self.assertEqual(calendar.check_year(2026), 2026)
         self.assertEqual(calendar.check_year(" 2027 "), 2027)
-        for bad in (True, 1899, 10000, "20x6", 2026.0, None):
-            with self.assertRaises(ValueError, msg=repr(bad)):
+        self.assertEqual((calendar.check_year("1900"), calendar.check_year(9999)), (1900, 9999))
+        for bad in (1899, 10000, 0, -5, "1899", "10000", "12", "0", "9" * 5000):  # B24: a whole number, out of range
+            with self.assertRaisesRegex(ValueError, r"^Year: use a year from 1900 to 9999\.$", msg=repr(bad)[:30]):
+                calendar.check_year(bad)
+        for bad in (True, "20x6", 2026.0, None, "", "-2025", "٢٠٢٦"):
+            with self.assertRaisesRegex(ValueError, r"^Year must be a whole number like 2026\.$", msg=repr(bad)):
                 calendar.check_year(bad)
 
 
