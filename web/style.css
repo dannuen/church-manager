@@ -400,3 +400,15 @@ input[type="file"].input::file-selector-button:hover { background: var(--raised)
   input[type="file"].input::file-selector-button { height: 34px; }
 }
 .refusal a, .result a:not(.btn) { text-decoration: underline; text-underline-offset: 3px; }
+
+/* Money: each Offering and Expense row ends with its Edit link (print.css hides .no-print) */
+table.money .edit { width: 1%; white-space: nowrap; text-align: right; }
+table.money td.edit a { color: var(--text); font-weight: 600; }
+@media (max-width: 640px) {
+  /* line 1: the Date and its Edit link; line 2: the other fields, the amount at the right edge */
+  table.money tr[data-row] > td:first-child { flex: 1 0 calc(100% - 48px); }
+  table.money tr[data-row] > td:not(:first-child):not(.edit) { order: 2; }
+  table.money td.edit { flex: 0 0 36px; order: 1; }
+  table.money tr.total td.edit { display: none; }
+  table.money td.edit a { display: inline-block; padding: 12px 0 12px 8px; margin: -12px 0 -12px -8px; }   /* a 44px tap */
+}

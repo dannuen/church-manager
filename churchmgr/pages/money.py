@@ -1,6 +1,7 @@
 """Money pages (card C2): ``/money`` (one month: totals, Offerings, Expenses),
 ``/money/offerings/new``, ``/money/expenses/new`` and ``/money/statement`` (the printable
-Giving statement of one Person or one Family for one year).
+Giving statement of one Person or one Family for one year). ``/money/offerings/<id>/edit`` and
+``/money/expenses/<id>/edit`` correct a row in place; ``.../delete`` removes it after one question.
 
 Rules kept here:
 - An amount is typed as text and read only by ``money.parse_amount`` (whole dong). It is shown
@@ -18,8 +19,8 @@ from .. import money as money_data
 from ..server import Response
 from ..ui import h, vi
 from .calendar import month_text, parse_month, shift_month
-from .people import (card_link, empty, family_link, field_errors, form_error, num, panel, past_or_today,
-                     person_link, today_text)
+from .people import (card_link, empty, family_link, field_errors, form_error, not_found, num, panel,
+                     past_or_today, person_link, today_text)
 
 NO_NAME = "no-name offering"
 AMOUNT_HINT = "Whole dong, for example 1.250.000 or 1250000."
@@ -62,19 +63,26 @@ def giver_cell(row):
     return f'<span class="faint">{NO_NAME}</span>'
 
 
-def _table(name, headers, rows, total_label, total):
+def _table(name, headers, rows, total_label, total, edits=None):
     """A money table: ``headers`` = ``[(text, numeric)]``, ``rows`` = lists of trusted cell HTML.
+    ``edits``: one ``(href, label)`` per row for the Edit link that ends the row (screen only).
     The total is the last body row (never a ``<tfoot>``: Chromium prints a tfoot on every page)."""
     def cls(numeric):
         return ' class="n"' if numeric else ""
 
     head = "".join(f'<th scope="col"{cls(n)}>{h(t)}</th>' for t, n in headers)
+    tails, total_tail = [""] * len(rows), ""  # the Edit cell that ends each row, and an empty one in the total row
+    if edits is not None:
+        head += '<th scope="col" class="edit no-print"><span class="sr-only">Edit</span></th>'
+        tails = [f'<td class="edit no-print"><a href="{h(href)}" aria-label="{h(label)}">Edit</a></td>'
+                 for href, label in edits]
+        total_tail = '<td class="edit no-print"></td>'
     body = "".join(
-        "<tr data-row>" + "".join(f"<td{cls(headers[i][1])}>{c}</td>" for i, c in enumerate(r)) + "</tr>"
-        for r in rows)
+        "<tr data-row>" + "".join(f"<td{cls(headers[i][1])}>{c}</td>" for i, c in enumerate(r)) + tail + "</tr>"
+        for r, tail in zip(rows, tails, strict=True))
     span = len(headers) - 1
     body += (f'<tr class="total"><th scope="row" colspan="{span}">{h(total_label)}</th>'
-             f'<td class="n">{money_cell(total, True)}</td></tr>')
+             f'<td class="n">{money_cell(total, True)}</td>{total_tail}</tr>')
     return (f'<div class="table-wrap"><table class="list money {h(name)}"><thead><tr>{head}</tr></thead>'
             f"<tbody>{body}</tbody></table></div>")
 
@@ -115,8 +123,10 @@ def _kpis(totals, n_offerings, n_expenses):
 
 def _offerings_panel(rows, total, scope):
     lines = [[num(ui.fmt_date(r["date"])), h(r["fund_name"]), giver_cell(r), money_cell(r["amount"])] for r in rows]
+    edits = [(f"/money/offerings/{r['id']}/edit", f"Edit Offering on {ui.fmt_date(r['date'])}, {r['fund_name']}")
+             for r in rows]
     body = (_table("offerings", [("Date", False), ("Fund", False), ("Giver", False), ("Amount", True)], lines,
-                   "Total Offerings", total)
+                   "Total Offerings", total, edits)
             if rows else empty(f"No Offering recorded in {scope}."))
     link = card_link("Record Offering", "/money/offerings/new")
     return panel("offerings", "Offerings", body, meta=h(f"{ui.plural(len(rows), 'Offering', 'Offerings')} in {scope}"),
@@ -126,8 +136,10 @@ def _offerings_panel(rows, total, scope):
 def _expenses_panel(rows, total, scope):
     lines = [[num(ui.fmt_date(r["date"])), h(r["spending_category_name"]), vi(r["note"]), money_cell(r["amount"])]
              for r in rows]
+    edits = [(f"/money/expenses/{r['id']}/edit",
+              f"Edit Expense on {ui.fmt_date(r['date'])}, {r['spending_category_name']}") for r in rows]
     body = (_table("expenses", [("Date", False), ("Spending category", False), ("Note", False), ("Amount", True)],
-                   lines, "Total Expenses", total)
+                   lines, "Total Expenses", total, edits)
             if rows else empty(f"No Expense recorded in {scope}."))
     link = card_link("Record Expense", "/money/expenses/new")
     return panel("expenses", "Expenses", body, meta=h(f"{ui.plural(len(rows), 'Expense', 'Expenses')} in {scope}"),
@@ -176,11 +188,23 @@ def money_page(req):
     return Response.html(ui.page("Money", body, "money", sub=finding, actions=actions))
 
 
-# ---------------------------------------------------------------- /money/offerings/new, /money/expenses/new
+# ---------------------------------------------------------------- Record, Edit and Delete an Offering or Expense
+#
+# /money/offerings/new and /money/expenses/new record a row. /money/<kind>/<id>/edit shows the same
+# fields filled in (plus the Note) and saves the row in place; the Delete box comes last and asks
+# once more on its own page before the row goes. A typo is not history: no old copy is kept.
 
 def _amount_field(value, error):
     return ui.field("Amount", "amount", value, error=error, hint=AMOUNT_HINT, autocomplete="off", required=True,
                     spellcheck="false")
+
+
+def _choices(conn, list_name, keep_id=None):
+    """The shown items of a list as ``[(id, name)]``. The item ``keep_id`` stays in even when it is
+    hidden, marked "(hidden)", so an old Offering or Expense keeps its Fund or Spending category."""
+    return [(i["id"], i["name"] if i["active"] else f"{i['name']} (hidden)")
+            for i in lists.get_list(conn, list_name, include_hidden=True)
+            if i["active"] or i["id"] == keep_id]
 
 
 def _giver_field(conn, selected, error):
@@ -202,22 +226,96 @@ def _giver_field(conn, selected, error):
             f"{err}</div>")
 
 
-def _offering_form(req, values=None, error=None, status=200):
+def _giver_value(row):
+    """The Giver field value of a saved Offering: ``person-5``, ``family-3`` or ``""``."""
+    if row["giver_person_id"] is not None:
+        return f"person-{row['giver_person_id']}"
+    if row["giver_family_id"] is not None:
+        return f"family-{row['giver_family_id']}"
+    return ""
+
+
+def _delete_box(action, what):
+    """The last block of an edit page: Delete, in the negative colour. It asks once more first."""
+    body = (ui.form(action, ui.button(f"Delete this {what}", "danger"))
+            + '<p class="hint">You are asked once more before it goes. It cannot be undone.</p>')
+    return panel("delete", "Delete", body, cls="narrow no-print")
+
+
+def _edit_page(title, form_html, delete_html, sub, month, status):
+    back = ui.link_button(f"Back to {ui.fmt_month(int(month[:4]), int(month[5:7]))}", ui.url("/money", month=month))
+    body = f'<div class="stack"><section class="panel narrow">{form_html}</section>{delete_html}</div>'
+    return Response.html(ui.page(title, body, "money", sub=h(sub), actions=back), status)
+
+
+def _confirm_delete(what, row, details, action, back_href):
+    """The one question before a Delete, naming the row: "Delete this Offering of 1.000.000 ₫ on 05/10/2026?".
+    ``details`` is trusted HTML (the Fund and Giver, or the Spending category and Note)."""
+    question = (f'Delete this {h(what)} of <strong class="num">{h(money_data.format_vnd(row["amount"]))}</strong> '
+                f'on <span class="num">{h(ui.fmt_date(row["date"]))}</span>?')
+    form = ui.form(action, ui.hidden("confirm", "yes") + ui.button("Yes, delete it", "danger"))
+    body = (f'<section class="panel narrow" data-panel="confirm"><p class="lead">{question}</p>'
+            f'<p class="hint">{details}</p>'
+            '<p class="hint">The month totals and the Giving statement change at once. It cannot be undone.</p>'
+            f'<div class="confirm-actions">{form}{ui.link_button("Cancel", back_href)}</div></section>')
+    return Response.html(ui.page(f"Delete this {what}?", body, "money"))
+
+
+def _missing(what):
+    return not_found(what, "/money", "Go to Money")
+
+
+def _saved(conn, what, amount, day, item_id, new):
+    """Back to /money on the month of ``day`` with a short message naming the row."""
+    name = lists.get_item(conn, item_id)["name"]
+    figure, when = money_data.format_vnd(amount), ui.fmt_date(day)
+    msg = f"{what} of {figure} recorded on {when} ({name})." if new else f"{what} saved: {figure} on {when} ({name})."
+    return Response.redirect(ui.url("/money", month=day[:7], msg=msg))
+
+
+def _deleted(what, row):
+    msg = f"{what} of {money_data.format_vnd(row['amount'])} on {ui.fmt_date(row['date'])} deleted."
+    return Response.redirect(ui.url("/money", month=row["date"][:7], msg=msg))
+
+
+# ---- Offering
+
+def _offering_form(req, values=None, error=None, status=200, row=None):
+    """The Record Offering form; with ``row`` the Edit Offering form (the same fields filled in,
+    the Note, then the Delete box)."""
     conn = req.conn
     v = (values or {}).get
     errors = field_errors(error, "offering", {"date": "Date", "amount": "Amount", "fund_id": "Fund", "giver": "Giver"})
-    funds = lists.get_list(conn, "fund")
+    funds = _choices(conn, "fund", row["fund_id"] if row else None)
     inner = (
         ui.field("Date", "date", v("date") or today_text(), type="date", max=today_text(), required=True,
                  error=errors.get("date"))
         + _amount_field(v("amount", ""), errors.get("amount"))
-        + ui.select_field("Fund", "fund_id", [(f["id"], f["name"]) for f in funds],
-                          selected=v("fund_id", funds[0]["id"] if funds else ""), error=errors.get("fund_id"))
+        + ui.select_field("Fund", "fund_id", funds, selected=v("fund_id", funds[0][0] if funds else ""),
+                          error=errors.get("fund_id"))
         + _giver_field(conn, v("giver", ""), errors.get("giver"))
-        + form_error(errors) + ui.button("Record Offering")
+        + (ui.textarea_field("Note", "note", v("note", ""), lang="vi", rows=2,
+                             hint="Optional. It is never printed on a Giving statement.") if row else "")
+        + form_error(errors) + ui.button("Save" if row else "Record Offering")
     )
-    body = f'<section class="panel narrow">{ui.form("/money/offerings/new", inner)}</section>'
-    return Response.html(ui.page("Record Offering", body, "money"), status)
+    if row is None:
+        body = f'<section class="panel narrow">{ui.form("/money/offerings/new", inner)}</section>'
+        return Response.html(ui.page("Record Offering", body, "money"), status)
+    oid = row["id"]
+    sub = (f"Saved now: {money_data.format_vnd(row['amount'])} on {ui.fmt_date(row['date'])} · {row['fund_name']} · "
+           f"{row['giver_name'] or NO_NAME} · Recorded {ui.fmt_datetime(row['created_at'])}")
+    return _edit_page("Edit Offering", ui.form(f"/money/offerings/{oid}/edit", inner),
+                      _delete_box(f"/money/offerings/{oid}/delete", "Offering"), sub, row["date"][:7], status)
+
+
+def _offering_input(f):
+    """Read the Offering form: ``(date, amount, person_id, family_id)``. The amount only via ``parse_amount``."""
+    day = past_or_today(f.get("date"), "Date")
+    amount = money_data.parse_amount(f.get("amount") or "")
+    if not f.get("fund_id"):
+        raise ValueError("Fund: choose a Fund.")
+    person_id, family_id = parse_giver(f.get("giver"))
+    return day, amount, person_id, family_id
 
 
 def offering_new_page(req):
@@ -227,38 +325,85 @@ def offering_new_page(req):
 def offering_new_post(req):
     f = req.form
     try:
-        day = past_or_today(f.get("date"), "Date")
-        amount = money_data.parse_amount(f.get("amount") or "")
-        if not f.get("fund_id"):
-            raise ValueError("Fund: choose a Fund.")
-        person_id, family_id = parse_giver(f.get("giver"))
+        day, amount, person_id, family_id = _offering_input(f)
         money_data.add_offering(req.conn, day, amount, f["fund_id"], giver_person_id=person_id,
                                 giver_family_id=family_id)
     except ValueError as exc:
         return _offering_form(req, f, ("offering", str(exc)), 400)
-    fund = lists.get_item(req.conn, f["fund_id"])["name"]
-    msg = f"Offering of {money_data.format_vnd(amount)} recorded on {ui.fmt_date(day)} ({fund})."
-    return Response.redirect(ui.url("/money", month=day[:7], msg=msg))
+    return _saved(req.conn, "Offering", amount, day, f["fund_id"], new=True)
 
 
-def _expense_form(req, values=None, error=None, status=200):
+def offering_edit_page(req):
+    row = money_data.get_offering(req.conn, req.params["id"])
+    if row is None:
+        return _missing("Offering")
+    values = {"date": row["date"], "amount": money_data.format_vnd(row["amount"]), "fund_id": row["fund_id"],
+              "giver": _giver_value(row), "note": row["note"] or ""}
+    return _offering_form(req, values, row=row)
+
+
+def offering_edit_post(req):
+    row = money_data.get_offering(req.conn, req.params["id"])
+    if row is None:
+        return _missing("Offering")
+    f = req.form
+    try:
+        day, amount, person_id, family_id = _offering_input(f)
+        money_data.update_offering(req.conn, row["id"], date=day, amount=amount, fund_id=f["fund_id"],
+                                   giver_person_id=person_id, giver_family_id=family_id, note=f.get("note"))
+    except ValueError as exc:
+        return _offering_form(req, f, ("offering", str(exc)), 400, row=row)
+    return _saved(req.conn, "Offering", amount, day, f["fund_id"], new=False)
+
+
+def offering_delete_post(req):
+    row = money_data.get_offering(req.conn, req.params["id"])
+    if row is None:
+        return _missing("Offering")
+    if req.form.get("confirm") != "yes":
+        details = f"Fund {h(row['fund_name'])} · Giver {vi(row['giver_name']) if row['giver_name'] else NO_NAME}"
+        return _confirm_delete("Offering", row, details, f"/money/offerings/{row['id']}/delete",
+                               f"/money/offerings/{row['id']}/edit")
+    money_data.delete_offering(req.conn, row["id"])
+    return _deleted("Offering", row)
+
+
+# ---- Expense
+
+def _expense_form(req, values=None, error=None, status=200, row=None):
+    """The Record Expense form; with ``row`` the Edit Expense form (filled in, then the Delete box)."""
     conn = req.conn
     v = (values or {}).get
     errors = field_errors(error, "expense", {"date": "Date", "amount": "Amount",
                                              "spending_category_id": "Spending category"})
-    cats = lists.get_list(conn, "spending_category")
+    cats = _choices(conn, "spending_category", row["spending_category_id"] if row else None)
     inner = (
         ui.field("Date", "date", v("date") or today_text(), type="date", max=today_text(), required=True,
                  error=errors.get("date"))
         + _amount_field(v("amount", ""), errors.get("amount"))
-        + ui.select_field("Spending category", "spending_category_id", [(c["id"], c["name"]) for c in cats],
-                          selected=v("spending_category_id", cats[0]["id"] if cats else ""),
+        + ui.select_field("Spending category", "spending_category_id", cats,
+                          selected=v("spending_category_id", cats[0][0] if cats else ""),
                           error=errors.get("spending_category_id"))
         + ui.textarea_field("Note", "note", v("note", ""), lang="vi", rows=2, hint="What it was for. Optional.")
-        + form_error(errors) + ui.button("Record Expense")
+        + form_error(errors) + ui.button("Save" if row else "Record Expense")
     )
-    body = f'<section class="panel narrow">{ui.form("/money/expenses/new", inner)}</section>'
-    return Response.html(ui.page("Record Expense", body, "money"), status)
+    if row is None:
+        body = f'<section class="panel narrow">{ui.form("/money/expenses/new", inner)}</section>'
+        return Response.html(ui.page("Record Expense", body, "money"), status)
+    eid = row["id"]
+    sub = (f"Saved now: {money_data.format_vnd(row['amount'])} on {ui.fmt_date(row['date'])} · "
+           f"{row['spending_category_name']} · Recorded {ui.fmt_datetime(row['created_at'])}")
+    return _edit_page("Edit Expense", ui.form(f"/money/expenses/{eid}/edit", inner),
+                      _delete_box(f"/money/expenses/{eid}/delete", "Expense"), sub, row["date"][:7], status)
+
+
+def _expense_input(f):
+    """Read the Expense form: ``(date, amount)``. The amount only via ``parse_amount``."""
+    day = past_or_today(f.get("date"), "Date")
+    amount = money_data.parse_amount(f.get("amount") or "")
+    if not f.get("spending_category_id"):
+        raise ValueError("Spending category: choose a Spending category.")
+    return day, amount
 
 
 def expense_new_page(req):
@@ -268,16 +413,48 @@ def expense_new_page(req):
 def expense_new_post(req):
     f = req.form
     try:
-        day = past_or_today(f.get("date"), "Date")
-        amount = money_data.parse_amount(f.get("amount") or "")
-        if not f.get("spending_category_id"):
-            raise ValueError("Spending category: choose a Spending category.")
+        day, amount = _expense_input(f)
         money_data.add_expense(req.conn, day, amount, f["spending_category_id"], note=f.get("note"))
     except ValueError as exc:
         return _expense_form(req, f, ("expense", str(exc)), 400)
-    cat = lists.get_item(req.conn, f["spending_category_id"])["name"]
-    msg = f"Expense of {money_data.format_vnd(amount)} recorded on {ui.fmt_date(day)} ({cat})."
-    return Response.redirect(ui.url("/money", month=day[:7], msg=msg))
+    return _saved(req.conn, "Expense", amount, day, f["spending_category_id"], new=True)
+
+
+def expense_edit_page(req):
+    row = money_data.get_expense(req.conn, req.params["id"])
+    if row is None:
+        return _missing("Expense")
+    values = {"date": row["date"], "amount": money_data.format_vnd(row["amount"]),
+              "spending_category_id": row["spending_category_id"], "note": row["note"] or ""}
+    return _expense_form(req, values, row=row)
+
+
+def expense_edit_post(req):
+    row = money_data.get_expense(req.conn, req.params["id"])
+    if row is None:
+        return _missing("Expense")
+    f = req.form
+    try:
+        day, amount = _expense_input(f)
+        money_data.update_expense(req.conn, row["id"], date=day, amount=amount,
+                                  spending_category_id=f["spending_category_id"], note=f.get("note"))
+    except ValueError as exc:
+        return _expense_form(req, f, ("expense", str(exc)), 400, row=row)
+    return _saved(req.conn, "Expense", amount, day, f["spending_category_id"], new=False)
+
+
+def expense_delete_post(req):
+    row = money_data.get_expense(req.conn, req.params["id"])
+    if row is None:
+        return _missing("Expense")
+    if req.form.get("confirm") != "yes":
+        details = f"Spending category {h(row['spending_category_name'])}"
+        if row["note"]:
+            details += f" · {vi(row['note'])}"
+        return _confirm_delete("Expense", row, details, f"/money/expenses/{row['id']}/delete",
+                               f"/money/expenses/{row['id']}/edit")
+    money_data.delete_expense(req.conn, row["id"])
+    return _deleted("Expense", row)
 
 
 # ---------------------------------------------------------------- /money/statement
@@ -347,7 +524,13 @@ ROUTES = [
     ("GET", "/money", money_page),
     ("GET", "/money/offerings/new", offering_new_page),
     ("POST", "/money/offerings/new", offering_new_post),
+    ("GET", "/money/offerings/<int:id>/edit", offering_edit_page),
+    ("POST", "/money/offerings/<int:id>/edit", offering_edit_post),
+    ("POST", "/money/offerings/<int:id>/delete", offering_delete_post),
     ("GET", "/money/expenses/new", expense_new_page),
     ("POST", "/money/expenses/new", expense_new_post),
+    ("GET", "/money/expenses/<int:id>/edit", expense_edit_page),
+    ("POST", "/money/expenses/<int:id>/edit", expense_edit_post),
+    ("POST", "/money/expenses/<int:id>/delete", expense_delete_post),
     ("GET", "/money/statement", statement_page),
 ]

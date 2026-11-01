@@ -100,66 +100,132 @@ def _sum(conn, sql, params):
 
 
 # ---------------------------------------------------------------- Offering and Expense
+#
+# A mistyped Offering or Expense is corrected in place or deleted. Neither is one of the glossary's
+# dated links (Status, Family, Chi phái, Trưởng Chi phái), so a typo is not history and no old copy
+# is kept. ``created_at`` keeps the moment the row was first recorded.
 
-def add_offering(conn, date, amount, fund_id, giver_person_id=None, giver_family_id=None, note=None):
-    """Record an Offering. ``amount`` is a whole number of dong (int). The Giver is a
-    Person, a Family, or nobody (a no-name offering). Returns the id."""
+def _offering_values(conn, date, amount, fund_id, giver_person_id, giver_family_id, note):
+    """The checked columns of an Offering: ``(date, amount, fund_id, person_id, family_id, note)``.
+    Shared by :func:`add_offering` and :func:`update_offering`; call it inside a transaction."""
     day = text.check_date(date, "Date")
     amount = check_amount(amount)
     has_person = giver_person_id not in (None, "")
     has_family = giver_family_id not in (None, "")
     if has_person and has_family:
         raise ValueError("An Offering has one Giver: a Person or a Family, not both.")
+    fund = lists.require_item(conn, fund_id, "fund")["id"]
+    pid = _require(conn, "person", giver_person_id, "Person") if has_person else None
+    fid = _require(conn, "family", giver_family_id, "Family") if has_family else None
+    return day, amount, fund, pid, fid, text.clean_text(note)
+
+
+def _expense_values(conn, date, amount, spending_category_id, note):
+    """The checked columns of an Expense: ``(date, amount, spending_category_id, note)``."""
+    day = text.check_date(date, "Date")
+    amount = check_amount(amount)
+    category = lists.require_item(conn, spending_category_id, "spending_category")["id"]
+    return day, amount, category, text.clean_text(note)
+
+
+def add_offering(conn, date, amount, fund_id, giver_person_id=None, giver_family_id=None, note=None):
+    """Record an Offering. ``amount`` is a whole number of dong (int). The Giver is a
+    Person, a Family, or nobody (a no-name offering). Returns the id."""
     with transaction(conn):
-        fund = lists.require_item(conn, fund_id, "fund")["id"]
-        pid = _require(conn, "person", giver_person_id, "Person") if has_person else None
-        fid = _require(conn, "family", giver_family_id, "Family") if has_family else None
+        values = _offering_values(conn, date, amount, fund_id, giver_person_id, giver_family_id, note)
         cur = conn.execute(
             "INSERT INTO offering (date, amount, fund_id, giver_person_id, giver_family_id, note, created_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (day, amount, fund, pid, fid, text.clean_text(note), text.now_text()),
+            (*values, text.now_text()),
         )
         return cur.lastrowid
+
+
+def update_offering(conn, offering_id, *, date, amount, fund_id, giver_person_id=None, giver_family_id=None,
+                    note=None):
+    """Correct an Offering in place: every column is set again, with the same checks as
+    :func:`add_offering`. ``created_at`` is kept. A missing id raises ``ValueError``."""
+    with transaction(conn):
+        oid = _require(conn, "offering", offering_id, "Offering")
+        values = _offering_values(conn, date, amount, fund_id, giver_person_id, giver_family_id, note)
+        conn.execute(
+            "UPDATE offering SET date = ?, amount = ?, fund_id = ?, giver_person_id = ?, giver_family_id = ?, "
+            "note = ? WHERE id = ?",
+            (*values, oid),
+        )
+
+
+def delete_offering(conn, offering_id):
+    """Delete one Offering (a mistake). A missing id raises ``ValueError``."""
+    with transaction(conn):
+        oid = _require(conn, "offering", offering_id, "Offering")
+        conn.execute("DELETE FROM offering WHERE id = ?", (oid,))
 
 
 def add_expense(conn, date, amount, spending_category_id, note=None):
     """Record an Expense with a Spending category. Returns the id."""
-    day = text.check_date(date, "Date")
-    amount = check_amount(amount)
     with transaction(conn):
-        category = lists.require_item(conn, spending_category_id, "spending_category")["id"]
+        values = _expense_values(conn, date, amount, spending_category_id, note)
         cur = conn.execute(
             "INSERT INTO expense (date, amount, spending_category_id, note, created_at) VALUES (?, ?, ?, ?, ?)",
-            (day, amount, category, text.clean_text(note), text.now_text()),
+            (*values, text.now_text()),
         )
         return cur.lastrowid
+
+
+def update_expense(conn, expense_id, *, date, amount, spending_category_id, note=None):
+    """Correct an Expense in place, with the same checks as :func:`add_expense`. ``created_at`` is kept."""
+    with transaction(conn):
+        eid = _require(conn, "expense", expense_id, "Expense")
+        values = _expense_values(conn, date, amount, spending_category_id, note)
+        conn.execute("UPDATE expense SET date = ?, amount = ?, spending_category_id = ?, note = ? WHERE id = ?",
+                     (*values, eid))
+
+
+def delete_expense(conn, expense_id):
+    """Delete one Expense (a mistake). A missing id raises ``ValueError``."""
+    with transaction(conn):
+        eid = _require(conn, "expense", expense_id, "Expense")
+        conn.execute("DELETE FROM expense WHERE id = ?", (eid,))
+
+
+_OFFERING_SELECT = (
+    "SELECT o.id, o.date, o.amount, o.fund_id, li.name AS fund_name, o.giver_person_id, "
+    "o.giver_family_id, COALESCE(p.full_name, f.name) AS giver_name, o.note, o.created_at "
+    "FROM offering o JOIN list_item li ON li.id = o.fund_id "
+    "LEFT JOIN person p ON p.id = o.giver_person_id "
+    "LEFT JOIN family f ON f.id = o.giver_family_id "
+)
+_EXPENSE_SELECT = (
+    "SELECT e.id, e.date, e.amount, e.spending_category_id, li.name AS spending_category_name, "
+    "e.note, e.created_at FROM expense e JOIN list_item li ON li.id = e.spending_category_id "
+)
+
+
+def get_offering(conn, offering_id):
+    """One Offering with the columns of :func:`list_offerings`, or ``None``."""
+    return conn.execute(_OFFERING_SELECT + "WHERE o.id = ?", (text.to_id(offering_id, "Offering"),)).fetchone()
+
+
+def get_expense(conn, expense_id):
+    """One Expense with the columns of :func:`list_expenses`, or ``None``."""
+    return conn.execute(_EXPENSE_SELECT + "WHERE e.id = ?", (text.to_id(expense_id, "Expense"),)).fetchone()
 
 
 def list_offerings(conn, start, end):
     """Offerings from ``start`` to ``end`` (dates, both included), oldest first.
     Extra columns: fund_name, giver_name (``None`` for a no-name offering)."""
     first, last = _date_range(start, end)
-    return conn.execute(
-        "SELECT o.id, o.date, o.amount, o.fund_id, li.name AS fund_name, o.giver_person_id, "
-        "o.giver_family_id, COALESCE(p.full_name, f.name) AS giver_name, o.note, o.created_at "
-        "FROM offering o JOIN list_item li ON li.id = o.fund_id "
-        "LEFT JOIN person p ON p.id = o.giver_person_id "
-        "LEFT JOIN family f ON f.id = o.giver_family_id "
-        "WHERE o.date BETWEEN ? AND ? ORDER BY o.date, o.id",
-        (first, last),
-    ).fetchall()
+    return conn.execute(_OFFERING_SELECT + "WHERE o.date BETWEEN ? AND ? ORDER BY o.date, o.id",
+                        (first, last)).fetchall()
 
 
 def list_expenses(conn, start, end):
     """Expenses from ``start`` to ``end`` (dates, both included), oldest first.
     Extra column: spending_category_name."""
     first, last = _date_range(start, end)
-    return conn.execute(
-        "SELECT e.id, e.date, e.amount, e.spending_category_id, li.name AS spending_category_name, "
-        "e.note, e.created_at FROM expense e JOIN list_item li ON li.id = e.spending_category_id "
-        "WHERE e.date BETWEEN ? AND ? ORDER BY e.date, e.id",
-        (first, last),
-    ).fetchall()
+    return conn.execute(_EXPENSE_SELECT + "WHERE e.date BETWEEN ? AND ? ORDER BY e.date, e.id",
+                        (first, last)).fetchall()
 
 
 def month_totals(conn, year, month):

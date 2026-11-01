@@ -1,5 +1,6 @@
 """Chi phái pages: ``/chi-phai`` (list), ``/chi-phai/new``, ``/chi-phai/<id>`` (Families now and
-before, the Trưởng Chi phái now and before, and the form to set the Trưởng Chi phái).
+before, the Trưởng Chi phái now and before, and the form to set the Trưởng Chi phái) and
+``/chi-phai/<id>/edit`` (a new name: a plain field, not history).
 
 The Trưởng Chi phái changes only through ``people.set_truong_chi_phai`` (history is kept).
 A Family changes its Chi phái on the Family page.
@@ -152,7 +153,8 @@ def _chi_phai_view(req, row, error=None, status=200):
                ui.plural(len(_people_now(conn, families)), "Person", "People") + " now"]
     body = (f'<div class="grid chi-phai"><div class="span-8 stack">{_families_panels(conn, cid, families)}</div>'
             f'<div class="side-4 stack">{_truong_panel(conn, cid, families, error, vals)}</div></div>')
-    return Response.html(ui.page(row["name"], body, "chi-phai", sub=h(" · ".join(finding))), status)
+    actions = ui.link_button("Rename Chi phái", f"/chi-phai/{cid}/edit")
+    return Response.html(ui.page(row["name"], body, "chi-phai", sub=h(" · ".join(finding)), actions=actions), status)
 
 
 def _row_or_none(req):
@@ -164,6 +166,45 @@ def chi_phai_page(req):
     if row is None:
         return not_found("Chi phái", "/chi-phai", "Go to Chi phái")
     return _chi_phai_view(req, row)
+
+
+# ---------------------------------------------------------------- /chi-phai/<id>/edit
+
+def _edit_form(req, row, values=None, error=None, status=200):
+    """Rename a Chi phái. The name is a plain field, not history (its Families and Trưởng Chi phái are)."""
+    values = values if values is not None else {"name": row["name"]}
+    errors = field_errors(error, "edit", {"name": "Chi phái"})
+    cid = row["id"]
+    inner = (
+        ui.field("Chi phái name", "name", values.get("name", ""), error=errors.get("name"), required=True,
+                 autocomplete="off", lang="vi")
+        + form_error(errors) + ui.button("Rename Chi phái")
+    )
+    body = (f'<section class="panel narrow">{ui.form(f"/chi-phai/{cid}/edit", inner)}'
+            '<p class="hint">Its Families and its Trưởng Chi phái stay as they are, with their dates. '
+            'The new name shows on every page at once.</p></section>')
+    return Response.html(ui.page(f"Rename {row['name']}", body, "chi-phai",
+                                 actions=ui.link_button("Back to the Chi phái", f"/chi-phai/{cid}")), status)
+
+
+def edit_page(req):
+    row = _row_or_none(req)
+    if row is None:
+        return not_found("Chi phái", "/chi-phai", "Go to Chi phái")
+    return _edit_form(req, row)
+
+
+def edit_post(req):
+    row = _row_or_none(req)
+    if row is None:
+        return not_found("Chi phái", "/chi-phai", "Go to Chi phái")
+    try:
+        people.rename_chi_phai(req.conn, row["id"], req.form.get("name"))
+    except ValueError as exc:
+        return _edit_form(req, row, req.form, ("edit", str(exc)), 400)
+    name = people.get_chi_phai(req.conn, row["id"])["name"]
+    message = f"Renamed to {name}." if name != row["name"] else same_change(f"The name is already {name}.")
+    return Response.redirect(ui.url(f"/chi-phai/{row['id']}", msg=message))
 
 
 def truong_post(req):
@@ -196,5 +237,7 @@ ROUTES = [
     ("GET", "/chi-phai/new", new_page),
     ("POST", "/chi-phai/new", new_post),
     ("GET", "/chi-phai/<int:id>", chi_phai_page),
+    ("GET", "/chi-phai/<int:id>/edit", edit_page),
+    ("POST", "/chi-phai/<int:id>/edit", edit_post),
     ("POST", "/chi-phai/<int:id>/truong", truong_post),
 ]

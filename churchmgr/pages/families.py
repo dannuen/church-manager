@@ -1,5 +1,6 @@
 """Family pages: ``/families`` (list), ``/families/new``, ``/families/<id>`` (the people in it now
-and before, the address, the Chi phái now and before, and the form to change the Chi phái).
+and before, the address, the Chi phái now and before, and the form to change the Chi phái) and
+``/families/<id>/edit`` (the Family name and Address: plain fields, not history).
 
 The Chi phái changes only through ``people.set_family_chi_phai`` (history is kept).
 A Person joins or leaves a Family on the Person page.
@@ -9,7 +10,7 @@ from .. import people, ui
 from ..server import Response
 from ..ui import h, vi
 from . import documents as document_pages  # card C3: the shared Documents block
-from .people import (change_box, chi_phai_link, date_field, empty, field_errors, form_error,
+from .people import (card_link, change_box, chi_phai_link, date_field, empty, field_errors, form_error,
                      latest_change, list_panel, newest_first, not_found, num, panel, past_or_today, period,
                      person_link, same_change, statement_href, table)
 
@@ -130,11 +131,13 @@ def _family_view(req, family, error=None, status=200):
     finding = [ui.plural(len(members), "Person", "People") + " now"]
     finding.append(f"{cp['name']} since {ui.fmt_date(cp['start_date'])}" if cp else "No Chi phái")
     address = panel("address", "Address", f'<p>{vi(family["address"])}</p>',
-                    meta="Every Person in this Family uses it")
+                    meta="Every Person in this Family uses it",
+                    foot=card_link("Edit name or Address", f"/families/{fid}/edit"))
     body = (f'<div class="grid family"><div class="span-8 stack">{_people_panels(conn, fid)}</div>'
             f'<div class="side-4 stack">{address}{_chi_phai_panel(conn, fid, error, vals)}'
             f'{document_pages.documents_panel(conn, family_id=fid)}</div></div>')
-    actions = ui.link_button("Giving statement", statement_href(family_id=fid))
+    actions = (ui.link_button("Edit Family", f"/families/{fid}/edit")
+               + ui.link_button("Giving statement", statement_href(family_id=fid)))
     return Response.html(ui.page(family["name"], body, "families", sub=h(" · ".join(finding)), actions=actions),
                          status)
 
@@ -148,6 +151,45 @@ def family_page(req):
     if family is None:
         return not_found("Family", "/families", "Go to Families")
     return _family_view(req, family)
+
+
+# ---------------------------------------------------------------- /families/<id>/edit
+
+def _edit_form(req, family, values=None, error=None, status=200):
+    """Family name and Address. They are plain fields, not history (who is in the Family and its Chi phái are)."""
+    values = values if values is not None else {"name": family["name"], "address": family["address"] or ""}
+    errors = field_errors(error, "edit", {"name": "Family name"})
+    fid = family["id"]
+    inner = (
+        ui.field("Family name", "name", values.get("name", ""), error=errors.get("name"), required=True,
+                 autocomplete="off", lang="vi")
+        + ui.textarea_field("Address", "address", values.get("address", ""), lang="vi",
+                            hint="Every Person in this Family uses this address.")
+        + form_error(errors) + ui.button("Save")
+    )
+    body = (f'<section class="panel narrow">{ui.form(f"/families/{fid}/edit", inner)}'
+            '<p class="hint">Who is in this Family changes on each Person page, and its Chi phái on the '
+            f'<a href="/families/{fid}">Family page</a>. Both keep their history.</p></section>')
+    return Response.html(ui.page(f"Edit {family['name']}", body, "families",
+                                 actions=ui.link_button("Back to the Family", f"/families/{fid}")), status)
+
+
+def edit_page(req):
+    family = _family_or_none(req)
+    if family is None:
+        return not_found("Family", "/families", "Go to Families")
+    return _edit_form(req, family)
+
+
+def edit_post(req):
+    family = _family_or_none(req)
+    if family is None:
+        return not_found("Family", "/families", "Go to Families")
+    try:
+        people.update_family(req.conn, family["id"], name=req.form.get("name"), address=req.form.get("address"))
+    except ValueError as exc:
+        return _edit_form(req, family, req.form, ("edit", str(exc)), 400)
+    return Response.redirect(ui.url(f"/families/{family['id']}", msg="Family name and Address saved."))
 
 
 def chi_phai_post(req):
@@ -179,5 +221,7 @@ ROUTES = [
     ("GET", "/families/new", new_page),
     ("POST", "/families/new", new_post),
     ("GET", "/families/<int:id>", family_page),
+    ("GET", "/families/<int:id>/edit", edit_page),
+    ("POST", "/families/<int:id>/edit", edit_post),
     ("POST", "/families/<int:id>/chi-phai", chi_phai_post),
 ]

@@ -1,6 +1,7 @@
 """Card C2: the Money pages and the printable Giving statement through the real server
 (port 0, a fake church in a temp folder, Host and Origin headers)."""
 
+import datetime as dt
 import re
 import unittest
 
@@ -174,8 +175,11 @@ class MoneyPagesTest(PagesTestBase):
     def test_print_css_rules(self):
         css = (ROOT / "web" / "print.css").read_text(encoding="utf-8")
         for rule in ("@media print", "size: A4", "display: table-header-group", "break-inside: avoid",
-                     ".no-print", ".sidebar", "button"):
+                     ".no-print", ".sidebar", "button",
+                     ".panel .table-wrap { margin: 0; overflow: visible; }"):  # no 12px bleed past the sheet
             self.assertIn(rule, css)
+        print_block = css[css.index("@media print"):]
+        self.assertIn(".panel .table-wrap", print_block)
 
 
 class SmallLogicTest(unittest.TestCase):
@@ -200,6 +204,182 @@ class SmallLogicTest(unittest.TestCase):
         source = (ROOT / "churchmgr" / "pages" / "money.py").read_text(encoding="utf-8")
         self.assertNotRegex(source, r"\bfloat\(|\bDecimal\b|/ *100\b")
         self.assertIn("money_data.parse_amount", source)
+
+
+class CorrectMoneyPagesTest(PagesTestBase):
+    """Edit and Delete of an Offering and an Expense on /money (its own fake church and server)."""
+
+    def fund(self, name="General"):
+        return lists.find_item(self.db(), "fund", name=name)["id"]
+
+    def category(self, name):
+        return lists.find_item(self.db(), "spending_category", name=name)["id"]
+
+    def first_person_id(self):
+        return next(p["id"] for p in people.list_persons(self.db()) if p["full_name"] == fake.FIRST_PERSON)
+
+    def offering_form(self, amount, giver="", fund=None, day=None, note=""):
+        return {"date": day or TODAY.isoformat(), "amount": amount, "fund_id": fund or self.fund(), "giver": giver,
+                "note": note}
+
+    def test_edit_offering_saves_in_place_and_the_totals_follow(self):
+        pid = self.first_person_id()
+        oid = money.add_offering(self.db(), TODAY.isoformat(), 10_000_000, self.fund(), giver_person_id=pid,
+                                 note="C1A Hộp ghi nhầm")
+        conn = self.db()
+        before = money.month_totals(conn, TODAY.year, TODAY.month)
+        st_before = money.giving_statement(conn, TODAY.year, person_id=pid)["total"]
+        count = conn.execute("SELECT COUNT(*) FROM offering").fetchone()[0]
+
+        offerings = section(self.page(f"/money?month={MONTH}"), "offerings")
+        self.assertIn(f'href="/money/offerings/{oid}/edit"', offerings)  # an Edit link on the row
+        self.assertIn('class="edit no-print"', offerings)                # never printed
+        form = self.page(f"/money/offerings/{oid}/edit")
+        self.assertEqual(parse_panels(form).h1, 1)
+        self.assertIn("<h1>Edit Offering</h1>", form)
+        self.assertIn('value="10.000.000 ₫"', form)                      # shown with format_vnd
+        self.assertIn(f'<option value="person-{pid}" selected>', form)
+        self.assertIn(f'value="{TODAY.isoformat()}"', form)
+        self.assertIn("C1A Hộp ghi nhầm</textarea>", form)               # the note stays in its field
+        delete_box = section(form, "delete")
+        self.assertIn(f'action="/money/offerings/{oid}/delete"', delete_box)
+        self.assertIn('class="btn danger"', delete_box)
+        self.assertLess(form.index('name="amount"'), form.index('data-panel="delete"'))  # Delete comes last
+
+        # the amount typed the way the page shows it ("1.000.000 ₫") is read by parse_amount
+        headers, _ = self.post(f"/money/offerings/{oid}/edit",
+                               self.offering_form(money.format_vnd(1_000_000), f"person-{pid}", self.fund("Building"),
+                                                  note="C1A đã sửa"))
+        self.assertTrue(headers["location"].startswith(f"/money?month={MONTH}&msg="), headers["location"])
+        conn = self.db()
+        row = money.get_offering(conn, oid)
+        self.assertEqual((row["amount"], type(row["amount"]), row["fund_name"], row["note"]),
+                         (1_000_000, int, "Building", "C1A đã sửa"))
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM offering").fetchone()[0], count)  # no new row
+        after = money.month_totals(conn, TODAY.year, TODAY.month)
+        self.assertEqual(before["offerings"] - after["offerings"], 9_000_000)
+        self.assertEqual(before["balance"] - after["balance"], 9_000_000)
+        self.assertEqual(st_before - money.giving_statement(conn, TODAY.year, person_id=pid)["total"], 9_000_000)
+
+        page = self.page(headers["location"])
+        self.assertIn(f"Offering saved: 1.000.000 ₫ on {shown(TODAY.isoformat())} (Building).", page)
+        figures = amounts_in(section(page, "offerings"))
+        self.assertEqual(sum(figures[:-1]), figures[-1])
+        self.assertEqual(figures[-1], after["offerings"])
+        self.assertIn(money.format_vnd(after["balance"]), section(page, "money-totals"))
+        sheet = section(self.page(f"/money/statement?person_id={pid}&year={TODAY.year}"), "statement")
+        self.assertEqual(amounts_in(sheet)[-1], st_before - 9_000_000)
+        self.assertNotIn("/edit", sheet)  # the Giving statement has no Edit column
+
+    def test_edit_offering_refusals(self):
+        oid = money.add_offering(self.db(), TODAY.isoformat(), 2_000_000, self.fund())
+        before = tuple(money.get_offering(self.db(), oid))
+        _h, page = self.post(f"/money/offerings/{oid}/edit", self.offering_form("1,5"), expect=400)
+        self.assertIn('id="f-amount-error"', page)  # the sentence sits next to the Amount field
+        self.assertIn("not understood", page)
+        self.assertIn('value="1,5"', page)          # the form keeps what was typed
+        self.assertIn("<h1>Edit Offering</h1>", page)
+        _h, page = self.post(f"/money/offerings/{oid}/edit", self.offering_form("1000", giver="person-abc"), expect=400)
+        self.assertIn("Giver must be", page)
+        tomorrow = (TODAY + dt.timedelta(days=1)).isoformat()
+        _h, page = self.post(f"/money/offerings/{oid}/edit", self.offering_form("1000", day=tomorrow), expect=400)
+        self.assertIn("Date cannot be after today", page)
+        # without the right Origin nothing is saved or deleted
+        for path, form in ((f"/money/offerings/{oid}/edit", self.offering_form("1000")),
+                           (f"/money/offerings/{oid}/delete", {"confirm": "yes"})):
+            for extra in ({"origin": False}, {"origin": False, "headers": {"Origin": "http://evil.example"}}):
+                status, _h, _d = self.request("POST", path, form, **extra)
+                self.assertEqual(status, 403, (path, extra))
+        self.assertEqual(tuple(money.get_offering(self.db(), oid)), before)
+        # an Offering that does not exist
+        self.page("/money/offerings/999999/edit", expect=404)
+        self.post("/money/offerings/999999/edit", self.offering_form("1000"), expect=404)
+        self.post("/money/offerings/999999/delete", {"confirm": "yes"}, expect=404)
+
+    def test_delete_offering_asks_first_and_names_the_row(self):
+        pid = self.first_person_id()
+        day = f"{MONTH}-01"
+        oid = money.add_offering(self.db(), day, 1_234_000, self.fund(), giver_person_id=pid)
+        before = money.month_totals(self.db(), TODAY.year, TODAY.month)
+        st_before = money.giving_statement(self.db(), TODAY.year, person_id=pid)["total"]
+        _h, page = self.post(f"/money/offerings/{oid}/delete", {}, expect=200)  # no confirm: one question first
+        question = re.sub(r"<[^>]+>", "", section(page, "confirm"))
+        self.assertIn(f"Delete this Offering of 1.234.000 ₫ on {shown(day)}?", question)
+        self.assertIn(fake.FIRST_PERSON, question)
+        self.assertIn('name="confirm" value="yes"', page)
+        self.assertIsNotNone(money.get_offering(self.db(), oid))  # still there
+
+        headers, _ = self.post(f"/money/offerings/{oid}/delete", {"confirm": "yes"})
+        self.assertTrue(headers["location"].startswith(f"/money?month={day[:7]}&msg="), headers["location"])
+        self.assertIsNone(money.get_offering(self.db(), oid))
+        after = money.month_totals(self.db(), TODAY.year, TODAY.month)
+        self.assertEqual(before["offerings"] - after["offerings"], 1_234_000)
+        self.assertEqual(st_before - money.giving_statement(self.db(), TODAY.year, person_id=pid)["total"], 1_234_000)
+        page = self.page(headers["location"])
+        self.assertIn(f"Offering of 1.234.000 ₫ on {shown(day)} deleted.", page)
+        self.assertNotIn(f"/money/offerings/{oid}/edit", page)
+
+    def test_a_hidden_fund_stays_on_the_edit_form(self):
+        conn = self.db()
+        old_fund = lists.add_item(conn, "fund", "C1A Quỹ cũ")
+        oid = money.add_offering(conn, TODAY.isoformat(), 500_000, old_fund)
+        lists.set_active(conn, old_fund, False)
+        self.assertNotIn("C1A Quỹ cũ", self.page("/money/offerings/new"))  # hidden: not offered for new rows
+        form = self.page(f"/money/offerings/{oid}/edit")
+        self.assertIn(f'<option value="{old_fund}" selected>C1A Quỹ cũ (hidden)</option>', form)
+        self.post(f"/money/offerings/{oid}/edit", self.offering_form("600.000", fund=old_fund))
+        row = money.get_offering(self.db(), oid)
+        self.assertEqual((row["fund_id"], row["amount"]), (old_fund, 600_000))
+
+    def test_edit_and_delete_pages_escape_what_was_typed(self):
+        events = self.category("Events")
+        eid = money.add_expense(self.db(), TODAY.isoformat(), 10_000, events, note='<script>alert(1)</script> "C1A"')
+        for page in (self.page(f"/money/expenses/{eid}/edit"),
+                     self.post(f"/money/expenses/{eid}/delete", {}, expect=200)[1]):
+            self.assertNotIn("<script>alert", page)
+            self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", page)
+
+    def test_edit_and_delete_expense(self):
+        events = self.category("Events")
+        eid = money.add_expense(self.db(), TODAY.isoformat(), 6_500_000, events, note="C1A Hoa ghi nhầm")
+        before = money.month_totals(self.db(), TODAY.year, TODAY.month)
+        expenses = section(self.page("/money"), "expenses")
+        self.assertIn(f'href="/money/expenses/{eid}/edit"', expenses)
+        form = self.page(f"/money/expenses/{eid}/edit")
+        self.assertIn("<h1>Edit Expense</h1>", form)
+        self.assertIn('value="6.500.000 ₫"', form)
+        self.assertIn(f'<option value="{events}" selected>Events</option>', form)
+        self.assertIn("C1A Hoa ghi nhầm</textarea>", form)
+        self.assertIn(f'action="/money/expenses/{eid}/delete"', section(form, "delete"))
+
+        good = {"date": TODAY.isoformat(), "amount": "650.000", "spending_category_id": events, "note": "C1A Hoa"}
+        _h, page = self.post(f"/money/expenses/{eid}/edit", {**good, "amount": "2,5"}, expect=400)
+        self.assertIn('id="f-amount-error"', page)
+        self.assertIn('value="2,5"', page)
+        self.assertEqual(money.get_expense(self.db(), eid)["amount"], 6_500_000)
+        status, _h, _d = self.request("POST", f"/money/expenses/{eid}/edit", good, origin=False)
+        self.assertEqual(status, 403)
+        headers, _ = self.post(f"/money/expenses/{eid}/edit", good)
+        self.assertTrue(headers["location"].startswith(f"/money?month={MONTH}&msg="))
+        row = money.get_expense(self.db(), eid)
+        self.assertEqual((row["amount"], type(row["amount"]), row["note"]), (650_000, int, "C1A Hoa"))
+        after = money.month_totals(self.db(), TODAY.year, TODAY.month)
+        self.assertEqual(before["expenses"] - after["expenses"], 5_850_000)
+        page = self.page(headers["location"])
+        self.assertIn(f"Expense saved: 650.000 ₫ on {shown(TODAY.isoformat())} (Events).", page)
+        self.assertEqual(amounts_in(section(page, "expenses"))[-1], after["expenses"])
+
+        _h, page = self.post(f"/money/expenses/{eid}/delete", {}, expect=200)
+        question = re.sub(r"<[^>]+>", "", section(page, "confirm"))
+        self.assertIn(f"Delete this Expense of 650.000 ₫ on {shown(TODAY.isoformat())}?", question)
+        self.assertIn("C1A Hoa", question)
+        headers, _ = self.post(f"/money/expenses/{eid}/delete", {"confirm": "yes"})
+        self.assertIsNone(money.get_expense(self.db(), eid))
+        self.assertEqual(after["expenses"] - money.month_totals(self.db(), TODAY.year, TODAY.month)["expenses"],
+                         650_000)
+        self.assertIn("Expense of 650.000 ₫", self.page(headers["location"]))
+        self.page(f"/money/expenses/{eid}/edit", expect=404)
+        self.post(f"/money/expenses/{eid}/delete", {"confirm": "yes"}, expect=404)
 
 
 if __name__ == "__main__":

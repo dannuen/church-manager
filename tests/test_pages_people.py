@@ -373,5 +373,104 @@ class SmallLogicTest(unittest.TestCase):
             self.assertNotRegex(source, r"\bUPDATE\s+\w+\s+SET\b", name)  # the C1 pages only read with SQL
 
 
+class FamilyAndChiPhaiEditTest(PagesTestBase):
+    """The Family name and Address, and a Chi phái's name: plain fields changed in place, not history."""
+
+    def new_family(self, name, address=""):
+        headers, _ = self.post("/families/new", {"name": name, "address": address})
+        m = re.fullmatch(r"/families/(\d+)\?msg=.+", headers["location"])
+        self.assertIsNotNone(m, headers["location"])
+        return int(m.group(1))
+
+    def new_chi_phai(self, name):
+        headers, _ = self.post("/chi-phai/new", {"name": name})
+        m = re.fullmatch(r"/chi-phai/(\d+)\?msg=.+", headers["location"])
+        self.assertIsNotNone(m, headers["location"])
+        return int(m.group(1))
+
+    def test_edit_family_name_and_address(self):
+        fid = self.new_family("Gia đình Trần Văn Cũ", "12 Lê Lợi")
+        pid = self.new_person("Trần Văn Dời Nhà", start=ago(30))
+        self.post(f"/people/{pid}/family", {"family_id": fid, "family_role": "Head", "start_date": ago(20)})
+        links_before = [tuple(r) for r in people.family_history(self.db(), pid)]
+        page = self.page(f"/families/{fid}")
+        self.assertIn(f'href="/families/{fid}/edit"', page)                         # Edit Family
+        self.assertIn(f'href="/families/{fid}/edit"', section(page, "address"))     # and under the Address
+        form = self.page(f"/families/{fid}/edit")
+        self.assertEqual(parse_panels(form).h1, 1)
+        self.assertIn('value="Gia đình Trần Văn Cũ"', form)
+        self.assertIn(">12 Lê Lợi</textarea>", form)
+
+        headers, _ = self.post(f"/families/{fid}/edit", {"name": "Gia đình Trần Văn Mới",
+                                                        "address": "45 Hai Bà Trưng, Phường 3"})
+        self.assertTrue(headers["location"].startswith(f"/families/{fid}?msg="), headers["location"])
+        row = people.get_family(self.db(), fid)
+        self.assertEqual((row["name"], row["address"]), ("Gia đình Trần Văn Mới", "45 Hai Bà Trưng, Phường 3"))
+        page = self.page(headers["location"])
+        self.assertIn("<h1>Gia đình Trần Văn Mới</h1>", page)
+        self.assertIn("45 Hai Bà Trưng, Phường 3", section(page, "address"))
+        self.assertIn("Family name and Address saved.", page)
+        self.assertIn("Gia đình Trần Văn Mới", self.page("/families"))
+        # every Person in it now shows the new address; the Family link history is not touched
+        self.assertIn("45 Hai Bà Trưng, Phường 3", section(self.page(f"/people/{pid}"), "details"))
+        self.assertEqual([tuple(r)[:2] + tuple(r)[3:] for r in people.family_history(self.db(), pid)],
+                         [r[:2] + r[3:] for r in links_before])  # all but the Family name column
+
+    def test_edit_family_refusals(self):
+        fid = self.new_family("Gia đình Không Đổi", "1 Nguyễn Huệ")
+        _h, page = self.post(f"/families/{fid}/edit", {"name": "  ", "address": "9 Pasteur"}, expect=400)
+        self.assertIn('id="f-name-error"', page)  # one sentence next to the Family name field
+        self.assertIn("Family name is required.", page)
+        self.assertIn(">9 Pasteur</textarea>", page)  # the form keeps what was typed
+        status, _h, _d = self.request("POST", f"/families/{fid}/edit", {"name": "Gia đình Lạ", "address": ""},
+                                      origin=False)
+        self.assertEqual(status, 403)
+        row = people.get_family(self.db(), fid)
+        self.assertEqual((row["name"], row["address"]), ("Gia đình Không Đổi", "1 Nguyễn Huệ"))
+        self.page("/families/999999/edit", expect=404)
+        self.post("/families/999999/edit", {"name": "Gia đình Lạ"}, expect=404)
+
+    def test_rename_chi_phai(self):
+        cid = self.new_chi_phai("Chi phái Thử Tênn")
+        fid = self.new_family("Gia đình Trong Chi Phái")
+        self.post(f"/families/{fid}/chi-phai", {"chi_phai_id": cid, "start_date": ago(5)})
+        links_before = [(r["id"], r["chi_phai_id"], r["start_date"], r["end_date"])
+                        for r in people.family_chi_phai_history(self.db(), fid)]
+        self.assertIn(f'href="/chi-phai/{cid}/edit"', self.page(f"/chi-phai/{cid}"))  # Rename Chi phái
+        form = self.page(f"/chi-phai/{cid}/edit")
+        self.assertEqual(parse_panels(form).h1, 1)
+        self.assertIn('value="Chi phái Thử Tênn"', form)
+
+        headers, _ = self.post(f"/chi-phai/{cid}/edit", {"name": "Chi phái Thử Tên"})
+        self.assertTrue(headers["location"].startswith(f"/chi-phai/{cid}?msg="), headers["location"])
+        page = self.page(headers["location"])
+        self.assertIn("<h1>Chi phái Thử Tên</h1>", page)
+        self.assertIn("Renamed to Chi phái Thử Tên.", page)
+        self.assertIn("Chi phái Thử Tên", self.page("/chi-phai"))
+        self.assertNotIn("Thử Tênn", self.page("/chi-phai"))
+        self.assertIn("Chi phái Thử Tên", section(self.page(f"/families/{fid}"), "chi-phai"))
+        self.assertEqual([(r["id"], r["chi_phai_id"], r["start_date"], r["end_date"])
+                          for r in people.family_chi_phai_history(self.db(), fid)], links_before)
+        # the same name again changes nothing and says so
+        headers, _ = self.post(f"/chi-phai/{cid}/edit", {"name": "Chi phái Thử Tên"})
+        self.assertIn("Nothing+changed", headers["location"])
+
+    def test_rename_chi_phai_refusals(self):
+        cid = self.new_chi_phai("Chi phái Bình An")
+        self.new_chi_phai("Chi phái Tân Phú")
+        _h, page = self.post(f"/chi-phai/{cid}/edit", {"name": ""}, expect=400)
+        self.assertIn('id="f-name-error"', page)
+        self.assertIn("Chi phái name is required.", page)
+        _h, page = self.post(f"/chi-phai/{cid}/edit", {"name": "Chi phái Tân Phú"}, expect=400)
+        self.assertIn('id="f-name-error"', page)
+        self.assertIn("already exists", page)
+        self.assertIn('value="Chi phái Tân Phú"', page)  # the form keeps what was typed
+        status, _h, _d = self.request("POST", f"/chi-phai/{cid}/edit", {"name": "Chi phái Lạ"}, origin=False)
+        self.assertEqual(status, 403)
+        self.assertEqual(people.get_chi_phai(self.db(), cid)["name"], "Chi phái Bình An")
+        self.page("/chi-phai/999999/edit", expect=404)
+        self.post("/chi-phai/999999/edit", {"name": "Chi phái Lạ"}, expect=404)
+
+
 if __name__ == "__main__":
     unittest.main()
