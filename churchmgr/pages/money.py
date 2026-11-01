@@ -24,6 +24,7 @@ from .people import (card_link, empty, family_link, field_errors, form_error, no
 
 NO_NAME = "no-name offering"
 AMOUNT_HINT = "Whole dong, for example 1.250.000 or 1250000."
+MIN_DATE = "1900-01-01"  # an Offering or Expense date has a year from 1900 (money._money_date)
 
 
 # ---------------------------------------------------------------- small logic (tested)
@@ -292,8 +293,8 @@ def _offering_form(req, values=None, error=None, status=200, row=None):
     errors = field_errors(error, "offering", {"date": "Date", "amount": "Amount", "fund_id": "Fund", "giver": "Giver"})
     funds = _choices(conn, "fund", row["fund_id"] if row else None)
     inner = (
-        ui.field("Date", "date", v("date") or today_text(), type="date", max=today_text(), required=True,
-                 error=errors.get("date"))
+        ui.field("Date", "date", v("date") or today_text(), type="date", min=MIN_DATE, max=today_text(),
+                 required=True, error=errors.get("date"))
         + _amount_field(v("amount", ""), errors.get("amount"))
         + ui.select_field("Fund", "fund_id", funds, selected=v("fund_id", funds[0][0] if funds else ""),
                           error=errors.get("fund_id"))
@@ -382,8 +383,8 @@ def _expense_form(req, values=None, error=None, status=200, row=None):
                                              "spending_category_id": "Spending category"})
     cats = _choices(conn, "spending_category", row["spending_category_id"] if row else None)
     inner = (
-        ui.field("Date", "date", v("date") or today_text(), type="date", max=today_text(), required=True,
-                 error=errors.get("date"))
+        ui.field("Date", "date", v("date") or today_text(), type="date", min=MIN_DATE, max=today_text(),
+                 required=True, error=errors.get("date"))
         + _amount_field(v("amount", ""), errors.get("amount"))
         + ui.select_field("Spending category", "spending_category_id", cats,
                           selected=v("spending_category_id", cats[0][0] if cats else ""),

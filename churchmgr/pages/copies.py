@@ -265,7 +265,8 @@ def _refusal_html(conn, copy_folder, refusal):
     for place, where in places[:PLACE_ROWS]:
         person_id = place[0]
         owner = conn.execute("SELECT full_name FROM person WHERE id = ?", (person_id,)).fetchone()[0]
-        owner_html = person_link(person_id, _safe_label(owner, bodies, f"Person {person_id}"))
+        # whose Private note: the link opens their Private note panel, where each note has its Edit link
+        owner_html = person_link(person_id, _safe_label(owner, bodies, f"Person {person_id}"), "#private-note")
         lines.append(f"<li>The Private note of {owner_html} is also written in {where(conn, place, bodies)}.</li>")
     if len(places) > PLACE_ROWS:
         lines.append(f"<li>And {len(places) - PLACE_ROWS} more places.</li>")
@@ -274,8 +275,9 @@ def _refusal_html(conn, copy_folder, refusal):
             "<p><strong>Handover not made.</strong> The words of a Private note are also written somewhere else "
             "in this church copy, so they would go to the next pastor.</p>"
             f"{found}"
-            "<p>Edit that text (or the Private note) so they are not the same, then press Make Handover again. "
-            "Nothing was changed and no zip was saved.</p></div>")
+            "<p>Change the Private note so it is not the same (open the Person, then Edit next to the note), "
+            "or change the other text. A Document file cannot be changed in the app, so for a Document change "
+            "the Private note. Then press Make Handover again. Nothing was changed and no zip was saved.</p></div>")
 
 
 def _handover_panel(req, refusal):
@@ -288,7 +290,8 @@ def _handover_panel(req, refusal):
     made = list_handovers(root)
     if made:
         rows = "".join(
-            f'<li class="row" data-row><span class="what"><a href="/copies/handovers/{h(p.name)}">{h(p.name)}</a></span>'
+            f'<li class="row" data-row><span class="what wrap">'
+            f'<a class="file-name" href="/copies/handovers/{h(p.name)}">{h(p.name)}</a></span>'
             f'<span class="side num">{h(fmt_size(size))}</span></li>' for p, size in made[:HANDOVER_ROWS])
         listing = f'<h3 class="sub-head">Handovers made</h3><ul class="rows">{rows}</ul>'
     else:

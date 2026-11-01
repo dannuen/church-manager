@@ -452,6 +452,20 @@ def add_private_note(conn, person_id, body):
     return cur.lastrowid
 
 
+def update_private_note(conn, person_id, note_id, body):
+    """Change the text of one Private note of a Person, in place (the same checks as
+    :func:`add_private_note`). No old copy is kept: a Private note is not a dated link, and an old
+    copy would keep the words the pastor wants gone. A note of another Person raises ``ValueError``."""
+    pid = _require_row(conn, "person", person_id, "Person")["id"]
+    nid = text.to_id(note_id, "Private note")
+    if conn.execute("SELECT 1 FROM private_note WHERE id = ? AND person_id = ?", (nid, pid)).fetchone() is None:
+        raise ValueError(f"This Person has no Private note with id {nid}.")
+    clean = text.clean_text(body)
+    if clean is None:
+        raise ValueError("A private note needs some text.")
+    conn.execute("UPDATE private_note SET body = ? WHERE id = ? AND person_id = ?", (clean, nid, pid))
+
+
 def list_private_notes(conn, person_id):
     """A Person's Private notes, newest first."""
     return conn.execute(

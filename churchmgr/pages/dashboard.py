@@ -16,7 +16,10 @@ from .people import clamp2
 WEEK_ROWS = 6  # Calendar items shown before "View all"
 VISIT_ROWS = 6  # Persons shown in Needs a visit (the card allows up to 10; the design rule caps lists at 4-6)
 HEAD_COUNTS = 8
-SENT_ROWS = 3
+SENT_ROWS = 2  # B17: 2 recent rows keep Sent documents level with Services and Money this month
+CHART_HEIGHT = 154  # px, the Services chart at every width
+# Row 2 of the 12 columns: Services, Money this month, Sent documents (4 + 4 + 4)
+ROW2_SPANS = ("span-4", "span-4", "span-4")
 _FAILED = object()
 # Round chart steps: 1, 2, 5, 10, 20, 25, 50, ... (integers only).
 _STEPS = tuple(sorted({m * 10 ** e for e in range(9) for m in (1, 2, 5)} | {25 * 10 ** e for e in range(8)}))
@@ -48,16 +51,22 @@ def nice_scale(max_value):
 
 
 def services_svg(rows):
-    """A small one-series line of Head counts (oldest left), drawn as inline SVG."""
+    """A small one-series line of Head counts (oldest left), drawn as inline SVG.
+
+    The chart has one height (``CHART_HEIGHT``) at every width and fills the card width: x places are
+    percentages, and the line sits in an inner SVG stretched across the plot (its stroke does not
+    scale). So the 12px text keeps its size and the Services card keeps its height when the window
+    changes. The y ticks and the last value sit in the side padding of ``.chart`` (style.css).
+    With more than 5 Services every second date is labelled, counted back from the last one.
+    """
     counts = [r["count"] for r in rows]
     n = len(counts)
     top, step = nice_scale(max(counts))
-    width, height = 480, 200
-    left, right, pad_top, bottom = 40, 40, 10, 28
-    plot_w, plot_h = width - left - right, height - pad_top - bottom
+    height, pad_top, bottom = CHART_HEIGHT, 10, 28
+    plot_h = height - pad_top - bottom
 
     def x(i):
-        return left + (plot_w * i / (n - 1) if n > 1 else plot_w / 2)
+        return 100 * i / (n - 1) if n > 1 else 50
 
     def y(c):
         return pad_top + plot_h - plot_h * c / top
@@ -66,16 +75,19 @@ def services_svg(rows):
     for v in range(0, top + 1, step):
         yy = y(v)
         cls = "gridline base" if v == 0 else "gridline"
-        parts.append(f'<line class="{cls}" x1="{left}" x2="{width - right}" y1="{yy:.1f}" y2="{yy:.1f}"/>')
-        parts.append(f'<text class="tick" x="{left - 8}" y="{yy + 4:.1f}" text-anchor="end">{v}</text>')
+        parts.append(f'<line class="{cls}" x1="0" x2="100%" y1="{yy:.1f}" y2="{yy:.1f}"/>')
+        parts.append(f'<text class="tick" x="-8" y="{yy + 4:.1f}" text-anchor="end">{v}</text>')
+    label_every = 2 if n > 5 else 1
     for i, r in enumerate(rows):
-        parts.append(f'<text class="tick" x="{x(i):.1f}" y="{height - 8}" text-anchor="middle">'
-                     f'{h(ui.fmt_date(r["starts_at"])[:5])}</text>')
-    points = " ".join(f"{x(i):.1f},{y(c):.1f}" for i, c in enumerate(counts))
-    parts.append(f'<polyline class="line" points="{points}"/>')
-    parts.append(f'<text class="end" x="{x(n - 1) + 8:.1f}" y="{y(counts[-1]) + 4:.1f}">{counts[-1]}</text>')
+        if (n - 1 - i) % label_every == 0:
+            parts.append(f'<text class="tick" x="{x(i):.2f}%" y="{height - 8}" text-anchor="middle">'
+                         f'{h(ui.fmt_date(r["starts_at"])[:5])}</text>')
+    points = " ".join(f"{x(i):.2f},{y(c):.1f}" for i, c in enumerate(counts))
+    parts.append(f'<svg class="plot" width="100%" height="{height}" viewBox="0 0 100 {height}" '
+                 f'preserveAspectRatio="none"><polyline class="line" points="{points}"/></svg>')
+    parts.append(f'<text class="end" x="100%" dx="8" y="{y(counts[-1]) + 4:.1f}">{counts[-1]}</text>')
     label = "; ".join(f"{ui.fmt_date(r['starts_at'])} {r['count']}" for r in rows)
-    return (f'<svg class="chart" viewBox="0 0 {width} {height}" role="img" '
+    return (f'<svg class="chart" width="100%" height="{height}" role="img" '
             f'aria-label="Head count of the last {n} Services: {h(label)}">{"".join(parts)}</svg>')
 
 
@@ -173,9 +185,10 @@ def _services(rows, span):
     if rows is _FAILED:
         return _failed(name, title, span)
     meta = f"Head count of the last {ui.plural(len(rows), 'Service', 'Services')}" if rows else "Head count"
+    # the link sits at the foot, as in the other panels: the header keeps one line in a 4-column card
     link = _link("Calendar", "/calendar")
     if not rows:
-        return _panel(name, title, _empty("No Head count recorded yet."), meta=meta, head_link=link, span=span)
+        return _panel(name, title, _empty("No Head count recorded yet."), meta=meta, foot=link, span=span)
     counts = [r["count"] for r in rows]
     last = rows[-1]
     word, average = trend(counts)
@@ -187,7 +200,7 @@ def _services(rows, span):
         line = (f'<p class="trend" data-row><strong class="trend-{word.lower()}">{word}</strong> · '
                 f'{h(said)}, against an average of {average} for the {before} before.</p>')
     chart = services_svg(rows) if len(rows) > 1 else ""
-    return _panel(name, title, chart + line, meta=meta, head_link=link, span=span)
+    return _panel(name, title, chart + line, meta=meta, foot=link, span=span)
 
 
 def _money_month(totals, today, span):
@@ -211,23 +224,28 @@ def _money_month(totals, today, span):
     return _panel(name, title, body, meta=h(ui.fmt_month(today.year, today.month)), foot=foot, span=span)
 
 
-def _sent_documents(next_number, recent, span):
+def _sent_documents(next_number, recent, year, span):
     name, title = "sent-documents", "Sent documents"
     if next_number is _FAILED or recent is _FAILED:
         return _failed(name, title, span)
+    count, recent = recent
+    meta = f"{ui.plural(count, 'Sent document', 'Sent documents')} in {year}"
     body = (f'<div class="kpi" data-row><span class="kpi-label">Next number</span>'
             f'<span class="kpi-value num">{h(next_number)}</span></div>')
     rows = []
     for s in recent:
-        sub = " · ".join(x for x in (h(ui.fmt_date(s["date"])), vi(s["recipient_name"]), h(s["purpose_name"])))
+        # date · Recipient · Purpose may wrap to 2 lines (full text in the title); a "·" stays with
+        # the word after it (no-break space), so no line ends on a dangling "·"
+        items = (h(ui.fmt_date(s["date"])), vi(s["recipient_name"]), h(s["purpose_name"]) or ui.DASH)
+        sub = " ·\u00a0".join(items)
         sub_text = " · ".join(x or "—" for x in (ui.fmt_date(s["date"]), s["recipient_name"], s["purpose_name"]))
         number = f'<span class="num nowrap">{h(s["number"])}</span>'
         subject = clamp2(f'{number} {vi(s["subject"]) if s["subject"] else ""}',
                          f'{s["number"]} {s["subject"] or ""}'.strip())
         rows.append(f'<li class="row" data-row><span class="what wrap">{subject}'
-                    f'<span class="sub" title="{h(sub_text)}">{sub}</span></span></li>')
+                    f'{clamp2(sub, sub_text, cls="sub")}</span></li>')
     body += f'<ul class="rows">{"".join(rows)}</ul>' if rows else _empty("No Sent document yet.")
-    return _panel(name, title, body, foot=_link("Open Sent documents", "/sent"), span=span)
+    return _panel(name, title, body, meta=h(meta), foot=_link("Open Sent documents", "/sent"), span=span)
 
 
 def _search_panel():
@@ -246,11 +264,13 @@ def _search_panel():
 
 
 def _recent_sent(conn, year):
-    """The last Sent documents, newest first: this year, then last year if needed."""
-    rows = list(reversed(sent.list_sent_documents(conn, year)))
+    """``(count, rows)``: how many Sent documents ``year`` has, and the last ones, newest first
+    (this year, then last year if needed)."""
+    this_year = sent.list_sent_documents(conn, year)
+    rows = list(reversed(this_year))
     if len(rows) < SENT_ROWS:
         rows += list(reversed(sent.list_sent_documents(conn, year - 1)))
-    return rows[:SENT_ROWS]
+    return len(this_year), rows[:SENT_ROWS]
 
 
 # ---------------------------------------------------------------- page
@@ -275,9 +295,9 @@ def dashboard(req):
         '<div class="grid dashboard">'
         + _this_week(week, today, "span-7")
         + _needs_visit(needs, months, "span-5")
-        + _services(counts, "span-6")
-        + _money_month(totals, today, "span-3")
-        + _sent_documents(next_number, recent, "span-3")
+        + _services(counts, ROW2_SPANS[0])
+        + _money_month(totals, today, ROW2_SPANS[1])
+        + _sent_documents(next_number, recent, today.year, ROW2_SPANS[2])
         + "</div>"
     )
     actions = _search_panel() + ui.link_button("Plan a Visit", "/care", "primary")

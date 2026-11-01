@@ -47,7 +47,9 @@ A Handover gives the church copy to the next pastor of the same church. Private 
    The page also has a link to download it.
 
 Your church copy is not changed. If the words of a Private note are also written somewhere else in
-the church copy, no zip is made: the page lists where, so you can edit that text first. Document
+the church copy, no zip is made: the page lists where. Change the Private note (open the Person, then
+**Edit** next to the note) or change the other text, then press **Make Handover** again. A Document
+file cannot be changed in the app, so for a Document change the Private note. Document
 files are checked as plain text only: text inside Word or PDF files is not read.
 
 The next pastor:

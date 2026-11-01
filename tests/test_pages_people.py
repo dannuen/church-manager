@@ -425,6 +425,80 @@ class PeoplePagesTest(PagesTestBase):
             self.assertIn("<h1>", self.page(path), path)  # English page names keep the page language
 
 
+class PrivateNoteEditTest(PagesTestBase):
+    """B13: a Private note is changed on the Person page (Edit next to the note), inside .no-print."""
+
+    PRIMARY = 'class="btn primary"'
+
+    def setUp(self):
+        super().setUp()
+        self.pid = self.new_person("Đinh Thị Sửa Ghi Chú", "member", start=ago(30))
+        self.words = "B13-CŨ tư vấn gia đình 6612"
+        self.post(f"/people/{self.pid}/private-notes", {"body": self.words})
+        self.nid = people.list_private_notes(self.db(), self.pid)[0]["id"]
+        self.edit_href = f"/people/{self.pid}?edit_note={self.nid}#private-note"
+        self.action = f'action="/people/{self.pid}/private-notes/{self.nid}"'
+
+    def body(self):
+        return people.list_private_notes(self.db(), self.pid)[0]["body"]
+
+    def test_edit_link_and_form_only_with_edit_note(self):
+        page = self.page(f"/people/{self.pid}")
+        box = section(page, "private-note")
+        self.assertIn('<div id="private-note" class="no-print">', page)  # the #private-note anchor
+        self.assertIn(f'<a class="note-edit" href="{self.edit_href}"', box)
+        self.assertNotIn(self.action, page)  # no edit form without ?edit_note
+        self.assertIn(f'action="/people/{self.pid}/private-notes"', box)  # the add form
+        self.assertEqual(page.count(self.PRIMARY), 1)
+
+        page = self.page(self.edit_href.split("#")[0])
+        box = section(page, "private-note")
+        self.assertIn(self.action, box)
+        self.assertIn(f">{self.words}</textarea>", box)
+        self.assertIn('<button class="btn secondary" type="submit">Save Private note</button>', box)
+        self.assertIn(f'<a class="text-action" href="/people/{self.pid}#private-note">Cancel</a>', box)
+        self.assertNotIn(f'action="/people/{self.pid}/private-notes"', box)  # one form at a time
+        self.assertEqual(page.count(self.PRIMARY), 1)  # Plan a Visit stays the one filled button (B12)
+        self.assertEqual(places(page, self.words), [True])  # once, inside .no-print
+        self.assertNotIn(self.words, section(page, "story"))
+        # a note id that is not this Person's, or not a number: the plain panel
+        other = people.list_persons(self.db())[0]["id"]
+        for query in ("?edit_note=abc", "?edit_note=0", "?edit_note=999999"):
+            self.assertNotIn(self.action, self.page(f"/people/{self.pid}{query}"), query)
+        self.assertNotIn(self.action, self.page(f"/people/{other}?edit_note={self.nid}"))
+        self.assertNotIn(self.words, self.page(f"/people/{other}?edit_note={self.nid}"))
+
+    def test_save_changes_the_note_and_never_puts_the_words_in_the_url(self):
+        new = "B13-MỚI đã đổi lời 8840"
+        headers, _ = self.post(f"/people/{self.pid}/private-notes/{self.nid}", {"body": new})
+        location = headers["location"]
+        self.assertEqual(location, f"/people/{self.pid}?msg=Private+note+changed.#private-note")
+        self.assertEqual(self.body(), new)
+        self.assertEqual([n["body"] for n in people.list_private_notes(self.db(), self.pid)], [new])  # no old copy
+        page = self.page(location.split("#")[0])
+        self.assertIn("Private note changed.", page)
+        self.assertEqual(places(page, new), [True])
+        self.assertNotIn(self.words, page)
+        self.assertEqual(page.count(self.PRIMARY), 1)
+
+    def test_refusals_show_next_to_the_field_and_change_nothing(self):
+        _h, page = self.post(f"/people/{self.pid}/private-notes/{self.nid}", {"body": "   "}, expect=400)
+        box = section(page, "private-note")
+        self.assertIn('<p class="error" id="private-edit-body-error">A private note needs some text.</p>', box)
+        self.assertIn(self.action, box)  # the form stays open
+        self.assertEqual(page.count(self.PRIMARY), 1)
+        self.assertEqual(self.body(), self.words)
+        # a note of another Person, or no such note: not found, nothing changed
+        other = people.list_persons(self.db())[0]["id"]
+        self.post(f"/people/{other}/private-notes/{self.nid}", {"body": "B13 lạ"}, expect=404)
+        self.post(f"/people/{self.pid}/private-notes/999999", {"body": "B13 lạ"}, expect=404)
+        self.post(f"/people/999999/private-notes/{self.nid}", {"body": "B13 lạ"}, expect=404)
+        status, _h, _d = self.request("POST", f"/people/{self.pid}/private-notes/{self.nid}", {"body": "B13 lạ"},
+                                      origin=False)
+        self.assertEqual(status, 403)
+        self.assertEqual(self.body(), self.words)
+
+
 class SmallLogicTest(unittest.TestCase):
     def test_past_or_today(self):
         today = TODAY.isoformat()
