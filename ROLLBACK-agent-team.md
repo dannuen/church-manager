@@ -36,3 +36,10 @@ Copied into profiles orchestrator, coder, reviewer, tester (folder `<profile>/sk
 design-taste-frontend (from C:/Users/danng/.hermes/skills), impeccable, mattpocock (33 skills),
 ponytail/ (6 skills: ponytail, -audit, -debt, -gain, -help, -review; copied from the plugin as plain skills, the plugin hooks are NOT copied).
 Undo: delete those folders from each profile's skills/ folder (they hold nothing else; each profile had only autonomous-ai-agents/hermes-agent before).
+
+## Telegram block alerts
+- Script: C:/Users/danng/AppData/Local/hermes/scripts/church_block_watch.py (+ church_block_watch.state.json). Zero tokens. Reads the board DB read-only.
+- Cron job `church-manager-block-watch` (id d6dce95d37ee), every 2m, no_agent. Sends via the Graby bot (@dannuen_sermon_grabber_bot) to the home chat (Dan Nguyen DM).
+- Alerts only for: blocked, gave_up, crashed, timed_out, block_loop_detected.
+- Undo: remove the cron job (cronjob remove d6dce95d37ee), then delete the two files above.
+- Token stays in .env; the script reads it there and never prints it.
