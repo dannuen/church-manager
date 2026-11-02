@@ -17,6 +17,7 @@ Build Church Manager: an offline app that helps one senior pastor run one church
 - Care: mark a Visit done. See the Care log.
 - Documents: attach files to a Person, Family or Calendar item. Record Sent documents with date, Recipient, Purpose and an automatic number per year. Recipient and Purpose lists are editable.
 - Copies: do a Handover (Private notes removed). Start a New church setup (blank, default lists only).
+- Language: switch the whole interface between Vietnamese and English at any time, in one click. The choice is remembered. Vietnamese is the default. Prints follow the chosen language. The pastor's own data (names, notes) is never translated.
 
 ## RULES
 1. Offline only. No cloud, no web login. One church = one church copy (one database file + one documents folder).
