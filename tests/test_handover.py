@@ -186,6 +186,45 @@ class HandoverTest(CopyTestCase):
         self.assertFalse(ctx.exception.private_text_found)
         self.assertFalse(handover.HandoverError("plain").private_text_found)
 
+    # ---- H4: the Hermes door is off in a Handover; the next pastor decides about it
+
+    def zip_door(self, zip_path):
+        """``(hermes_door value, settings.hermes_door_on)`` of the church.db in ``zip_path``."""
+        _path, conn = self.open_zip_db(zip_path)
+        conn.row_factory = sqlite3.Row
+        return settings.get_setting(conn, settings.HERMES_DOOR), settings.hermes_door_on(conn)
+
+    def test_the_hermes_door_is_off_in_the_handover_and_stays_on_in_the_source(self):
+        settings.set_setting(self.conn, settings.HERMES_DOOR, "on")
+        before = sha(self.db_file)
+        self.assertEqual(self.zip_door(self.make()), ("off", False))
+        self.assertEqual(sha(self.db_file), before)  # the source church copy is not changed
+        self.assertEqual(settings.get_setting(self.conn, settings.HERMES_DOOR), "on")
+        self.assertTrue(settings.hermes_door_on(self.conn))
+
+    def test_a_source_with_no_door_row_gives_a_handover_with_the_door_off(self):
+        self.assertIsNone(settings.get_setting(self.conn, settings.HERMES_DOOR))
+        self.assertEqual(self.zip_door(self.make()), ("off", False))
+        self.assertIsNone(settings.get_setting(self.conn, settings.HERMES_DOOR))
+
+    def test_a_door_left_on_stops_the_handover(self):
+        settings.set_setting(self.conn, settings.HERMES_DOOR, "on")
+
+        def door_kept(path):  # removes the Private notes like the real step, but not the door
+            conn = sqlite3.connect(path, isolation_level=None)
+            conn.execute("PRAGMA secure_delete = ON")
+            conn.execute("DELETE FROM private_note")
+            conn.execute("VACUUM")
+            conn.close()
+
+        with mock.patch.object(handover, "_strip_private", door_kept):
+            with self.assertRaises(handover.HandoverError) as ctx:
+                self.make()
+        self.assertEqual(str(ctx.exception),
+                         "The Hermes door was still on in the handover database. No handover was made.")
+        self.assertFalse(ctx.exception.private_text_found)
+        self.assertEqual(list(self.out.iterdir()), [])  # no zip, no .partial file, no work folder
+
 
 class NewChurchSetupTest(unittest.TestCase):
     def setUp(self):

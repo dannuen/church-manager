@@ -89,8 +89,9 @@ A dry run answers `"dry_run": true, "saved": false`, with `would_save` (the valu
    delete or change something, tell them to do it in Church Manager.
 4. **Only the door.** Never open `church.db` with sqlite, Python or any other tool. Never read files
    in the church copy folder (also not its `documents` folder). Never use the Church Manager web
-   pages or their addresses (a browser, curl) to read or change data. Never try to get Private
-   notes. Never turn on the Hermes door yourself, and never work around it.
+   pages or their addresses (in a web browser or with any other web request) to read or change
+   data. Never try to get Private notes. Never turn on the Hermes door yourself, and never work
+   around it.
 5. **Glossary words.** Say Person and People (Member is a Status, not a kind of Person), Family,
    Chi phái, Trưởng Chi phái, Calendar item, Visit, Care log, Offering, Giver, Fund, Expense,
    Spending category, Private note. Keep the Vietnamese accents in names.
@@ -115,8 +116,10 @@ printed. Do not try another way.
 - **Save once.** Each run with `--yes` saves again: two runs make two Offerings. If you are not sure
   a save worked, read it back first (see Verification). Never run `--yes` again "to be safe".
 - **Ids are not 1, 2, 3.** Fund, Spending category and Status ids come from `lists`. A Person id
-  comes from `search`. A Family id is `family_id` inside `family` in the `person` answer (its `id`
-  is the id of the link, not of the Family). A planned Visit id is in `calendar` (`kind` Visit,
+  comes from `search`. In the `person` answer, the `status`, `family` and `ministries` parts have
+  no `id`: use their `status_id`, `family_id` and `ministry_id`. In the `family` answer, `family`
+  has the Family `id`, `chi_phai` has no `id` (use `chi_phai_id`), and `people` lists the People in
+  the Family, each with its Person `id`. A planned Visit id is in `calendar` (`kind` Visit,
   `visit_done` 0). The calendar shows 7 days by default: give `--from` and `--to`.
 - **Money is whole dong.** Write `1250000` or `1.250.000`. No decimals and no minus sign: `1,5` is
   refused. Tell the pastor the `amount_text`.

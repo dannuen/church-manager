@@ -269,13 +269,41 @@ class ReadCommandsTest(FakeChurchBase):
     def test_family(self):
         fid = self.sql("SELECT family_id FROM family_link WHERE end_date IS NULL ORDER BY family_id LIMIT 1")[0][0]
         answer = self.ok("family", str(fid))
+        self.assertEqual(set(answer), {"ok", "command", "family", "chi_phai", "people"})  # H2: no "members"
         self.assertEqual(set(answer["family"]), {"id", "name", "address"})
         self.assertEqual(answer["family"]["id"], fid)
-        members = {r[0] for r in self.sql("SELECT person_id FROM family_link WHERE family_id = ? "
-                                          "AND end_date IS NULL", (fid,))}
-        self.assertEqual({m["id"] for m in answer["members"]}, members)
-        self.assertIn("chi_phai", answer)
+        people_ids = {r[0] for r in self.sql("SELECT person_id FROM family_link WHERE family_id = ? "
+                                             "AND end_date IS NULL", (fid,))}
+        self.assertEqual({p["id"] for p in answer["people"]}, people_ids)  # each one's Person id is kept
         self.assertNotIn("name_folded", json.dumps(answer))
+
+    def test_link_parts_name_their_record_and_not_the_link_row(self):
+        """H1: the status, family, ministries and chi_phai parts have no ``id`` (that was the id of the link
+        row); they name the Status, Family, Ministry and Chi phái by status_id, family_id, ministry_id and
+        chi_phai_id."""
+        pid = self.sql("SELECT ml.person_id FROM ministry_link ml JOIN family_link fl ON fl.person_id = ml.person_id "
+                       "AND fl.end_date IS NULL WHERE ml.end_date IS NULL ORDER BY ml.person_id LIMIT 1")[0][0]
+        answer = self.ok("person", str(pid))
+        self.assertTrue(answer["ministries"])
+        for part in (answer["status"], answer["family"], *answer["ministries"]):
+            self.assertNotIn("id", part)
+        self.assertEqual(answer["person"]["id"], pid)
+        status_id = self.sql("SELECT status_id FROM person_status WHERE person_id = ? AND end_date IS NULL", (pid,))
+        self.assertEqual([answer["status"]["status_id"]], [r[0] for r in status_id])
+        self.assertIn(answer["status"]["status_id"],
+                      [r["id"] for r in lists.get_list(self.ro(), "status", include_hidden=True)])
+        self.assertEqual([answer["family"]["family_id"]],
+                         [r[0] for r in self.sql("SELECT family_id FROM family_link WHERE person_id = ? "
+                                                 "AND end_date IS NULL", (pid,))])
+        self.assertEqual(sorted(m["ministry_id"] for m in answer["ministries"]),
+                         sorted(r[0] for r in self.sql("SELECT ministry_id FROM ministry_link WHERE person_id = ? "
+                                                       "AND end_date IS NULL", (pid,))))
+        fid, cid = self.sql("SELECT family_id, chi_phai_id FROM chi_phai_link WHERE end_date IS NULL "
+                            "ORDER BY family_id LIMIT 1")[0]
+        chi_phai = self.ok("family", str(fid))["chi_phai"]
+        self.assertNotIn("id", chi_phai)
+        self.assertEqual(chi_phai["chi_phai_id"], cid)
+        self.assertEqual(chi_phai["name"], self.sql("SELECT name FROM chi_phai WHERE id = ?", (cid,))[0][0])
 
     def test_calendar(self):
         today = dt.date.today()
@@ -665,12 +693,29 @@ class WriteCommandsTest(FakeChurchBase):
         self.refused("invalid", "visit-done", "abc")
         self.refused("not_found", "visit-done", "99999999999999999999")
 
+    def test_visit_done_on_a_missing_id_is_not_found(self):
+        """H3: no Calendar item with that id is ``not_found`` (find the id again), not ``invalid``."""
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM calendar_item WHERE id = 999999"), [(0,)])
+        before = sha(self.db_path)
+        for yes in ([], ["--yes"]):
+            answer = self.refused("not_found", "visit-done", "999999", *yes)
+            self.assertEqual(answer["message"], "No Calendar item with id 999999.")
+        self.assertEqual(sha(self.db_path), before)
+        # an id that is there but is not a planned Visit keeps the web sentence
+        service = self.sql("SELECT MIN(id) FROM calendar_item WHERE kind = 'Service'")[0][0]
+        self.assertEqual(self.refused("invalid", "visit-done", str(service), "--yes")["message"],
+                         "This is not a planned Visit. It may be marked done already.")
+        self.assertEqual(sha(self.db_path), before)
+
     def test_a_refused_value_saves_nothing_even_with_yes(self):
         counts, before = row_counts(self.db_path), sha(self.db_path)
         for yes in ([], ["--yes"]):
             self.refused("invalid", "add-offering", "--amount", "1,5", "--fund-id", self.list_id("fund"), *yes)
             self.refused("invalid", "add-person", "--full-name", "  ", *yes)
             self.refused("invalid", "plan-visit", "--starts-at", f"{day()} 10:00", *yes)  # no Person, no Family
+            huge = self.refused("invalid", "add-offering", "--amount", "1" * 4301, "--fund-id", self.list_id("fund"),
+                                *yes)
+            self.assertEqual(huge["message"], "Amount is too large.")  # H6: not Python's own int() text
         self.assertEqual(row_counts(self.db_path), counts)
         self.assertEqual(sha(self.db_path), before)
         self.refused("usage", "add-person")  # --full-name is required

@@ -117,6 +117,16 @@ def _dicts(rows):
     return [_dict(r) for r in rows]
 
 
+def _link(row):
+    """A current link row (Status, Family, Ministry, Chi phái) as a dict without its ``id``: that is the
+    id of the link row, not of the Status, Family, Ministry or Chi phái (``status_id``, ``family_id``,
+    ``ministry_id``, ``chi_phai_id`` are). ``None`` stays ``None``."""
+    out = _dict(row)
+    if out is not None:
+        out.pop("id", None)
+    return out
+
+
 def _id(raw, what):
     try:
         return text.to_id(raw, what)
@@ -172,9 +182,9 @@ def cmd_person(conn, args, copy, root):
     person["note"] = row["note"]
     return {
         "person": person,
-        "status": _dict(people.current_status(conn, pid)),
-        "family": _dict(people.current_family(conn, pid)),
-        "ministries": _dicts(people.current_ministries(conn, pid)),
+        "status": _link(people.current_status(conn, pid)),
+        "family": _link(people.current_family(conn, pid)),
+        "ministries": [_link(r) for r in people.current_ministries(conn, pid)],
         "story": story.person_story(conn, pid, include_private=False),
     }
 
@@ -186,8 +196,8 @@ def cmd_family(conn, args, copy, root):
         raise AgentError("not_found", f"No Family with id {fid}.")
     return {
         "family": {"id": row["id"], "name": row["name"], "address": row["address"]},
-        "chi_phai": _dict(people.current_chi_phai(conn, fid)),
-        "members": _dicts(people.family_members(conn, fid)),
+        "chi_phai": _link(people.current_chi_phai(conn, fid)),
+        "people": _dicts(people.family_members(conn, fid)),
     }
 
 
@@ -256,6 +266,8 @@ def cmd_plan_visit(conn, form, args):
 
 def cmd_visit_done(conn, form, args):
     iid = _id(args.id, "Calendar item")
+    if calendar.get_calendar_item(conn, iid) is None:  # the form function says "not a planned Visit" here too
+        raise AgentError("not_found", f"No Calendar item with id {iid}.")
     return {"calendar_item_id": iid, "done_date": care_page.mark_visit_done_from_form(conn, iid, form)}
 
 
