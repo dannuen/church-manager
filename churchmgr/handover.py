@@ -22,20 +22,26 @@ import zipfile
 from pathlib import Path
 
 from . import db, documents, paths, schema, settings, text
+from .i18n import TEXT, TextError
 
 MIN_CHECK_LENGTH = 4  # Private note texts this long or longer are searched for in the bytes
 
 
-class HandoverError(Exception):
+class HandoverError(TextError):
     """The Handover was stopped. No zip was made.
+
+    A ``TextError`` (``copies.err_*`` key): ``str()`` is English, the Copies page shows
+    ``i18n.error_text(e)``. A plain sentence instead of a key is kept as it is in every language.
 
     ``private_text_found`` is True only when the text of a Private note was found in the
     handover database or in a Document file (it is also written somewhere else in the church
     copy). The Copies page then lists where, instead of showing the message.
     """
 
-    def __init__(self, message, private_text_found=False):
-        super().__init__(message)
+    def __init__(self, key, private_text_found=False, **params):
+        if key not in TEXT["en"]:
+            key, params = "copies.err_plain", {"message": key}
+        super().__init__(key, **params)
         self.private_text_found = private_text_found
 
 
@@ -57,7 +63,7 @@ def _read_source(db_path):
     try:
         version = src.execute("PRAGMA user_version").fetchone()[0]
         if version != schema.SCHEMA_VERSION:
-            raise HandoverError(f"{db_path} is not a Church Manager database of version {schema.SCHEMA_VERSION}.")
+            raise HandoverError("copies.err_db_version", path=db_path, version=schema.SCHEMA_VERSION)
         row = src.execute("SELECT value FROM setting WHERE key = 'church_name'").fetchone()
         slug = text.slugify(row[0] if row else "church")
         bodies = _note_texts(src)
@@ -107,23 +113,19 @@ def _check_db_file(path, bodies):
     finally:
         conn.close()
     if left != 0:
-        raise HandoverError(f"{left} Private note(s) were still in the handover database. No handover was made.")
+        raise HandoverError("copies.err_notes_left", n=left)
     if whole != "ok":
-        raise HandoverError(f"The handover database failed its check ({whole}). No handover was made.")
+        raise HandoverError("copies.err_db_check", detail=whole)
     check_no_private_text(path.read_bytes(), bodies)
     if door != ("off",):  # written by _strip_private: anything else means that step did not happen
-        raise HandoverError("The Hermes door was not off in the handover database. No handover was made.")
+        raise HandoverError("copies.err_door")
 
 
 def check_no_private_text(data, bodies):
     """Raise ``HandoverError`` if any Private note text is found in ``data`` (bytes)."""
     for note_id, body in bodies:
         if body in data:
-            raise HandoverError(
-                f"The text of Private note {note_id} was still found in the handover database "
-                "(maybe the same text is also used somewhere else). No handover was made.",
-                private_text_found=True,
-            )
+            raise HandoverError("copies.err_text_in_db", private_text_found=True, note_id=note_id)
 
 
 def private_text_files(files, notes):
@@ -166,12 +168,12 @@ def _check_zip(zip_path, bodies, work, doc_files):
     with zipfile.ZipFile(zip_path) as zf:
         bad = zf.testzip()
         if bad is not None:
-            raise HandoverError(f"The handover zip is damaged ({bad}). No handover was made.")
+            raise HandoverError("copies.err_zip_damaged", detail=bad)
         names = set(zf.namelist())
         if db.DB_NAME not in names:
-            raise HandoverError("The handover zip has no church.db. No handover was made.")
+            raise HandoverError("copies.err_zip_no_db", db=db.DB_NAME)
         if not {f"{db.DOCUMENTS_DIR}/{f.name}" for f in doc_files} <= names:
-            raise HandoverError("A Document file is missing from the handover zip. No handover was made.")
+            raise HandoverError("copies.err_zip_missing_file")
         check_path = work / "check.db"
         check_path.write_bytes(zf.read(db.DB_NAME))
     _check_db_file(check_path, bodies)
@@ -187,14 +189,14 @@ def make_handover(copy_folder, out_dir, today=None):
         folder = paths.check_not_onedrive(copy_folder)
         out = paths.check_not_onedrive(out_dir)
     except paths.CopyPathError as exc:
-        raise HandoverError(str(exc)) from exc
+        raise HandoverError(exc.key, **exc.params) from exc
     db_path = folder / db.DB_NAME
     if not db_path.is_file():
-        raise HandoverError(f"No church copy in {folder}: {db.DB_NAME} is missing.")
+        raise HandoverError("copies.err_no_copy", folder=folder, db=db.DB_NAME)
     docs = db.documents_folder(folder).resolve()
     if out == docs or out.is_relative_to(docs):
-        raise HandoverError("Save the handover outside the documents folder of the church copy.")
-    day = text.check_date(today if today is not None else text.today_text(), "Date")
+        raise HandoverError("copies.err_out_in_documents")
+    day = text.check_date(today if today is not None else text.today_text(), "copies.date")
 
     work = None
     partial = None
@@ -208,8 +210,7 @@ def make_handover(copy_folder, out_dir, today=None):
         _check_db_file(work_db, bodies)
         doc_files = documents.documents_on_disk(folder)
         if private_text_files(doc_files, bodies):
-            raise HandoverError("The text of a Private note is also written in a Document file, "
-                                "so it would go to the next pastor. No handover was made.", private_text_found=True)
+            raise HandoverError("copies.err_text_in_document", private_text_found=True)
         partial = out / (_free_name(out, slug, day) + ".partial")
         _write_zip(partial, work_db, doc_files)
         _check_zip(partial, bodies, work, doc_files)
@@ -220,7 +221,7 @@ def make_handover(copy_folder, out_dir, today=None):
     except HandoverError:
         raise
     except (sqlite3.Error, OSError, zipfile.BadZipFile) as exc:
-        raise HandoverError(f"The handover could not be made: {exc}") from exc
+        raise HandoverError("copies.err_failed", detail=str(exc)) from exc
     finally:
         if partial is not None:
             Path(partial).unlink(missing_ok=True)
