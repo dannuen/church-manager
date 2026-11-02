@@ -245,10 +245,9 @@ class ChurchServer(ThreadingHTTPServer):
         folder = paths.check_not_onedrive(folder)
         root = self.copies_root
         if root == folder or root.is_relative_to(folder):  # Windows paths compare without case
-            where = "is the church copy folder itself" if root == folder else f"is inside the church copy {folder}"
-            raise db.ChurchCopyError(
-                f"The copies folder {root} {where}, so Handover zips and New church setups would be saved "
-                "in the church copy: choose a copies folder outside it.")
+            if root == folder:
+                raise db.ChurchCopyError("errors.copy_root_is_copy", root=root)
+            raise db.ChurchCopyError("errors.copy_root_inside", root=root, folder=folder)
         db.open_church_copy(folder).close()
         self.copy_folder = folder
         if write_current and self.remember:

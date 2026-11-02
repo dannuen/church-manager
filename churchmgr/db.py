@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from itertools import count
 from pathlib import Path
 
-from . import paths, schema, settings, text
+from . import i18n, paths, schema, settings, text
 
 DB_NAME = "church.db"
 DOCUMENTS_DIR = "documents"
@@ -14,7 +14,19 @@ _savepoints = count(1)
 
 
 class ChurchCopyError(Exception):
-    """The folder is not a usable church copy (missing, already there, wrong version)."""
+    """The folder is not a usable church copy (missing, already there, wrong version).
+
+    ``ChurchCopyError("errors.copy_<name>", **params)``: ``str()`` is the English text (the agent,
+    ``app.py`` and the logs read it); a page shows ``i18n.error_text(e)``. Paths and SQLite text are
+    params, shown as they are. A plain sentence instead of a key is kept as it is in every language.
+    The base stays ``Exception`` (a ``TextError`` is a ``ValueError``), so every ``except`` works as before.
+    """
+
+    def __init__(self, key, **params):
+        if not (isinstance(key, str) and key in i18n.TEXT["en"]):
+            key, params = "errors.copy_plain", {"message": key}
+        self.key, self.params = key, params
+        super().__init__(i18n.error_text(self, "en"))
 
 
 def connect(db_path):
@@ -35,9 +47,9 @@ def connect(db_path):
         conn.execute("PRAGMA recursive_triggers = ON")
         mode = conn.execute("PRAGMA journal_mode = DELETE").fetchone()[0]
         if conn.execute("PRAGMA foreign_keys").fetchone()[0] != 1:
-            raise ChurchCopyError("SQLite foreign keys could not be turned on.")
+            raise ChurchCopyError("errors.copy_foreign_keys")
         if not memory and mode.lower() != "delete":
-            raise ChurchCopyError(f"SQLite journal mode is {mode}, expected delete.")
+            raise ChurchCopyError("errors.copy_journal_mode", mode=mode)
     except BaseException:
         conn.close()
         raise
@@ -86,7 +98,7 @@ def create_church_copy(folder, church_name, lang="en"):
     name = text.clean_name(church_name, "settings.church_name")
     db_path = folder / DB_NAME
     if db_path.exists():
-        raise ChurchCopyError(f"A church copy already exists in {folder}. It was not changed.")
+        raise ChurchCopyError("errors.copy_exists", folder=folder)
     folder.mkdir(parents=True, exist_ok=True)
     (folder / DOCUMENTS_DIR).mkdir(exist_ok=True)
     conn = connect(db_path)
@@ -114,21 +126,19 @@ def open_church_copy(folder):
     folder = paths.check_not_onedrive(folder)
     db_path = folder / DB_NAME
     if not db_path.is_file():
-        raise ChurchCopyError(f"No church copy in {folder}: {DB_NAME} is missing.")
+        raise ChurchCopyError("errors.copy_missing", folder=folder, db=DB_NAME)
     try:
         conn = connect(db_path)
     except sqlite3.DatabaseError as exc:
-        raise ChurchCopyError(f"{db_path} is not a Church Manager database ({exc}).") from exc
+        raise ChurchCopyError("errors.copy_not_database", path=db_path, detail=str(exc)) from exc
     try:
         version = conn.execute("PRAGMA user_version").fetchone()[0]
     except sqlite3.DatabaseError as exc:
         conn.close()
-        raise ChurchCopyError(f"{db_path} is not a Church Manager database ({exc}).") from exc
+        raise ChurchCopyError("errors.copy_not_database", path=db_path, detail=str(exc)) from exc
     if version != schema.SCHEMA_VERSION:
         conn.close()
-        raise ChurchCopyError(
-            f"{db_path} has database version {version}; this app needs version {schema.SCHEMA_VERSION}."
-        )
+        raise ChurchCopyError("errors.copy_version", path=db_path, version=version, needed=schema.SCHEMA_VERSION)
     (folder / DOCUMENTS_DIR).mkdir(exist_ok=True)
     return conn
 

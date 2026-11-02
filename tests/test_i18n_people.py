@@ -182,9 +182,9 @@ class VietnamesePagesTest(CopyServer, unittest.TestCase):
         self.post(f"/people/{pid}/family", {"family_id": fid, "family_role": "Child", "start_date": ago(0)})
         _h, page = self.post(f"/people/{pid}/family", {"family_id": fid, "family_role": "Head", "start_date": ago(5)},
                              expect=400)
-        self.assertIn(f'<p class="error" id="family-date-error">Ngày bắt đầu {ago(5)} sớm hơn {ago(0)}, ngày của lần '
-                      "thay đổi gần nhất. Những gì đã qua không bao giờ bị viết lại; hãy dùng ngày "
-                      f"{ago(0)} hoặc sau đó.</p>", page)
+        self.assertIn(f'<p class="error" id="family-date-error">Ngày bắt đầu {shown(ago(5))} sớm hơn {shown(ago(0))}, '
+                      "ngày của lần thay đổi gần nhất. Những gì đã qua không bao giờ bị viết lại; hãy dùng ngày "
+                      f"{shown(ago(0))} hoặc sau đó.</p>", page)
         self.assert_vietnamese(page, "family, before the last change")
         worship = self.item("ministry", name="Ban Âm nhạc")
         _h, page = self.post(f"/people/{pid}/ministry",
@@ -252,7 +252,7 @@ class VietnamesePagesTest(CopyServer, unittest.TestCase):
         pid, headers = self.new_person(ACCENTED)
         page = self.page(f"/people/{pid}")
         self.assertIn(f'<h1 lang="vi">{ACCENTED}</h1>', page)
-        self.assertIn(f"<title>{ACCENTED} · ", page)
+        self.assertIn(f'<title lang="vi">{ACCENTED} · ', page)
         self.assertIn(f'<span lang="vi">{ACCENTED}</span>', self.page("/people?q=" + urllib.parse.quote("anh tuyet")))
         self.assertIn(f'<h1 lang="vi">Chỉnh sửa {ACCENTED}</h1>', self.page(f"/people/{pid}/edit"))
 
@@ -325,8 +325,8 @@ class PeopleErrorsTest(_support.CopyTestCase):
             (lambda: people.set_status(conn, pid, self.status("attender"), "2026-01-01"),
              "Start date 2026-01-01 is before 2026-01-10, the date of the last change. History is never rewritten; "
              "use a date on or after it.",
-             "Ngày bắt đầu 2026-01-01 sớm hơn 2026-01-10, ngày của lần thay đổi gần nhất. Những gì đã qua không bao "
-             "giờ bị viết lại; hãy dùng ngày 2026-01-10 hoặc sau đó."),
+             "Ngày bắt đầu 01/01/2026 sớm hơn 10/01/2026, ngày của lần thay đổi gần nhất. Những gì đã qua không bao "
+             "giờ bị viết lại; hãy dùng ngày 10/01/2026 hoặc sau đó."),
             (lambda: people.set_family(conn, pid, fid, "Boss", "2026-02-01"),
              "Family role must be one of: Head, Spouse, Child, Other.",
              "Vai trò trong gia đình phải là một trong: Chủ gia đình, Vợ/Chồng, Con, Người thân khác."),
