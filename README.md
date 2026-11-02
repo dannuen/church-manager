@@ -67,13 +67,14 @@ Phần mềm hiện chữ bằng **Tiếng Việt** hoặc **English** (tiếng 
    đang dùng có khung viền và chữ đậm.
 2. Bấm một lần vào ngôn ngữ bạn muốn. Trang hiện lại ngay bằng ngôn ngữ đó, và bạn vẫn ở đúng trang
    đang xem.
-3. Xong. Phần mềm nhớ lựa chọn này. Lần sau mở phần mềm, chữ vẫn hiện bằng ngôn ngữ bạn đã chọn.
-   Mỗi dữ liệu Hội Thánh nhớ ngôn ngữ riêng của nó.
+3. Xong. Sau khi đã có dữ liệu Hội Thánh, phần mềm nhớ lựa chọn này. Lần sau mở phần mềm, chữ vẫn hiện
+   bằng ngôn ngữ bạn đã chọn. Mỗi dữ liệu Hội Thánh nhớ ngôn ngữ riêng của nó.
 
 Hai nút này có ở mọi trang. Bạn cũng có thể đổi ngôn ngữ trong trang **Cài đặt** (ở thanh menu): chọn
 ô **Ngôn ngữ**, rồi bấm **Lưu cài đặt**.
 
-- Một Hội Thánh mới (**Lập dữ liệu Hội Thánh mới**) bắt đầu bằng **Tiếng Việt**.
+- Một Hội Thánh mới (**Lập dữ liệu Hội Thánh mới**) bắt đầu bằng **Tiếng Việt**. Lúc lập, bạn cũng có thể
+  chọn **English** ở ô **Ngôn ngữ**.
 - Phần mềm chỉ đổi chữ của phần mềm. Tên người, ghi chú và các mục trong **Danh mục** giữ y như lúc
   được nhập. Phần mềm **không bao giờ dịch** chúng.
 

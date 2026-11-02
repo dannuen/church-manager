@@ -12,11 +12,14 @@
    exit 3; the door is turned on through the app (POST /settings); ``status``, ``search``, ``person``,
    ``care-due`` and ``money`` answer ok; a dry run of ``add-person`` saves nothing; no answer holds a
    Private note.
-6. Both languages. Builds a fake church in Tiếng Việt and one in English. On each, every GET page of
+6. Both languages. First, every Tiếng Việt text (``i18n.TEXT["vi"]``) must be Vietnamese: no ASCII word
+   (3 or more letters) of the English texts, outside ``i18n.ALLOW`` and the fixed ``VI_ASCII_OK`` list.
+   Then builds a fake church in Tiếng Việt and one in English. On each, every GET page of
    every page module (real ids of the fake data, some query variants, a 404, a 400 and a 405 page) and
    the first run page (no church copy open) must have the expected status, ``<html lang>`` = the
    language, the switch (``action="/language"``, buttons "Tiếng Việt" and "English") and no ``[[``;
-   every Tiếng Việt page must have ``i18n.english_left(page) == []``. Then the switch: POST /language
+   every Tiếng Việt page must have ``i18n.english_left(page) == []`` and show no English word of a
+   Tiếng Việt text. Then the switch: POST /language
    to English, the next page is English, a NEW server on the same church copy still shows English, and
    back to Tiếng Việt. Last, a church copy with no ``language`` row (made as before this setting
    existed) shows Tiếng Việt.
@@ -59,6 +62,20 @@ SWITCH_FORM = re.compile(r'<form class="lang-switch" method="post" action="/lang
 HTML_LANG = re.compile(r'<html lang="([^"]*)"')
 H1 = re.compile(r"<h1\b[^>]*>(.*?)</h1>", re.S)
 MISSING_KEY = re.compile(r"\[\[[^\[\]]*\]\]")  # i18n.t gives [[key]] for a key with no text
+# The ASCII words a Tiếng Việt text may share with the English texts (step 6). Written here by hand, never
+# taken from i18n.TEXT["vi"]: so an English word put into a Tiếng Việt text is still seen.
+VI_ASCII_OK = frozenset({
+    "byte",      # the unit of a file size: "0 byte", "{n} byte"
+    "chi",       # Vietnamese: Chi phái, Khoản chi, Hạng mục chi, Chi tiết
+    "cung",      # Vietnamese: "Lễ Cung Hiến", the example subject of a Sent document
+    "english",   # the name of the switch button: "Tiếng Việt hoặc English"
+    "gia",       # Vietnamese: Gia đình
+    "onedrive",  # the name of the cloud folder a church copy must stay out of
+    "thu",       # Vietnamese: "thu hẹp" (to narrow a search)
+    "tin",       # Vietnamese: thông tin, Tin Lành
+    "yyyy",      # the date form the pastor types: YYYY-MM-DD
+    "zip",       # the file kind of a Handover: tệp ZIP
+})
 
 
 class Checks:
@@ -527,6 +544,45 @@ def switch_problems(page, lang):
     return out
 
 
+def vi_english():
+    """``{key: sorted words}``: each Tiếng Việt text (``i18n.TEXT["vi"]``) that holds an English word. A word
+    is English when the English texts have it and it is not in ``i18n.ALLOW`` or ``VI_ASCII_OK``. Word rule
+    of ``i18n._ascii_words`` (ASCII, 3 or more letters, lower case, ``{params}`` left out); the phrase
+    "Church Manager" is left out, as in ``i18n.english_left``."""
+    english = i18n._ascii_words(i18n.TEXT["en"].values()) - i18n.ALLOW - VI_ASCII_OK
+    out = {}
+    for key, value in i18n.TEXT["vi"].items():
+        words = i18n._ascii_words([value.replace("Church Manager", " ")]) & english
+        if words:
+            out[key] = sorted(words)
+    return out
+
+
+def check_vi_texts():
+    """Every Tiếng Việt text is Vietnamese. Prints each text with an English word (key and words) on its
+    own line before the PASS/FAIL line."""
+    bad = vi_english()
+    for key, words in bad.items():
+        print(f"      {key}: {', '.join(words)}", flush=True)
+    return not bad, (f"{len(i18n.TEXT['vi'])} texts checked; " + (
+        f"{len(bad)} TEXTS WITH ENGLISH WORDS, listed above" if bad else
+        "no English word (ASCII words shared with the English texts are only i18n.ALLOW and "
+        f"VI_ASCII_OK: {', '.join(sorted(VI_ASCII_OK))})"))
+
+
+def vi_english_shown(page):
+    """The visible words of a page that are English words of a Tiếng Việt text (``vi_english``), sorted.
+    Visible text as in ``i18n.english_left``."""
+    bad = {word for words in vi_english().values() for word in words}
+    if not bad:
+        return []
+    parser = i18n._Visible()
+    parser.feed(page)
+    parser.close()
+    visible = "\n".join(parser.parts).replace("Church Manager", " ")
+    return sorted({w for w in i18n._WORD.findall(visible) if w.isascii() and w.lower() in bad})
+
+
 def page_problems(lang, status, headers, body, expect):
     """What is wrong with one HTML page in ``lang`` (an empty list: nothing)."""
     out = [] if status == expect else [f"status {status}, expected {expect}"]
@@ -543,6 +599,9 @@ def page_problems(lang, status, headers, body, expect):
         words = [w for w in i18n.english_left(page) if not w.startswith("[[")]
         if words:
             out.append("English left: " + ", ".join(words))
+        shown = vi_english_shown(page)  # english_left cannot see these: they are inside TEXT["vi"]
+        if shown:
+            out.append("English from a Tiếng Việt text: " + ", ".join(shown))
     elif not i18n.english_left(page):  # proves the vi rule can see English words on this page
         out.append("no English word seen by i18n.english_left")
     return out
@@ -595,7 +654,8 @@ def check_pages(lang, copy, root):
     for problem in problems:
         print(f"      {problem}", flush=True)
     rules = f'status, <html lang="{lang}">, switch, no [[, ' + (
-        "no English left" if lang == "vi" else "English words seen (so the Tiếng Việt rule can see them)")
+        "no English left, no English word of a Tiếng Việt text" if lang == "vi"
+        else "English words seen (so the Tiếng Việt rule can see them)")
     return not problems, (f"{n_pages} pages checked (first run page included) + {n_answers} file/JSON answers; "
                           + (f"{len(problems)} PROBLEMS, listed above" if problems else rules))
 
@@ -669,6 +729,7 @@ def check_no_language_row(folder, root):
 def check_languages(checks, tmp, people):
     """Step 6: every page in Tiếng Việt and in English, the switch, a church copy with no language row."""
     copies = {lang: tmp / f"fake-{lang}" for lang, _name in LANGUAGES}
+    checks.run("6. every Tiếng Việt text is Vietnamese", check_vi_texts)
     built = [checks.run(f"6. fake church in {name}", build_lang, copies[lang], people, lang)
              for lang, name in LANGUAGES]
     if all(built):

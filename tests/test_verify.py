@@ -1,5 +1,6 @@
 """B8: verify.py gives the tests at most 600 seconds; a timeout prints one FAIL line, not a traceback.
-I18N-U7: the both-language rules of step 6 name each fault, and every GET route must be in the page list."""
+I18N-U7: the both-language rules of step 6 name each fault, and every GET route must be in the page list.
+I18N-U7-fix1: an English word inside a Tiếng Việt text is named (the key, and each page that shows it)."""
 
 import contextlib
 import io
@@ -12,7 +13,7 @@ from unittest import mock
 
 import _support  # noqa: F401 - puts the repo root on sys.path
 import verify
-from churchmgr import db, fake
+from churchmgr import db, fake, i18n
 
 
 class RunTestsTimeoutTest(unittest.TestCase):
@@ -75,6 +76,37 @@ class PageRulesTest(unittest.TestCase):
         self.assertEqual(verify.answer_problems(200, {"content-type": "application/json"}, b"[]", 200), [])
         self.assertEqual(verify.answer_problems(200, {"content-type": "text/html"}, b"[[x]]", 200),
                          ["an HTML page, expected a file or JSON", "[[ in the answer"])
+
+    def vi_texts(self):
+        """``check_vi_texts()`` as ``(ok, detail, printed lines)``."""
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ok, detail = verify.check_vi_texts()
+        return ok, detail, out.getvalue()
+
+    def test_every_vi_text_of_today_is_vietnamese(self):
+        ok, detail, printed = self.vi_texts()
+        self.assertTrue(ok, printed + detail)
+        self.assertIn("no English word", detail)
+
+    def test_an_english_word_in_a_vi_text_is_named_with_its_key_and_on_the_page(self):
+        """I18N-U7-fix1 (M1): english_left cannot see these words, because they are in TEXT["vi"]."""
+        english = {"settings.language_hint": i18n.TEXT["en"]["settings.language_hint"],
+                   "families.title": "Gia đình Families"}
+        with mock.patch.dict(i18n.TEXT["vi"], english):
+            ok, detail, printed = self.vi_texts()
+            self.assertFalse(ok)
+            self.assertIn("2 TEXTS WITH ENGLISH WORDS", detail)
+            self.assertIn("      settings.language_hint: and, items, list, names, notes, screens, stay, the, they, "
+                          "typed, were, words\n", printed)
+            self.assertIn("      families.title: families\n", printed)
+            page = self.page(body="<h1>Gia đình Families</h1>")
+            self.assertEqual(i18n.english_left(page), [])  # the old rule alone says nothing
+            self.assertIn("English from a Tiếng Việt text: Families", self.problems("vi", page))
+            self.assertEqual(self.problems("vi", self.page()), [])  # a page with no such word
+            self.assertEqual(self.problems("vi", self.page(body='<h1>Gia đình</h1><p lang="vi">Families</p>')), [])
+        self.assertEqual(self.problems("vi", self.page(body="<h1>Gia đình Families</h1>")),
+                         ["English left: Families"])  # patch gone: the word is English again
 
 
 class RoutesListedTest(unittest.TestCase):
