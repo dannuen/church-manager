@@ -45,6 +45,9 @@ def parse_amount(value):
         digits = s.replace(".", "").replace(",", "")
     else:
         raise ValueError(f'Amount "{value.strip()}" not understood. No decimals, no minus sign. {_AMOUNT_HELP}')
+    digits = digits.lstrip("0") or "0"  # leading zeros count too in Python's 4300-digit limit of int()
+    if len(digits) > len(str(MAX_AMOUNT)):
+        raise ValueError("Amount is too large.")  # before int(), whose own error text is not for people
     return check_amount(int(digits))
 
 

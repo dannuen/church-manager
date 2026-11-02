@@ -3,10 +3,12 @@
 Steps (any failed check raises ``HandoverError`` and leaves no zip):
 1. Copy ``church.db`` with the SQLite backup API into a work folder (the source
    is opened read-only and never changed).
-2. On the copy: ``PRAGMA secure_delete=ON``, ``DELETE FROM private_note``, ``VACUUM``.
-3. Check: no Private note row is left, the database is whole, and no Private
+2. On the copy: ``PRAGMA secure_delete=ON``, ``DELETE FROM private_note``, the Hermes door set to
+   off, ``VACUUM``.
+3. Check: no Private note row is left, the database is whole, no Private
    note text (4+ characters) is found in the bytes of the file, nor in the bytes of any
-   Document file (as UTF-8, NFC and NFD; text inside Word or PDF files is not read).
+   Document file (as UTF-8, NFC and NFD; text inside Word or PDF files is not read), and the
+   Hermes door is off.
 4. Zip ``church.db`` and every file in ``documents/``, check the zip again, then
    give it its final name ``handover-<slug>-<YYYY-MM-DD>.zip`` (``-2``, ``-3`` if taken).
 """
@@ -19,7 +21,7 @@ import unicodedata
 import zipfile
 from pathlib import Path
 
-from . import db, documents, paths, schema, text
+from . import db, documents, paths, schema, settings, text
 
 MIN_CHECK_LENGTH = 4  # Private note texts this long or longer are searched for in the bytes
 
@@ -80,23 +82,28 @@ def _backup(db_path, target):
 
 
 def _strip_private(path):
-    """Remove every Private note from the database file at ``path`` and rebuild the file."""
+    """Remove every Private note from the database file at ``path``, turn its Hermes door off (the next
+    pastor decides about the Hermes helper), and rebuild the file."""
     conn = sqlite3.connect(path, isolation_level=None)
     try:
         conn.execute("PRAGMA journal_mode = MEMORY")  # no journal file with the old pages on disk
         conn.execute("PRAGMA secure_delete = ON")
         conn.execute("DELETE FROM private_note")
+        conn.execute("INSERT INTO setting (key, value) VALUES (?, 'off') "
+                     "ON CONFLICT (key) DO UPDATE SET value = 'off'", (settings.HERMES_DOOR,))
         conn.execute("VACUUM")
     finally:
         conn.close()
 
 
 def _check_db_file(path, bodies):
-    """Raise ``HandoverError`` unless the file has 0 Private notes, is whole, and holds no note text."""
+    """Raise ``HandoverError`` unless the file has 0 Private notes, is whole, holds no note text and has
+    the Hermes door off."""
     conn = _connect_ro(path)
     try:
         left = conn.execute("SELECT COUNT(*) FROM private_note").fetchone()[0]
         whole = conn.execute("PRAGMA integrity_check").fetchone()[0]
+        door = conn.execute("SELECT value FROM setting WHERE key = ?", (settings.HERMES_DOOR,)).fetchone()
     finally:
         conn.close()
     if left != 0:
@@ -104,6 +111,8 @@ def _check_db_file(path, bodies):
     if whole != "ok":
         raise HandoverError(f"The handover database failed its check ({whole}). No handover was made.")
     check_no_private_text(path.read_bytes(), bodies)
+    if door != ("off",):  # written by _strip_private: anything else means that step did not happen
+        raise HandoverError("The Hermes door was still on in the handover database. No handover was made.")
 
 
 def check_no_private_text(data, bodies):

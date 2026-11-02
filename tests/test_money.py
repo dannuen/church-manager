@@ -34,6 +34,17 @@ class ParseAmountTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             money.parse_amount("9" * 16)  # too large
 
+    def test_a_huge_amount_is_too_large_in_plain_words(self):
+        """H6: more digits than Python's int() takes (4300) gives our sentence, not Python's own."""
+        for value in ("1" * 4301, "9" * 5000 + " ₫", "0" * 5000 + "1" * 16, "1" * 16, "1" + ".000" * 1500):
+            with self.assertRaises(ValueError, msg=value[:20]) as caught:
+                money.parse_amount(value)
+            self.assertEqual(str(caught.exception), "Amount is too large.", value[:20])
+        self.assertEqual(money.parse_amount("0" * 5000 + "1250000"), 1250000)  # leading zeros, as "007" -> 7
+        self.assertEqual(money.parse_amount("0" * 4000 + str(money.MAX_AMOUNT)), money.MAX_AMOUNT)
+        with self.assertRaisesRegex(ValueError, "^Amount must be above 0"):
+            money.parse_amount("0" * 5000)
+
     def test_error_message_is_plain(self):
         with self.assertRaisesRegex(ValueError, "whole number of dong"):
             money.parse_amount("1,5")
