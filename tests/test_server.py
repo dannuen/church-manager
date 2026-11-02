@@ -389,6 +389,7 @@ class FirstRunTest(LiveServer, unittest.TestCase):
         self.root = pathlib.Path(tmp.name) / "copies"
         self.start(None, self.root)
         self.addCleanup(self.stop)
+        self.request("POST", "/language", {"lang": "en", "next": "/setup"})  # old test runs in English (D8)
 
     def test_first_run_sends_every_page_to_setup(self):
         for path in ("/", "/people", "/api/search?q=a", "/search?q=a"):

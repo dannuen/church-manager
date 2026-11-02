@@ -58,6 +58,11 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .title-row .sub { margin-top: 2px; color: var(--muted); }
 .title-row .actions { display: flex; align-items: flex-end; gap: 12px; flex: none; }
 .flash { margin-bottom: 16px; padding: 10px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+/* the language switch at the top of every page: two quiet buttons, the current one marked */
+.lang-switch { display: flex; justify-content: flex-end; gap: 4px; margin: -8px 0 8px; }
+.lang-switch button { min-height: 28px; padding: 0 10px; border: 1px solid transparent; border-radius: var(--radius-control); background: none; color: var(--muted); font: inherit; font-size: var(--fs-small); cursor: pointer; }
+.lang-switch button:hover { background: var(--raised); color: var(--text); }
+.lang-switch button[aria-pressed="true"] { border-color: var(--control); background: var(--surface); color: var(--text); font-weight: 600; }
 .lead { font-size: var(--fs-body); margin-bottom: 12px; }
 
 /* ---------- panels and the 12-column grid ---------- */

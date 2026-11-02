@@ -117,15 +117,15 @@ class CreateOpenTest(unittest.TestCase):
         self.addCleanup(conn.close)
         for list_name, items in schema.DEFAULT_LISTS.items():
             got = [(r["code"], r["name"]) for r in lists.get_list(conn, list_name)]
-            self.assertEqual(got, list(items), list_name)
+            self.assertEqual(got, [(code, en) for code, _vi, en in items], list_name)
         total = sum(len(v) for v in schema.DEFAULT_LISTS.values())
         self.assertEqual(conn.execute("SELECT COUNT(*) FROM list_item").fetchone()[0], total)
         self.assertEqual(
             [r["name"] for r in lists.get_list(conn, "recipient")], ["Chính quyền", "Giáo hội", "Hội Thánh"]
         )
         for _, items in schema.DEFAULT_LISTS.items():
-            for _, name in items:
-                self.assertEqual(name, nfc(name))
+            for _, vi_name, en_name in items:
+                self.assertEqual((vi_name, en_name), (nfc(vi_name), nfc(en_name)))
         for table in ("person", "family", "private_note", "offering", "calendar_item", "sent_document"):
             self.assertEqual(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0], 0, table)
 

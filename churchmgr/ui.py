@@ -7,6 +7,8 @@ Rules for page code:
   The only JS is ``web/app.js`` (live search; a button with ``data-print`` prints the page).
 - A handler returns ``Response.html(ui.page(title, body_html, active))``. ``page`` adds the one h1,
   the sidebar with the church name, and the flash message from ``?msg=`` (see :func:`url`).
+- Words on screen come from the text table: ``i18n.t(key)`` in the language of this request
+  (:func:`current_lang`). Data (names, notes, list items) is never translated.
 """
 
 import datetime as _dt
@@ -14,25 +16,25 @@ import html
 import threading
 import urllib.parse
 
-from . import money
+from . import i18n, money, settings
+from .i18n import t
 
-NAV = (
-    ("dashboard", "Dashboard", "/"),
-    ("people", "People", "/people"),
-    ("families", "Families", "/families"),
-    ("chi-phai", "Chi phái", "/chi-phai"),
-    ("calendar", "Calendar", "/calendar"),
-    ("money", "Money", "/money"),
-    ("care", "Care", "/care"),
-    ("documents", "Documents", "/documents"),
-    ("sent", "Sent documents", "/sent"),
-    ("lists", "Lists", "/lists"),
-    ("copies", "Copies", "/copies"),
-    ("settings", "Settings", "/settings"),
+NAV = (  # (key, TEXT key of the label, href)
+    ("dashboard", "core.nav_dashboard", "/"),
+    ("people", "core.nav_people", "/people"),
+    ("families", "core.nav_families", "/families"),
+    ("chi-phai", "core.nav_chi_phai", "/chi-phai"),
+    ("calendar", "core.nav_calendar", "/calendar"),
+    ("money", "core.nav_money", "/money"),
+    ("care", "core.nav_care", "/care"),
+    ("documents", "core.nav_documents", "/documents"),
+    ("sent", "core.nav_sent", "/sent"),
+    ("lists", "core.nav_lists", "/lists"),
+    ("copies", "core.nav_copies", "/copies"),
+    ("settings", "core.nav_settings", "/settings"),
+    ("search", "core.nav_search", "/search"),
 )
-WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August", "September",
-          "October", "November", "December")
+LANG_NAMES = (("vi", "Tiếng Việt"), ("en", "English"))  # never translated: each name in its own language
 DASH = '<span class="dash">—</span>'  # a missing value
 
 _local = threading.local()
@@ -45,6 +47,24 @@ def set_request(req):
 
 def current_request():
     return getattr(_local, "request", None)
+
+
+def current_lang():
+    """The language of the screens for this request: the ``language`` setting of the open church copy.
+    With no church copy open (first run): the choice kept in server memory for this run (``vi`` at start).
+    Outside a request: ``i18n.DEFAULT_LANG``."""
+    req = current_request()
+    if req is None:
+        return i18n.DEFAULT_LANG
+    if req.state.copy_folder is None:
+        return req.state.first_run_lang
+    try:
+        return settings.get_language(req.conn)
+    except Exception:  # the church copy cannot be read: the error page still needs its words
+        return i18n.DEFAULT_LANG
+
+
+i18n.set_lang_getter(current_lang)
 
 
 # ---------------------------------------------------------------- text
@@ -120,13 +140,13 @@ def fmt_time(value):
 
 
 def fmt_weekday(value):
-    """``"2026-11-01"`` -> ``"Sun"``."""
-    return WEEKDAYS[_parse_day(value).weekday()]
+    """``"2026-11-01"`` -> ``"Sun"`` (``"Chúa Nhật"`` in Tiếng Việt)."""
+    return t(f"core.weekday_{_parse_day(value).weekday()}")
 
 
 def fmt_month(year, month):
-    """``fmt_month(2026, 11)`` -> ``"November 2026"``."""
-    return f"{MONTHS[month - 1]} {year}"
+    """``fmt_month(2026, 11)`` -> ``"November 2026"`` (``"Tháng 11/2026"`` in Tiếng Việt)."""
+    return t("core.month_year", month=t(f"core.month_{month}"), year=year)
 
 
 def fmt_money(amount):
@@ -135,8 +155,40 @@ def fmt_money(amount):
 
 
 def plural(n, one, many):
-    """``plural(1, "Person", "People")`` -> ``"1 Person"``."""
+    """``plural(1, "Person", "People")`` -> ``"1 Person"``. Old callers only: new code uses ``i18n.tn``."""
     return f"{n} {one if n == 1 else many}"
+
+
+def _code_word(prefix, code):
+    """The word on screen for a code stored in English (``"Head"`` -> ``core.family_role_head``).
+    An unknown code is shown as it is."""
+    key = f"{prefix}{str(code).lower()}"
+    return t(key) if key in i18n.TEXT[i18n.DEFAULT_LANG] else code
+
+
+def family_role(code):
+    """``"Head"`` -> ``"Chủ gia đình"`` / ``"Head"`` (``schema.FAMILY_ROLES``)."""
+    return _code_word("core.family_role_", code)
+
+
+def ministry_role(code):
+    """``"Leader"`` -> ``"Trưởng ban"`` / ``"Leader"`` (``schema.MINISTRY_ROLES``)."""
+    return _code_word("core.ministry_role_", code)
+
+
+def calendar_kind(code):
+    """``"Service"`` -> ``"Giờ thờ phượng"`` / ``"Service"`` (``schema.CALENDAR_KINDS``)."""
+    return _code_word("core.kind_", code)
+
+
+def t_html(key, **html_params):
+    """``t(key)`` as HTML: the words escaped, each ``{param}`` filled with trusted HTML (escape its values),
+    such as a link inside a sentence."""
+    marks = {name: f"\x00{name}\x00" for name in html_params}
+    out = h(t(key, **marks))
+    for name, value in html_params.items():
+        out = out.replace(marks[name], value)
+    return out
 
 
 # ---------------------------------------------------------------- forms
@@ -214,7 +266,7 @@ def link_button(text, href, kind="secondary"):
 
 def _head(title):
     return (
-        '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
+        f'<!doctype html>\n<html lang="{h(current_lang())}">\n<head>\n<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f'<title>{h(title)}</title>\n'
         '<link rel="stylesheet" href="/static/style.css">\n'
@@ -223,17 +275,40 @@ def _head(title):
     )
 
 
+def _here():
+    """The path and query of this request (ASCII, for the switch to come back to). ``msg`` is left out:
+    the flash was for one time."""
+    req = current_request()
+    if req is None:
+        return "/"
+    query = {k: v for k, v in req.query_all.items() if k != "msg"}
+    return urllib.parse.quote(req.path) + ("?" + urllib.parse.urlencode(query, doseq=True) if query else "")
+
+
+def lang_switch():
+    """The language switch at the top of every page: a POST to ``/language`` with the page to come back to.
+    The current language has ``aria-pressed="true"``."""
+    lang = current_lang()
+    buttons = "".join(
+        f'<button name="lang" value="{code}" lang="{code}" aria-pressed="{"true" if code == lang else "false"}">'
+        f"{h(name)}</button>"
+        for code, name in LANG_NAMES
+    )
+    return (f'<form class="lang-switch" method="post" action="/language" aria-label="{h(t("core.language"))}">'
+            f'{hidden("next", _here())}{buttons}</form>')
+
+
 def _sidebar(church, active):
     current = ' aria-current="page"'
     links = "".join(
-        f'<a class="nav-item" href="{href}"{current if key == active else ""}>{h(label)}</a>'
+        f'<a class="nav-item" href="{href}"{current if key == active else ""}>{h(t(label))}</a>'
         for key, label, href in NAV
     )
     return (
         '<aside class="sidebar">'
         f'<a class="brand" href="/"><span class="brand-app">Church Manager</span>'
         f'<span class="brand-church" lang="vi">{h(church)}</span></a>'
-        f'<nav class="nav" aria-label="Main">{links}</nav>'
+        f'<nav class="nav" aria-label="{h(t("core.nav_label"))}">{links}</nav>'
         '</aside>'
     )
 
@@ -254,7 +329,7 @@ def page(title, body_html, active=None, sub=None, actions="", lang=None):
     ``active``: the NAV key to mark (``"people"``, ``"money"``, ...). ``sub`` is trusted HTML
     (escape its values) for the one line under the h1; ``actions`` is trusted HTML for buttons
     on the right of the title. ``lang="vi"`` when the h1 holds a Vietnamese name.
-    With no church copy open (first run) there is no navigation.
+    With no church copy open (first run) there is no navigation. The language switch comes first.
     """
     req = current_request()
     church = req.church_name if req is not None else None
@@ -267,7 +342,7 @@ def page(title, body_html, active=None, sub=None, actions="", lang=None):
     return (
         _head(full_title)
         + f'<body>\n<div class="app">{side}<main class="canvas">'
-        + flash + title_row(title, sub, actions, lang) + body_html
+        + lang_switch() + flash + title_row(title, sub, actions, lang) + body_html
         + "</main></div>\n</body>\n</html>\n"
     )
 
@@ -278,5 +353,5 @@ def bare_page(title, body_html):
         _head(f"{title} · Church Manager")
         + '<body>\n<div class="app"><aside class="sidebar"><a class="brand" href="/">'
         + '<span class="brand-app">Church Manager</span></a></aside><main class="canvas">'
-        + title_row(title) + body_html + "</main></div>\n</body>\n</html>\n"
+        + lang_switch() + title_row(title) + body_html + "</main></div>\n</body>\n</html>\n"
     )

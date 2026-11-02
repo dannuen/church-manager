@@ -27,7 +27,8 @@ from email.parser import BytesParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import db, paths, settings, text, ui
+from . import db, i18n, paths, settings, text, ui
+from .i18n import t
 
 HOST = "127.0.0.1"
 MAX_BODY = 60 * 1024 * 1024  # bytes
@@ -40,7 +41,7 @@ STATIC_FILES = {
 # No inline <script>: JS lives only in web/app.js. No framing by other pages (clickjacking).
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
        "object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
-FIRST_RUN_OPEN = {"/setup"}  # the only pages that work before a church copy is open
+FIRST_RUN_OPEN = {"/setup", "/language"}  # the only pages that work before a church copy is open
 
 
 class Response:
@@ -87,7 +88,7 @@ def content_disposition(name):
 class Request:
     """One request. ``query`` and ``form`` hold the first value of each field (NFC text);
     ``query_all`` / ``form_all`` hold every value. ``files`` is ``{field: (file name, bytes)}``.
-    ``state`` is the server (``copy_folder``, ``copies_root``, ``port``, ``switch_copy``).
+    ``state`` is the server (``copy_folder``, ``copies_root``, ``port``, ``first_run_lang``, ``switch_copy``).
     ``conn`` opens the church copy on first use; the server closes it after the response."""
 
     def __init__(self, state, method, path, query_all, form_all=None, files=None, headers=None, params=None):
@@ -205,7 +206,8 @@ def build_routes(modules):
 # ---------------------------------------------------------------- server
 
 class ChurchServer(ThreadingHTTPServer):
-    """The HTTP server and the app state: ``copy_folder`` (or ``None``), ``copies_root``, ``port``."""
+    """The HTTP server and the app state: ``copy_folder`` (or ``None``), ``copies_root``, ``port``,
+    ``first_run_lang`` (the language of the screens while no church copy is open: memory only, this run)."""
 
     daemon_threads = True
     # On Windows SO_REUSEADDR lets a second server take a busy port; we want the bind to fail instead.
@@ -217,6 +219,7 @@ class ChurchServer(ThreadingHTTPServer):
         self.remember = remember
         self.routes = routes
         self.log_requests = False
+        self.first_run_lang = i18n.DEFAULT_LANG
         super().__init__((HOST, port), _Handler)
         self.port = self.server_address[1]
         if copy_folder is not None:
@@ -389,9 +392,9 @@ class _Handler(BaseHTTPRequestHandler):
             try:
                 return handler(req)
             except (ValueError, db.ChurchCopyError) as exc:
-                return _message_page(400, "Not done", str(exc))
+                return _message_page(400, t("errors.not_done"), i18n.error_text(exc))
         if allowed:
-            return _message_page(405, "Not allowed", "This page cannot be opened that way.")
+            return _message_page(405, t("errors.not_allowed"), t("errors.not_allowed_text"))
         return _error_page(req, 404)
 
     def _send(self, resp):
@@ -425,7 +428,7 @@ def _static(name):
 
 
 def _message_page(status, title, message):
-    body = f'<p class="lead">{html.escape(message)}</p><p>Use the Back button of the browser, fix it and try again.</p>'
+    body = f'<p class="lead">{html.escape(message)}</p><p>{html.escape(t("errors.go_back"))}</p>'
     try:
         return Response.html(ui.page(title, body), status)
     except Exception:
@@ -435,13 +438,13 @@ def _message_page(status, title, message):
 
 def _error_page(req, status):
     """Friendly 404 / 500 page. The traceback goes only to the console."""
+    home = f'<p><a href="/">{html.escape(t("errors.go_dashboard"))}</a></p>'
     if status == 404:
-        title, body = "Page not found", '<p class="lead">This page does not exist.</p><p><a href="/">Go to the Dashboard</a></p>'
+        title, body = t("errors.not_found"), f'<p class="lead">{html.escape(t("errors.not_found_text"))}</p>{home}'
     else:
-        title = "Something went wrong"
-        body = ('<p class="lead">Something went wrong on this page.</p>'
-                '<p>Try again. If it happens again, close Church Manager and start it again.</p>'
-                '<p><a href="/">Go to the Dashboard</a></p>')
+        title = t("errors.went_wrong")
+        body = (f'<p class="lead">{html.escape(t("errors.went_wrong_text"))}</p>'
+                f'<p>{html.escape(t("errors.try_again"))}</p>{home}')
     if req is not None and status == 404:
         try:
             return Response.html(ui.page(title, body), status)

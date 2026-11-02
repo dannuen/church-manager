@@ -11,22 +11,34 @@ Rules kept by the database itself:
 
 SCHEMA_VERSION = 1
 
-# New church setup keeps only these. Tuples of (code, name).
+# New church setup keeps only these. Tuples of (code, Vietnamese name, English name): a new church
+# copy stores the name in its language (``default_name``). Status codes never change.
 DEFAULT_LISTS = {
     "status": (
-        ("member", "Member"),
-        ("attender", "Attender"),
-        ("visitor", "Visitor"),
-        ("left", "Left"),
-        ("passed_away", "Passed away"),
+        ("member", "Tín hữu", "Member"),
+        ("attender", "Thân hữu", "Attender"),
+        ("visitor", "Khách", "Visitor"),
+        ("left", "Nghỉ nhóm", "Left"),
+        ("passed_away", "Về với Chúa", "Passed away"),
     ),
-    "ministry": ((None, "Worship"), (None, "Youth"), (None, "Children")),
-    "fund": ((None, "General"), (None, "Building"), (None, "Missions")),
-    "spending_category": ((None, "Rent"), (None, "Utilities"), (None, "Events")),
-    "recipient": ((None, "Chính quyền"), (None, "Giáo hội"), (None, "Hội Thánh")),
-    "purpose": ((None, "Invitation"), (None, "Notice"), (None, "Certificate"), (None, "Report")),
+    "ministry": ((None, "Ban Âm nhạc", "Worship"), (None, "Ban Thanh niên", "Youth"),
+                 (None, "Ban Thiếu nhi", "Children")),
+    "fund": ((None, "Quỹ Hội Thánh", "General"), (None, "Quỹ xây dựng", "Building"),
+             (None, "Quỹ truyền giáo", "Missions")),
+    "spending_category": ((None, "Tiền thuê", "Rent"), (None, "Điện nước", "Utilities"),
+                          (None, "Chương trình", "Events")),
+    "recipient": ((None, "Chính quyền", "Chính quyền"), (None, "Giáo hội", "Giáo hội"),
+                  (None, "Hội Thánh", "Hội Thánh")),
+    "purpose": ((None, "Thư mời", "Invitation"), (None, "Thông báo", "Notice"),
+                (None, "Giấy chứng nhận", "Certificate"), (None, "Báo cáo", "Report")),
 }
 LIST_NAMES = tuple(DEFAULT_LISTS)
+
+
+def default_name(item, lang):
+    """The name of one ``DEFAULT_LISTS`` item in ``lang`` (``vi`` or ``en``)."""
+    return item[{"vi": 1, "en": 2}[lang]]
+
 
 DEFAULT_SETTINGS = {"care_reminder_months": "3"}
 
@@ -302,11 +314,11 @@ def create_schema(conn):
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
 
-def insert_default_lists(conn):
-    """Insert ``DEFAULT_LISTS`` into ``list_item`` (sort_order 1, 2, 3, ...)."""
+def insert_default_lists(conn, lang):
+    """Insert ``DEFAULT_LISTS`` into ``list_item`` with the names of ``lang`` (sort_order 1, 2, 3, ...)."""
     for list_name, items in DEFAULT_LISTS.items():
-        for order, (code, name) in enumerate(items, start=1):
+        for order, item in enumerate(items, start=1):
             conn.execute(
                 "INSERT INTO list_item (list_name, code, name, sort_order, active) VALUES (?, ?, ?, ?, 1)",
-                (list_name, code, name, order),
+                (list_name, item[0], default_name(item, lang), order),
             )

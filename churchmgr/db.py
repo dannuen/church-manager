@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from itertools import count
 from pathlib import Path
 
-from . import paths, schema, text
+from . import paths, schema, settings, text
 
 DB_NAME = "church.db"
 DOCUMENTS_DIR = "documents"
@@ -71,16 +71,19 @@ def transaction(conn):
         raise
 
 
-def create_church_copy(folder, church_name):
+def create_church_copy(folder, church_name, lang="en"):
     """Make a new church copy in ``folder`` and return an open connection.
 
     Refuses a OneDrive folder and a folder that already has ``church.db``.
-    Creates the folder, ``documents/``, the whole schema, the default lists and
-    the settings ``church_name`` and ``care_reminder_months`` (3).
+    Creates the folder, ``documents/``, the whole schema, the default lists with
+    the names of ``lang`` (``vi`` or ``en``) and the settings ``church_name``,
+    ``care_reminder_months`` (3) and ``language`` (``lang``). The app always passes
+    a language; the default ``en`` keeps the old tests in English.
     The caller must close the connection.
     """
+    settings.check_language(lang)
     folder = paths.check_not_onedrive(folder)
-    name = text.clean_name(church_name, "Church name")
+    name = text.clean_name(church_name, "settings.church_name")
     db_path = folder / DB_NAME
     if db_path.exists():
         raise ChurchCopyError(f"A church copy already exists in {folder}. It was not changed.")
@@ -90,10 +93,10 @@ def create_church_copy(folder, church_name):
     try:
         with transaction(conn):
             schema.create_schema(conn)
-            schema.insert_default_lists(conn)
-            settings = {"church_name": name, **schema.DEFAULT_SETTINGS}
+            schema.insert_default_lists(conn, lang)
+            values = {"church_name": name, **schema.DEFAULT_SETTINGS, settings.LANGUAGE: lang}
             conn.executemany(
-                "INSERT INTO setting (key, value) VALUES (?, ?)", list(settings.items())
+                "INSERT INTO setting (key, value) VALUES (?, ?)", list(values.items())
             )
     except BaseException:
         conn.close()

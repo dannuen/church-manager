@@ -8,6 +8,8 @@ import datetime as _dt
 import re
 import unicodedata
 
+from .i18n import TextError
+
 _SPACES = re.compile(r"\s+")
 _NOT_SLUG = re.compile(r"[^a-z0-9]+")
 _DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
@@ -58,12 +60,12 @@ def clean_name(value, what="Name"):
     """Required name: NFC, single spaces, strip. Empty or longer than ``MAX_NAME_LENGTH``
     characters raises ``ValueError`` starting with ``what``."""
     if value is None or not isinstance(value, str):
-        raise ValueError(f"{what} is required.")
+        raise TextError("errors.required", label=what)
     value = _SPACES.sub(" ", nfc(value)).strip()
     if not value:
-        raise ValueError(f"{what} is required.")
+        raise TextError("errors.required", label=what)
     if len(value) > MAX_NAME_LENGTH:
-        raise ValueError(f"{what}: use at most {MAX_NAME_LENGTH} characters.")
+        raise TextError("errors.name_too_long", label=what, max=MAX_NAME_LENGTH)
     return value
 
 
@@ -84,7 +86,7 @@ def check_date(value, what="Date"):
                 return v
             except ValueError:
                 pass
-    raise ValueError(f"{what} must be a real date written YYYY-MM-DD, for example 2026-05-31.")
+    raise TextError("errors.date", label=what)
 
 
 def check_date_years(value, what="Date"):
@@ -93,7 +95,7 @@ def check_date_years(value, what="Date"):
     year, so every row shows in one of them."""
     day = check_date(value, what)
     if not 1900 <= int(day[:4]) <= 9999:
-        raise ValueError(f"{what}: use a year from 1900 to 9999.")
+        raise TextError("errors.date_years", label=what)
     return day
 
 
@@ -109,7 +111,7 @@ def check_datetime(value, what="Date and time"):
                 return v
             except ValueError:
                 pass
-    raise ValueError(f"{what} must be written YYYY-MM-DD HH:MM, for example 2026-05-31 09:30.")
+    raise TextError("errors.datetime", label=what)
 
 
 def today_text():
@@ -132,15 +134,15 @@ def digits_to_int(digits):
 def to_id(value, what="id"):
     """Return a positive integer id (1 to ``MAX_ID``) from an int or digit text, or raise ``ValueError``."""
     if isinstance(value, bool):
-        raise ValueError(f"{what} must be a whole number.")
+        raise TextError("errors.whole_number", label=what)
     if isinstance(value, int):
         number = value
     elif isinstance(value, str) and _DIGITS.fullmatch(value.strip()):
         number = digits_to_int(value.strip())
     else:
-        raise ValueError(f"{what} must be a whole number.")
+        raise TextError("errors.whole_number", label=what)
     if number <= 0:
-        raise ValueError(f"{what} must be a whole number above 0.")
+        raise TextError("errors.above_zero", label=what)
     if number > MAX_ID:  # SQLite cannot even look it up (OverflowError)
-        raise ValueError(f"No {what} with that id.")
+        raise TextError("errors.no_such_id", label=what)
     return number

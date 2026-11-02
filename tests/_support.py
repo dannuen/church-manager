@@ -24,10 +24,12 @@ def temp_folder(test):
 class CopyTestCase(unittest.TestCase):
     """Each test gets a fresh church copy in a temp folder and an open connection."""
 
+    LANG = "en"  # old tests read the English default list items
+
     def setUp(self):
         self.tmp = temp_folder(self)
         self.folder = self.tmp / "copy"
-        self.conn = db.create_church_copy(self.folder, "Hội Thánh Thử")
+        self.conn = db.create_church_copy(self.folder, "Hội Thánh Thử", lang=self.LANG)
         self.addCleanup(self.conn.close)  # runs before the folder cleanup
 
     def item(self, list_name, code=None, name=None):
