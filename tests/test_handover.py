@@ -207,23 +207,46 @@ class HandoverTest(CopyTestCase):
         self.assertEqual(self.zip_door(self.make()), ("off", False))
         self.assertIsNone(settings.get_setting(self.conn, settings.HERMES_DOOR))
 
-    def test_a_door_left_on_stops_the_handover(self):
-        settings.set_setting(self.conn, settings.HERMES_DOOR, "on")
+    # ---- H7: one sentence when the door is not off (left on, row missing, or any other value)
 
-        def door_kept(path):  # removes the Private notes like the real step, but not the door
+    DOOR_NOT_OFF = "The Hermes door was not off in the handover database. No handover was made."
+
+    def refused_by_door(self, door_sql=None):
+        """The source door is ``on``. A mocked ``_strip_private`` removes the Private notes like the real step,
+        then runs ``door_sql`` on the door row (``None``: the door is left as it is). The Handover must refuse
+        with ``DOOR_NOT_OFF`` and leave nothing. Returns the door row the check saw."""
+        settings.set_setting(self.conn, settings.HERMES_DOOR, "on")
+        seen = []
+
+        def strip(path):
             conn = sqlite3.connect(path, isolation_level=None)
             conn.execute("PRAGMA secure_delete = ON")
             conn.execute("DELETE FROM private_note")
+            if door_sql:
+                conn.execute(door_sql, (settings.HERMES_DOOR,))
             conn.execute("VACUUM")
+            seen.append(conn.execute("SELECT value FROM setting WHERE key = ?", (settings.HERMES_DOOR,)).fetchone())
             conn.close()
 
-        with mock.patch.object(handover, "_strip_private", door_kept):
+        before = sha(self.db_file)
+        with mock.patch.object(handover, "_strip_private", strip):
             with self.assertRaises(handover.HandoverError) as ctx:
                 self.make()
-        self.assertEqual(str(ctx.exception),
-                         "The Hermes door was still on in the handover database. No handover was made.")
+        self.assertEqual(str(ctx.exception), self.DOOR_NOT_OFF)
         self.assertFalse(ctx.exception.private_text_found)
         self.assertEqual(list(self.out.iterdir()), [])  # no zip, no .partial file, no work folder
+        self.assertEqual(sha(self.db_file), before)  # the source church copy is not changed
+        self.assertEqual(settings.get_setting(self.conn, settings.HERMES_DOOR), "on")
+        return seen
+
+    def test_a_door_left_on_stops_the_handover(self):
+        self.assertEqual(self.refused_by_door(), [("on",)])
+
+    def test_a_missing_door_row_stops_the_handover(self):
+        self.assertEqual(self.refused_by_door("DELETE FROM setting WHERE key = ?"), [None])
+
+    def test_a_door_value_that_is_not_off_stops_the_handover(self):
+        self.assertEqual(self.refused_by_door("UPDATE setting SET value = 'maybe' WHERE key = ?"), [("maybe",)])
 
 
 class NewChurchSetupTest(unittest.TestCase):

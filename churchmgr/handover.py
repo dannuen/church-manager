@@ -112,7 +112,7 @@ def _check_db_file(path, bodies):
         raise HandoverError(f"The handover database failed its check ({whole}). No handover was made.")
     check_no_private_text(path.read_bytes(), bodies)
     if door != ("off",):  # written by _strip_private: anything else means that step did not happen
-        raise HandoverError("The Hermes door was still on in the handover database. No handover was made.")
+        raise HandoverError("The Hermes door was not off in the handover database. No handover was made.")
 
 
 def check_no_private_text(data, bodies):
