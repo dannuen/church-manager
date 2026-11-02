@@ -2,6 +2,8 @@
 
 Each panel is ``<section data-panel="NAME">``; each data line in it has ``data-row``.
 A panel that cannot load keeps its frame and says so (the error goes to the console).
+Words on screen come from the text table (section ``dashboard``), also the words of the live search:
+the form carries them in ``data-text-*`` attributes and ``web/app.js`` reads them there.
 """
 
 import datetime as _dt
@@ -9,6 +11,7 @@ import traceback
 
 from .. import calendar as cal
 from .. import care, money, sent, ui
+from ..i18n import t, tn
 from ..server import Response
 from ..ui import clamp2, h, vi
 
@@ -22,6 +25,7 @@ ROW2_SPANS = ("span-4", "span-4", "span-4")
 _FAILED = object()
 # Round chart steps: 1, 2, 5, 10, 20, 25, 50, ... (integers only).
 _STEPS = tuple(sorted({m * 10 ** e for e in range(9) for m in (1, 2, 5)} | {25 * 10 ** e for e in range(8)}))
+TREND_WORDS = {"Up": "dashboard.trend_up", "Down": "dashboard.trend_down", "Same": "dashboard.trend_same"}
 
 
 # ---------------------------------------------------------------- small logic (tested)
@@ -29,8 +33,9 @@ _STEPS = tuple(sorted({m * 10 ** e for e in range(9) for m in (1, 2, 5)} | {25 *
 def trend(counts):
     """The last Head count against the average of the earlier ones.
 
-    Returns ``(word, average)``: word ``"Up"``, ``"Down"`` or ``"Same"``; the average is
-    rounded half up. Fewer than 2 counts -> ``(None, None)``. Whole numbers only.
+    Returns ``(word, average)``: word ``"Up"``, ``"Down"`` or ``"Same"`` (a code: the page shows
+    ``TREND_WORDS``); the average is rounded half up. Fewer than 2 counts -> ``(None, None)``.
+    Whole numbers only.
     """
     if len(counts) < 2:
         return None, None
@@ -87,7 +92,7 @@ def services_svg(rows):
     parts.append(f'<text class="end" x="100%" dx="8" y="{y(counts[-1]) + 4:.1f}">{counts[-1]}</text>')
     label = "; ".join(f"{ui.fmt_date(r['starts_at'])} {r['count']}" for r in rows)
     return (f'<svg class="chart" width="100%" height="{height}" role="img" '
-            f'aria-label="Head count of the last {n} Services: {h(label)}">{"".join(parts)}</svg>')
+            f'aria-label="{h(t("dashboard.chart_label", n=n, counts=label))}">{"".join(parts)}</svg>')
 
 
 # ---------------------------------------------------------------- panels
@@ -109,8 +114,8 @@ def _panel(name, title, body, meta="", head_link="", foot="", span=""):
 
 
 def _failed(name, title, span):
-    return _panel(name, title, f'<p class="empty">Could not load {h(title)}. <a class="no-print" href="/">Retry</a></p>',
-                  span=span)
+    return _panel(name, title, f'<p class="empty">{h(t("dashboard.failed", title=title))} '
+                               f'<a class="no-print" href="/">{h(t("dashboard.retry"))}</a></p>', span=span)
 
 
 def _empty(sentence):
@@ -123,14 +128,14 @@ def _link(text, href):
 
 def _day_label(day, today):
     if day == today:
-        return "Today"
+        return t("dashboard.today")
     if day == today + _dt.timedelta(days=1):
-        return "Tomorrow"
+        return t("dashboard.tomorrow")
     return f"{ui.fmt_weekday(day)} {day.strftime('%d/%m')}"
 
 
 def _this_week(items, today, span):
-    name, title = "this-week", "This week"
+    name, title = "this-week", t("dashboard.this_week")
     if items is _FAILED:
         return _failed(name, title, span)
     last = today + _dt.timedelta(days=6)
@@ -138,7 +143,8 @@ def _this_week(items, today, span):
     rows = []
     for it in items[:WEEK_ROWS]:
         day = _dt.date.fromisoformat(it["starts_at"][:10])
-        sub, words = [h(it["kind"])], [it["kind"]]
+        kind = ui.calendar_kind(it["kind"])
+        sub, words = [h(kind)], [kind]
         if it["kind"] == "Visit" and it["visit_name"] and it["visit_name"] not in it["title"]:
             sub.append(vi(it["visit_name"]))
             words.append(it["visit_name"])
@@ -154,22 +160,24 @@ def _this_week(items, today, span):
             f'<span class="what wrap">{clamp2(link, it["title"], lang="vi")}</span>'
             f'{ui.row_side(sub, words)}</li>'
         )
-    body = f'<ul class="rows">{"".join(rows)}</ul>' if rows else _empty("Nothing this week.")
-    more = f"View all {len(items)} in Calendar" if len(items) > WEEK_ROWS else "Open Calendar"
+    body = f'<ul class="rows">{"".join(rows)}</ul>' if rows else _empty(t("dashboard.nothing_week"))
+    more = (t("dashboard.view_all_calendar", n=len(items)) if len(items) > WEEK_ROWS
+            else t("dashboard.open_calendar"))
     # the same 7 days on the Calendar (not its Monday-to-Sunday week), so the count matches
     href = ui.url("/calendar", **{"from": today.isoformat()})
     return _panel(name, title, body, meta=meta, foot=_link(more, href), span=span)
 
 
 def _needs_visit(people, months, span):
-    name, title = "needs-visit", "Needs a visit"
+    name, title = "needs-visit", t("dashboard.needs_visit")
     if people is _FAILED or months is _FAILED:
         return _failed(name, title, span)
-    meta = f"No Visit in the last {ui.plural(months, 'month', 'months')}, or never"
-    count = f'<span class="count num">{ui.plural(len(people), "Person", "People")}</span>'
+    meta = t("dashboard.no_visit_in", months=tn("core.months", months))
+    count = f'<span class="count num">{h(tn("dashboard.persons", len(people)))}</span>'
+    last_visit = t("dashboard.last_visit")
     rows = []
     for p in people[:VISIT_ROWS]:
-        last = ui.fmt_date(p["last_visit"]) if p["last_visit"] else "never"
+        last = ui.fmt_date(p["last_visit"]) if p["last_visit"] else t("dashboard.never")
         link = f'<a href="/people/{p["person_id"]}">{h(p["full_name"])}</a>'
         status = h(p["status_name"]) if p["status_name"] else ui.DASH
         rows.append(
@@ -177,66 +185,67 @@ def _needs_visit(people, months, span):
             f'<span class="what wrap">{clamp2(link, p["full_name"], lang="vi")}</span>'
             f'{ui.row_side([status], [p["status_name"]])}'
             f'<span class="figure num{" faint" if not p["last_visit"] else ""}" '
-            f'title="Last Visit">{h(last)}</span></li>'
+            f'title="{h(last_visit)}">{h(last)}</span></li>'
         )
-    body = (('<div class="list-head" aria-hidden="true"><span>Person</span><span>Status</span>'
-             f'<span>Last Visit</span></div><ul class="rows">{"".join(rows)}</ul>')
-            if rows else _empty("No one needs a visit now."))
-    more = f"View all {len(people)} in Care" if len(people) > VISIT_ROWS else "Open Care"
-    return _panel(name, title, body, meta=meta, head_link=count, foot=_link(more, "/care"), span=span)
+    body = ((f'<div class="list-head" aria-hidden="true"><span>{h(t("dashboard.person"))}</span>'
+             f'<span>{h(t("dashboard.status"))}</span><span>{h(last_visit)}</span></div>'
+             f'<ul class="rows">{"".join(rows)}</ul>')
+            if rows else _empty(t("dashboard.no_needs")))
+    more = t("dashboard.view_all_care", n=len(people)) if len(people) > VISIT_ROWS else t("dashboard.open_care")
+    return _panel(name, title, body, meta=h(meta), head_link=count, foot=_link(more, "/care"), span=span)
 
 
 def _services(rows, span):
-    name, title = "services", "Services"
+    name, title = "services", t("dashboard.services")
     if rows is _FAILED:
         return _failed(name, title, span)
-    meta = f"Head count of the last {ui.plural(len(rows), 'Service', 'Services')}" if rows else "Head count"
+    meta = tn("dashboard.services_meta", len(rows)) if rows else t("dashboard.head_count")
     # the link sits at the foot, as in the other panels: the header keeps one line in a 4-column card
-    link = _link("Calendar", "/calendar")
+    link = _link(t("core.nav_calendar"), "/calendar")
     if not rows:
-        return _panel(name, title, _empty("No Head count recorded yet."), meta=meta, foot=link, span=span)
+        return _panel(name, title, _empty(t("dashboard.no_head_count")), meta=h(meta), foot=link, span=span)
     counts = [r["count"] for r in rows]
     last = rows[-1]
     word, average = trend(counts)
-    said = f"Head count {last['count']} on {ui.fmt_date(last['starts_at'])}"
+    said = t("dashboard.said", count=last["count"], date=ui.fmt_date(last["starts_at"]))
     if word is None:
-        line = f'<p class="trend" data-row>{h(said)}. A trend shows after the second Head count.</p>'
+        line = f'<p class="trend" data-row>{h(t("dashboard.trend_later", said=said))}</p>'
     else:
-        before = ui.plural(len(counts) - 1, "Service", "Services")
-        line = (f'<p class="trend" data-row><strong class="trend-{word.lower()}">{word}</strong> · '
-                f'{h(said)}, against an average of {average} for the {before} before.</p>')
+        sentence = tn("dashboard.trend_line", len(counts) - 1, said=said, average=average)
+        line = (f'<p class="trend" data-row><strong class="trend-{word.lower()}">{h(t(TREND_WORDS[word]))}</strong>'
+                f' · {h(sentence)}</p>')
     chart = services_svg(rows) if len(rows) > 1 else ""
-    return _panel(name, title, chart + line, meta=meta, foot=link, span=span)
+    return _panel(name, title, chart + line, meta=h(meta), foot=link, span=span)
 
 
 def _money_month(totals, today, span):
-    name, title = "money-month", "Money this month"
+    name, title = "money-month", t("dashboard.money_month")
     if totals is _FAILED:
         return _failed(name, title, span)
     balance_cls = " neg" if totals["balance"] < 0 else ""
     body = (
         '<div class="kpis">'
-        f'<div class="kpi" data-row><span class="kpi-label">Offerings</span>'
+        f'<div class="kpi" data-row><span class="kpi-label">{h(t("dashboard.offerings"))}</span>'
         f'<span class="kpi-value num">{h(ui.fmt_money(totals["offerings"]))}</span></div>'
-        f'<div class="kpi" data-row><span class="kpi-label">Expenses</span>'
+        f'<div class="kpi" data-row><span class="kpi-label">{h(t("dashboard.expenses"))}</span>'
         f'<span class="kpi-value num">{h(ui.fmt_money(totals["expenses"]))}</span></div>'
-        f'<div class="kpi" data-row><span class="kpi-label">Balance</span>'
+        f'<div class="kpi" data-row><span class="kpi-label">{h(t("dashboard.balance"))}</span>'
         f'<span class="kpi-value num strong{balance_cls}">{h(ui.fmt_money(totals["balance"]))}</span></div>'
         "</div>"
     )
     if totals["offerings"] == 0 and totals["expenses"] == 0:
-        body += _empty("No Offering or Expense recorded this month.")
-    foot = _link("Record Offering", "/money/offerings/new") + _link("Open Money", "/money")
+        body += _empty(t("dashboard.no_money"))
+    foot = _link(t("dashboard.record_offering"), "/money/offerings/new") + _link(t("dashboard.open_money"), "/money")
     return _panel(name, title, body, meta=h(ui.fmt_month(today.year, today.month)), foot=foot, span=span)
 
 
 def _sent_documents(next_number, recent, year, span):
-    name, title = "sent-documents", "Sent documents"
+    name, title = "sent-documents", t("dashboard.sent_documents")
     if next_number is _FAILED or recent is _FAILED:
         return _failed(name, title, span)
     count, recent = recent
-    meta = f"{ui.plural(count, 'Sent document', 'Sent documents')} in {year}"
-    body = (f'<div class="kpi" data-row><span class="kpi-label">Next number</span>'
+    meta = tn("dashboard.sent_in_year", count, year=year)
+    body = (f'<div class="kpi" data-row><span class="kpi-label">{h(t("dashboard.next_number"))}</span>'
             f'<span class="kpi-value num">{h(next_number)}</span></div>')
     rows = []
     for s in recent:
@@ -250,20 +259,22 @@ def _sent_documents(next_number, recent, year, span):
                          f'{s["number"]} {s["subject"] or ""}'.strip())
         rows.append(f'<li class="row" data-row><span class="what wrap">{subject}'
                     f'{clamp2(sub, sub_text, cls="sub")}</span></li>')
-    body += f'<ul class="rows">{"".join(rows)}</ul>' if rows else _empty("No Sent document yet.")
-    return _panel(name, title, body, meta=h(meta), foot=_link("Open Sent documents", "/sent"), span=span)
+    body += f'<ul class="rows">{"".join(rows)}</ul>' if rows else _empty(t("dashboard.no_sent"))
+    return _panel(name, title, body, meta=h(meta), foot=_link(t("dashboard.open_sent"), "/sent"), span=span)
 
 
 def _search_panel():
-    """Search sits in the title row: type a name, see People at once (app.js), or press Search."""
+    """Search sits in the title row: type a name, see People at once (app.js), or press Search.
+    The two sentences app.js may show are in ``data-text-none`` and ``data-text-failed``."""
     return (
         '<section class="title-search" data-panel="search" aria-labelledby="p-search">'
-        '<h2 id="p-search" class="sr-only">Search</h2>'
-        '<form class="search-form" action="/search" method="get" role="search" data-live-search>'
-        '<label for="dash-q">Find a Person</label>'
+        f'<h2 id="p-search" class="sr-only">{h(t("search.title"))}</h2>'
+        '<form class="search-form" action="/search" method="get" role="search" data-live-search '
+        f'data-text-none="{h(t("search.live_none"))}" data-text-failed="{h(t("search.live_failed"))}">'
+        f'<label for="dash-q">{h(t("search.find_person"))}</label>'
         '<div class="search-line"><input class="input" id="dash-q" name="q" type="search" '
-        'autocomplete="off" placeholder="With or without accents">'
-        '<button class="btn secondary" type="submit">Search</button></div>'
+        f'autocomplete="off" placeholder="{h(t("search.placeholder"))}">'
+        f'<button class="btn secondary" type="submit">{h(t("core.btn_search"))}</button></div>'
         '<ul class="results" data-results aria-live="polite" hidden></ul>'
         "</form></section>"
     )
@@ -294,9 +305,9 @@ def dashboard(req):
 
     finding = [f"{ui.fmt_weekday(today)} {ui.fmt_date(today)}"]
     if needs is not _FAILED:
-        finding.append(f"{ui.plural(len(needs), 'Person needs', 'People need')} a visit")
+        finding.append(tn("dashboard.finding_needs", len(needs)))
     if week is not _FAILED:
-        finding.append(f"{ui.plural(len(week), 'Calendar item', 'Calendar items')} this week")
+        finding.append(tn("dashboard.finding_week", len(week)))
     body = (
         '<div class="grid dashboard">'
         + _this_week(week, today, "span-7")
@@ -306,8 +317,9 @@ def dashboard(req):
         + _sent_documents(next_number, recent, today.year, ROW2_SPANS[2])
         + "</div>"
     )
-    actions = _search_panel() + ui.link_button("Plan a Visit", "/care", "primary")
-    return Response.html(ui.page("Dashboard", body, "dashboard", sub=h(" · ".join(finding)), actions=actions))
+    actions = _search_panel() + ui.link_button(t("dashboard.plan_visit"), "/care", "primary")
+    return Response.html(ui.page(t("dashboard.title"), body, "dashboard", sub=h(" · ".join(finding)),
+                                 actions=actions))
 
 
 ROUTES = [("GET", "/", dashboard)]
