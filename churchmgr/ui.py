@@ -265,10 +265,13 @@ def link_button(text, href, kind="secondary"):
 # ---------------------------------------------------------------- layout
 
 def _head(title):
+    lang = current_lang()
+    # The title holds pastor data (a name, the church name), and no element can carry its own lang there.
+    title_tag = '<title lang="vi">' if lang == "vi" else "<title>"
     return (
-        f'<!doctype html>\n<html lang="{h(current_lang())}">\n<head>\n<meta charset="utf-8">\n'
+        f'<!doctype html>\n<html lang="{h(lang)}">\n<head>\n<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
-        f'<title>{h(title)}</title>\n'
+        f'{title_tag}{h(title)}</title>\n'
         '<link rel="stylesheet" href="/static/style.css">\n'
         '<link rel="stylesheet" href="/static/print.css">\n'
         '<script src="/static/app.js" defer></script>\n</head>\n'
