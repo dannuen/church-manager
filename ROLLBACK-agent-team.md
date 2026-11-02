@@ -43,3 +43,8 @@ Undo: delete those folders from each profile's skills/ folder (they hold nothing
 - Alerts only for: blocked, gave_up, crashed, timed_out, block_loop_detected.
 - Undo: remove the cron job (cronjob remove d6dce95d37ee), then delete the two files above.
 - Token stays in .env; the script reads it there and never prints it.
+
+## Decision session (2026-11-02)
+- Orchestrator SOUL.md: section 'Human gate' replaced by 'Decisions go to the user's decision session'. Undo: restore the old text (merge to main / deletes data needs `kanban_block` needs_input).
+- Added docs/DECISION-SESSION.md (undo: delete). Skill agent-team-starter: added 'Decision session' section (undo: delete it).
+- Telegram ask (2026-11-02): added scripts/telegram_ask.py (undo: delete it); SOUL step 3 and skill line now send the question on Telegram plus the session.
