@@ -21,6 +21,11 @@ SECTIONS = ("core", "dashboard", "people", "families", "chi_phai", "calendar", "
 TEXT = {
     "vi": {
         # --- core
+        "core.language": "Ngôn ngữ",
+        "core.nav_label": "Menu chính",
+        "core.months_one": "{n} tháng",
+        "core.months_many": "{n} tháng",
+        "core.month_year": "{month}/{year}",
         "core.nav_dashboard": "Trang chủ",
         "core.nav_people": "Mọi người",
         "core.nav_families": "Gia đình",
@@ -113,17 +118,55 @@ TEXT = {
         "copies.title": "Dữ liệu",
         "copies.handover": "Bàn giao",
         # --- settings
+        "settings.church_name_hint": "Hiện ở đầu mỗi trang, trên Tổng kết dâng hiến và trong tên tệp Bàn giao.",
+        "settings.care_months": "Nhắc thăm viếng (tháng)",
+        "settings.care_months_hint": "Một Người cần thăm viếng khi lần Thăm viếng gần nhất đã lâu hơn số tháng "
+                                     "này. Từ {min} đến {max} tháng; thường là 3.",
+        "settings.months_error": "Nhắc thăm viếng phải là số tháng nguyên từ {min} đến {max}.",
+        "settings.door_off": "Tắt",
+        "settings.door_on": "Bật",
+        "settings.door_state_off": "tắt",
+        "settings.door_state_on": "bật",
+        "settings.door_hint": "Không bắt buộc. Khi Bật, trợ lý Hermes trên máy tính này được đọc Dữ liệu Hội Thánh "
+                              "này và lưu hồ sơ mới sau khi được đồng ý. Trợ lý không bao giờ thấy Ghi chú cá nhân.",
+        "settings.language_hint": "Chữ trên màn hình. Tên, ghi chú và các mục trong Danh mục vẫn giữ như đã nhập.",
+        "settings.panel_church": "Hội Thánh",
+        "settings.needs_today": "Cần thăm viếng hôm nay",
+        "settings.no_visit_in": "Không có Thăm viếng trong {months} qua, hoặc chưa bao giờ",
+        "settings.links": "Xem những người này trong {care}. Các mục để chọn nằm trong {lists}; nơi lưu Dữ liệu "
+                          "Hội Thánh này ghi trong {copies}.",
+        "settings.panel_care": "Nhắc thăm viếng",
+        "settings.panel_care_meta": "Kết quả của Nhắc thăm viếng hôm nay",
+        "settings.sub": "nhắc thăm viếng {months}",
+        "settings.saved": "Đã lưu cài đặt: {name}, nhắc thăm viếng {months}, Cổng Hermes {door}.",
         "settings.title": "Cài đặt",
         "settings.church_name": "Tên Hội Thánh",
         "settings.hermes_door": "Cổng Hermes",
         "settings.save": "Lưu cài đặt",
         # --- setup
+        "setup.intro": "Chưa mở Dữ liệu Hội Thánh nào. Hãy lập một Dữ liệu Hội Thánh trống. Dữ liệu mới chỉ có các "
+                       "danh sách có sẵn (Trạng thái, Quỹ, Hạng mục chi, Nơi nhận, Mục đích, Ban ngành).",
+        "setup.name_hint": "Ví dụ: Hội Thánh Tin Lành Bình An",
+        "setup.language_hint": "Các danh sách có sẵn được lập bằng ngôn ngữ này. Sau này vẫn đổi được ngôn ngữ "
+                               "trên màn hình.",
+        "setup.start": "Lập dữ liệu Hội Thánh",
+        "setup.saved_in": "Dữ liệu được lưu trong {path}, ngoài OneDrive.",
         "setup.title": "Lập dữ liệu Hội Thánh mới",
         "setup.done": "Đã lập dữ liệu Hội Thánh mới. Đây là Trang chủ.",
         # --- search
         "search.title": "Tìm kiếm",
         "search.find_person": "Tìm Người",
         # --- errors
+        "errors.not_done": "Chưa làm được",
+        "errors.go_back": "Bấm nút Quay lại của trình duyệt, sửa lại rồi thử lần nữa.",
+        "errors.not_allowed": "Không được phép",
+        "errors.not_allowed_text": "Không mở được trang này theo cách đó.",
+        "errors.not_found": "Không tìm thấy trang",
+        "errors.not_found_text": "Không có trang này.",
+        "errors.go_dashboard": "Về Trang chủ",
+        "errors.went_wrong": "Có lỗi xảy ra",
+        "errors.went_wrong_text": "Trang này gặp lỗi.",
+        "errors.try_again": "Hãy thử lại. Nếu vẫn lỗi, hãy đóng Church Manager rồi mở lại.",
         "errors.required": "Cần nhập {label}.",
         "errors.name_too_long": "{label}: tối đa {max} ký tự.",
         "errors.date": "{label} phải là một ngày có thật, viết YYYY-MM-DD, ví dụ 2026-05-31.",
@@ -139,6 +182,11 @@ TEXT = {
     },
     "en": {
         # --- core
+        "core.language": "Language",
+        "core.nav_label": "Main",
+        "core.months_one": "{n} month",
+        "core.months_many": "{n} months",
+        "core.month_year": "{month} {year}",
         "core.nav_dashboard": "Dashboard",
         "core.nav_people": "People",
         "core.nav_families": "Families",
@@ -231,17 +279,55 @@ TEXT = {
         "copies.title": "Copies",
         "copies.handover": "Handover",
         # --- settings
+        "settings.church_name_hint": "Shown at the top of every page, on the Giving statement and in the Handover "
+                                     "file name.",
+        "settings.care_months": "Care reminder time (months)",
+        "settings.care_months_hint": "A Person needs a visit when their last Visit is older than this. "
+                                     "{min} to {max} months; 3 is the usual.",
+        "settings.months_error": "Care reminder time must be a whole number of months from {min} to {max}.",
+        "settings.door_off": "Off",
+        "settings.door_on": "On",
+        "settings.door_state_off": "off",
+        "settings.door_state_on": "on",
+        "settings.door_hint": "Optional. On lets the Hermes helper on this computer read this church copy and save "
+                              "new records after you say yes. It never sees Private notes.",
+        "settings.language_hint": "The words on the screens. Names, notes and list items stay as they were typed.",
+        "settings.panel_church": "Church",
+        "settings.needs_today": "Needs a visit today",
+        "settings.no_visit_in": "No Visit in the last {months}, or never",
+        "settings.links": "See them in {care}. The lists of choices are in {lists}; where this church copy is "
+                          "saved is in {copies}.",
+        "settings.panel_care": "Care reminder",
+        "settings.panel_care_meta": "What the care reminder time gives today",
+        "settings.sub": "care reminder time {months}",
+        "settings.saved": "Settings saved: {name}, care reminder time {months}, Hermes door {door}.",
         "settings.title": "Settings",
         "settings.church_name": "Church name",
         "settings.hermes_door": "Hermes door",
         "settings.save": "Save settings",
         # --- setup
+        "setup.intro": "No church copy is open yet. Start a blank church copy. It keeps only the default lists "
+                       "(Status, Fund, Spending category, Recipient, Purpose, Ministry).",
+        "setup.name_hint": "For example: Hội Thánh Tin Lành Bình An",
+        "setup.language_hint": "The default lists are made in this language. The screens can change language later.",
+        "setup.start": "Start the church copy",
+        "setup.saved_in": "It is saved in {path}, outside OneDrive.",
         "setup.title": "New church setup",
         "setup.done": "New church setup is done. This is your Dashboard.",
         # --- search
         "search.title": "Search",
         "search.find_person": "Find a Person",
         # --- errors
+        "errors.not_done": "Not done",
+        "errors.go_back": "Use the Back button of the browser, fix it and try again.",
+        "errors.not_allowed": "Not allowed",
+        "errors.not_allowed_text": "This page cannot be opened that way.",
+        "errors.not_found": "Page not found",
+        "errors.not_found_text": "This page does not exist.",
+        "errors.go_dashboard": "Go to the Dashboard",
+        "errors.went_wrong": "Something went wrong",
+        "errors.went_wrong_text": "Something went wrong on this page.",
+        "errors.try_again": "Try again. If it happens again, close Church Manager and start it again.",
         "errors.required": "{label} is required.",
         "errors.name_too_long": "{label}: use at most {max} characters.",
         "errors.date": "{label} must be a real date written YYYY-MM-DD, for example 2026-05-31.",
