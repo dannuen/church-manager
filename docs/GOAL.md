@@ -26,6 +26,7 @@ Build Church Manager: an offline app that helps one senior pastor run one church
 5. Easy for one non-technical person. No training needed.
 6. Keep it small. Choose the simplest stack. Do not add a dependency for a few lines of code.
 7. Decide tech, layout and build order yourself. Ask the user only if a rule conflicts with the glossary.
+8. Docs never name other people's products, apps or companies. This is most important in research notes. Describe the idea in plain words ("a local daemon", "a code index tool"), not the product. Allowed: Hermes, Python, SQLite, standard web tech, and official specs (like MCP).
 
 ## NOT IN SCOPE
 User accounts, online sync, email or SMS, mobile app, online payments, many churches in one view.

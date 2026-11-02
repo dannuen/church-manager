@@ -16,7 +16,7 @@ You run this goal to the end. You do not write code. You make cards, route them,
 - Private notes in their own table. Handover copies the db with that table emptied (and checked), plus the documents folder.
 
 ## Suggested chain (adjust if you see better; keep cheap checks before expensive ones)
-1. `researcher` (short, Sonnet): 3 questions only. (a) Vietnamese diacritic-insensitive search in SQLite without extensions: the right fold method incl. `đ/Đ`, NFC vs NFD input. (b) Printing a yearly Giving statement from a browser with no library: best plain HTML + `@media print` approach. (c) Safe way to attach files and to avoid path traversal in a local server. Report back as a note in the card summary, max 1 page. Cite sources; mark UNVERIFIED if not opened.
+1. `researcher` (short, Sonnet): 3 questions only. (a) Vietnamese diacritic-insensitive search in SQLite without extensions: the right fold method incl. `đ/Đ`, NFC vs NFD input. (b) Printing a yearly Giving statement from a browser with no library: best plain HTML + `@media print` approach. (c) Safe way to attach files and to avoid path traversal in a local server. Report back as a note in the card summary, max 1 page. Cite sources; mark UNVERIFIED if not opened. Do not name other people's products in the note (GOAL.md rule 8).
 2. `coder` card A: schema + data layer + tests (people, history, calendar, money, care, documents, sent-document numbering per year, Handover, New church setup). No UI yet.
 3. `reviewer` card on A. Then fix cards if needed.
 4. `coder` card B: server + dashboard (the 6 panels) + search. 
