@@ -7,12 +7,12 @@ An offline database that helps one senior pastor run one church: its people, cal
 **Person**:
 Anyone the church knows about, whether member, visitor, child, someone who left or someone who passed away.
 _Tiếng Việt_: Người
-_Tránh (tiếng Việt)_: tín hữu (đó là một Tình trạng), thành viên, người dùng
+_Tránh (tiếng Việt)_: tín hữu (đó là một Trạng thái), thành viên, người dùng
 _Avoid_: Member (that is a status), contact, user
 
 **Status**:
 Where a person stands with the church right now, such as Member, Attender, Visitor, Left or Passed away. Each change is kept with its date.
-_Tiếng Việt_: Tình trạng
+_Tiếng Việt_: Trạng thái
 _Tránh (tiếng Việt)_: loại, phân loại
 _Avoid_: Type, category
 
@@ -39,7 +39,7 @@ _Tiếng Việt_: Vai trò trong gia đình
 
 **Ministry**:
 A serving team in the church, such as Worship, Youth or Children.
-_Tiếng Việt_: Ban
+_Tiếng Việt_: Ban ngành
 _Tránh (tiếng Việt)_: nhóm (dễ nhầm với buổi nhóm), phòng, đội
 _Avoid_: Department, group, team
 
@@ -49,7 +49,7 @@ _Tiếng Việt_: Vai trò trong ban
 
 **Private note**:
 A note only the pastor sees, such as counseling or prayer. Never part of a handover.
-_Tiếng Việt_: Ghi chú riêng
+_Tiếng Việt_: Ghi chú cá nhân
 _Tránh (tiếng Việt)_: ghi chú mật, ghi chú bí mật
 _Avoid_: Secret note
 
@@ -57,14 +57,14 @@ _Avoid_: Secret note
 
 **Calendar item**:
 Anything with a date and time: a service, meeting, visit or event. It can list people who join or serve, and can repeat.
-_Tiếng Việt_: Mục lịch
-_Tránh (tiếng Việt)_: lịch trình, lịch hẹn, hoạt động, sự kiện (đó là một loại mục lịch)
+_Tiếng Việt_: Lịch
+_Tránh (tiếng Việt)_: lịch trình, lịch hẹn, hoạt động, sự kiện (đó là một loại lịch)
 _Avoid_: Schedule, appointment, activity
 
 **Service**:
 A worship gathering, such as Sunday service.
-_Tiếng Việt_: Buổi thờ phượng
-_Tránh (tiếng Việt)_: thánh lễ, buổi họp
+_Tiếng Việt_: Giờ thờ phượng
+_Tránh (tiếng Việt)_: thánh lễ, buổi họp (đó là một loại lịch khác)
 _Avoid_: Mass, meeting
 
 **Head count**:
@@ -82,7 +82,7 @@ _Tránh (tiếng Việt)_: quyên góp, phần mười, thu nhập
 
 **Giver**:
 The person or family an offering is from. An offering with no giver is a no-name offering.
-_Tiếng Việt_: Người dâng
+_Tiếng Việt_: Người dâng hiến
 _Tránh (tiếng Việt)_: nhà hảo tâm, người quyên góp
 _Avoid_: Donation, tithe, income
 
@@ -98,11 +98,11 @@ _Avoid_: Cost, spending, payment
 
 **Spending category**:
 What an expense is for, such as Rent, Utilities or Events.
-_Tiếng Việt_: Mục chi
+_Tiếng Việt_: Hạng mục chi
 
 **Giving statement**:
 A yearly list of one giver's offerings, for a person or a family.
-_Tiếng Việt_: Bảng kê dâng hiến
+_Tiếng Việt_: Tổng kết dâng hiến
 _Tránh (tiếng Việt)_: biên nhận, biên lai, phiếu thu
 _Avoid_: Receipt, tax letter
 
@@ -115,7 +115,7 @@ _Avoid_: Pastoral call, home visit
 
 **Care log**:
 All done visits: who, when and a short note.
-_Tiếng Việt_: Sổ thăm viếng
+_Tiếng Việt_: Nhật ký thăm viếng
 
 **Needs a visit**:
 A person whose last pastoral visit is older than the care reminder time (3 months by default).
@@ -125,7 +125,7 @@ _Tiếng Việt_: Cần thăm viếng
 
 **Document**:
 A file kept inside the church copy, linked to a person, family or calendar item.
-_Tiếng Việt_: Giấy tờ
+_Tiếng Việt_: Tài liệu
 _Tránh (tiếng Việt)_: tệp đính kèm, tải lên
 _Avoid_: Attachment, upload
 
@@ -148,7 +148,7 @@ _Tiếng Việt_: Mục đích
 
 **Church copy**:
 One church's whole database in one file plus its documents folder.
-_Tiếng Việt_: Bản dữ liệu Hội Thánh
+_Tiếng Việt_: Dữ liệu Hội Thánh
 _Tránh (tiếng Việt)_: bản sao, phiên bản, bản cài đặt
 _Avoid_: Instance, install, tenant
 
@@ -158,7 +158,7 @@ _Tiếng Việt_: Bàn giao
 
 **New church setup**:
 Starting a blank church copy that keeps only the default lists.
-_Tiếng Việt_: Tạo bản dữ liệu mới
+_Tiếng Việt_: Lập dữ liệu Hội Thánh mới
 _Tránh (tiếng Việt)_: thành lập Hội Thánh, mở Hội Thánh mới (đó là mở một Hội Thánh thật)
 
 ## Words on screen (Vietnamese)
@@ -167,62 +167,65 @@ The words the app shows on screen, in Vietnamese. Bold rows name the group.
 
 | English | Tiếng Việt |
 |---|---|
-| **Status** | **Tình trạng** |
+| **Status** | **Trạng thái** |
 | Member | Tín hữu |
 | Attender | Thân hữu |
 | Visitor | Khách |
-| Left | Đã rời |
-| Passed away | Đã qua đời |
+| Left | Nghỉ nhóm |
+| Passed away | Về với Chúa |
 | **Family role** | **Vai trò trong gia đình** |
 | Head | Chủ gia đình |
 | Spouse | Vợ/Chồng |
 | Child | Con |
-| Other | Khác |
+| Other | Người thân khác |
 | **Ministry role** | **Vai trò trong ban** |
 | Leader | Trưởng ban |
-| Member | Thành viên |
-| **Calendar item kind** | **Loại mục lịch** |
-| Service | Buổi thờ phượng |
+| Member | Ban viên |
+| **Calendar item kind** | **Loại lịch** |
+| Service | Giờ thờ phượng |
 | Meeting | Buổi họp |
 | Visit | Thăm viếng |
-| Event | Sự kiện |
-| **Ministry (default list)** | **Ban (danh sách có sẵn)** |
-| Worship | Ban Thờ phượng |
+| Event | Chương trình |
+| **Ministry (default list)** | **Ban ngành (danh sách có sẵn)** |
+| Worship | Ban Âm nhạc |
 | Youth | Ban Thanh niên |
 | Children | Ban Thiếu nhi |
 | **Fund (default list)** | **Quỹ (danh sách có sẵn)** |
-| General | Quỹ chung |
+| General | Quỹ Hội Thánh |
 | Building | Quỹ xây dựng |
 | Missions | Quỹ truyền giáo |
-| **Spending category (default list)** | **Mục chi (danh sách có sẵn)** |
+| **Spending category (default list)** | **Hạng mục chi (danh sách có sẵn)** |
 | Rent | Tiền thuê |
 | Utilities | Điện nước |
-| Events | Sự kiện |
+| Events | Chương trình |
 | **Purpose (default list)** | **Mục đích (danh sách có sẵn)** |
-| Invitation | Giấy mời |
+| Invitation | Thư mời |
 | Notice | Thông báo |
 | Certificate | Giấy chứng nhận |
 | Report | Báo cáo |
 | **Menu** | **Menu** |
-| Dashboard | Tổng quan |
+| Dashboard | Trang chủ |
 | People | Mọi người |
 | Families | Gia đình |
 | Calendar | Lịch |
 | Money | Tài chính |
-| Care | Chăm sóc |
-| Documents | Giấy tờ |
-| Sent documents | Công văn đi |
-| Lists | Danh sách |
-| Copies | Bản dữ liệu |
+| Care | Thăm viếng |
+| Documents | Tài liệu |
+| Sent documents | Văn bản đi |
+| Lists | Danh mục |
+| Copies | Dữ liệu |
 | Settings | Cài đặt |
 | Search | Tìm kiếm |
 | **Buttons** | **Nút** |
 | Add | Thêm |
 | Save | Lưu |
-| Edit | Sửa |
-| Cancel | Huỷ |
+| Edit | Chỉnh sửa |
+| Cancel | Hủy |
 | Print | In |
 | Back | Quay lại |
 | Open | Mở |
 | Close (end a link) | Kết thúc |
-| Mark done | Đánh dấu đã xong |
+| Mark done | Hoàn tất |
+| **Other words** | **Từ khác** |
+| no-name offering | Ẩn danh |
+| care reminder time | Nhắc thăm viếng |
