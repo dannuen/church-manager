@@ -7,6 +7,7 @@ A done date after today is refused here (the data layer would accept it).
 
 import datetime as _dt
 
+from .. import calendar as cal
 from .. import care, people, text, ui
 from ..server import Response
 from ..ui import h, vi
@@ -167,25 +168,47 @@ def care_page(req):
     return _care_view(req)
 
 
+class NotPlannedVisit(ValueError):
+    """Mark Visit done on a Calendar item that is not a Visit waiting to be marked done."""
+
+
+def plan_visit_from_form(conn, form):
+    """Plan a Visit from the Plan a Visit form: the one place of its rules, for this page and the Hermes
+    door. ``form`` has ``.get``. Returns the Calendar item id; a refused value raises ``ValueError``."""
+    f = form
+    starts = visit_start(f.get("starts_at"))
+    return care.plan_visit(conn, starts, person_id=f.get("person_id") or None, family_id=f.get("family_id") or None,
+                           note=f.get("note"))
+
+
+def mark_visit_done_from_form(conn, item_id, form):
+    """Mark the planned Visit ``item_id`` done from its Mark Visit done form: the one place of its rules,
+    for this page and the Hermes door. Returns the done date. Not a planned Visit: ``NotPlannedVisit``;
+    another refused value: ``ValueError``."""
+    row = conn.execute("SELECT kind, visit_done FROM calendar_item WHERE id = ?", (item_id,)).fetchone()
+    if row is None or row["kind"] != "Visit" or row["visit_done"]:
+        raise NotPlannedVisit("This is not a planned Visit. It may be marked done already.")
+    day = past_or_today(form.get("done_date"), "Done date")
+    care.mark_visit_done(conn, item_id, day, form.get("care_note"))
+    return day
+
+
 def plan_post(req):
     f = req.form
     try:
-        starts = visit_start(f.get("starts_at"))
-        care.plan_visit(req.conn, starts, person_id=f.get("person_id") or None, family_id=f.get("family_id") or None,
-                        note=f.get("note"))
+        iid = plan_visit_from_form(req.conn, f)
     except ValueError as exc:
         return _care_view(req, ("plan", str(exc)), 400)
+    starts = cal.get_calendar_item(req.conn, iid)["starts_at"]
     return Response.redirect(ui.url("/care", msg=f"Visit planned for {ui.fmt_datetime(starts)}."))
 
 
 def done_post(req):
     iid = req.params["id"]
-    row = req.conn.execute("SELECT kind, visit_done FROM calendar_item WHERE id = ?", (iid,)).fetchone()
-    if row is None or row["kind"] != "Visit" or row["visit_done"]:
-        raise ValueError("This is not a planned Visit. It may be marked done already.")
     try:
-        day = past_or_today(req.form.get("done_date"), "Done date")
-        care.mark_visit_done(req.conn, iid, day, req.form.get("care_note"))
+        day = mark_visit_done_from_form(req.conn, iid, req.form)
+    except NotPlannedVisit:
+        raise  # the server's plain 400 "Not done" page, as before
     except ValueError as exc:
         return _care_view(req, (f"done-{iid}", str(exc)), 400)
     return Response.redirect(ui.url("/care", msg=f"Visit marked done on {ui.fmt_date(day)}. It is in the Care log."))

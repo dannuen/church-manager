@@ -3,12 +3,17 @@
     python -m churchmgr.agent COMMAND [options] [--copy FOLDER] [--copies-root FOLDER]
 
 Read commands: status, search, person, family, calendar, money, care-due, lists.
+Write commands: add-person, add-offering, add-expense, add-calendar-item, plan-visit, visit-done.
+No command deletes, edits, hides or hands over anything.
 
 - The door is off by default. The pastor turns it on in Church Manager: Settings > Hermes door.
   With the door off, every command prints the ``door_off`` answer, changes nothing and exits 3.
 - Read commands open church.db read-only with :func:`connect_ro` (SQLite ``mode=ro``), so a write
   fails inside SQLite. They reuse the app's functions; this module has no rules of its own.
-- Private notes are never read: the Person story is always asked for without them.
+- Write commands call the web form's own function (``*_from_form`` in ``churchmgr/pages``), so they
+  keep the same rules and refuse with the same sentences. Without ``--yes`` a write command is a dry
+  run: it runs on a copy of church.db in memory and nothing is saved. Only ``--yes`` saves.
+- Private notes are never read: the Person story is always asked for without them. No flag takes one.
 - Output: exactly one JSON object on stdout, UTF-8. ``{"ok": true, "command": ...}`` or
   ``{"ok": false, "error": CODE, "message": ...}``. Exit codes: 0 ok, 1 refused (``invalid``,
   ``not_found``, ``no_copy``), 2 bad usage (``usage``), 3 door off (``door_off``).
@@ -23,10 +28,12 @@ import sys
 from pathlib import Path
 
 from . import calendar, care, db, lists, money, paths, people, schema, search, settings, story, text
+from .pages import calendar as calendar_page, care as care_page, money as money_page, people as people_page
 
 EXIT = {"invalid": 1, "not_found": 1, "no_copy": 1, "usage": 2, "door_off": 3}
 DOOR_OFF = ("The Hermes door is off for this church copy. The pastor can turn it on in Church Manager: "
             "Settings > Hermes door > On.")
+DRY_RUN = "Dry run: nothing was saved. Run again with --yes to save."
 COUNTED = ("person", "family", "calendar_item", "offering", "expense")  # tables in the status counts
 LISTS = ("status", "fund", "spending_category")
 MAX_SEARCH = 100
@@ -216,6 +223,63 @@ def cmd_lists(conn, args, copy, root):
     return out
 
 
+# ---------------------------------------------------------------- write commands
+#
+# Each gets ``conn`` (a copy in memory for a dry run, the church copy with --yes), the form as a plain
+# dict, and ``args``. Each calls the web form's own function: the rules and their sentences live there.
+
+def _amount(amount):
+    return {"amount": amount, "amount_text": money.format_vnd(amount)}  # whole dong (int), never a float
+
+
+def cmd_add_person(conn, form, args):
+    return {"person_id": people_page.add_person_from_form(conn, form)}
+
+
+def cmd_add_offering(conn, form, args):
+    oid = money_page.add_offering_from_form(conn, form)
+    return {"offering_id": oid, **_amount(money.get_offering(conn, oid)["amount"])}
+
+
+def cmd_add_expense(conn, form, args):
+    eid = money_page.add_expense_from_form(conn, form)
+    return {"expense_id": eid, **_amount(money.get_expense(conn, eid)["amount"])}
+
+
+def cmd_add_calendar_item(conn, form, args):
+    return {"calendar_item_ids": calendar_page.add_calendar_item_from_form(conn, form)}
+
+
+def cmd_plan_visit(conn, form, args):
+    return {"calendar_item_id": care_page.plan_visit_from_form(conn, form)}
+
+
+def cmd_visit_done(conn, form, args):
+    iid = _id(args.id, "Calendar item")
+    return {"calendar_item_id": iid, "done_date": care_page.mark_visit_done_from_form(conn, iid, form)}
+
+
+def _write(ro, args, copy):
+    """Run a write command after the door check. Without ``--yes``: on a copy of church.db in memory,
+    so nothing is saved. With ``--yes``: on the church copy itself."""
+    values = {name: getattr(args, name) for name in args.fields}
+    form = {name: value for name, value in values.items() if value is not None}
+    if args.yes:
+        ro.close()  # no read lock is left on church.db while it is written
+        conn = db.open_church_copy(copy)
+    else:
+        conn = db.connect(":memory:")
+        ro.backup(conn)
+    try:
+        result = args.run(conn, form, args)
+    finally:
+        conn.close()
+    if args.yes:
+        return {"dry_run": False, "saved": True, "result": result}
+    would_save = {**form, **{k: result[k] for k in ("amount", "amount_text") if k in result}}
+    return {"dry_run": True, "saved": False, "would_save": would_save, "result": result, "message": DRY_RUN}
+
+
 # ---------------------------------------------------------------- command line
 
 def build_parser():
@@ -224,7 +288,8 @@ def build_parser():
     common.add_argument("--copies-root", metavar="FOLDER", help="the folder that holds the church copies")
     parser = _Parser(prog="python -m churchmgr.agent",
                      description="Church Manager for the Hermes helper. Works only when Settings > Hermes door "
-                                 "is On. Prints one JSON object.")
+                                 "is On. Prints one JSON object. A write command saves only with --yes; "
+                                 "no command deletes or edits.")
     sub = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
 
     def add(name, run, words):
@@ -250,6 +315,73 @@ def build_parser():
     add("care-due", cmd_care_due, "People who need a visit: no Visit within the care reminder time.")
     add("lists", cmd_lists, "Ids and names of the Status, Fund and Spending category lists, "
                             "and the Calendar item kinds.")
+
+    writing = _Parser(add_help=False)
+    writing.add_argument("--yes", action="store_true",
+                         help="save it. Without --yes nothing is saved: a dry run shows what would be saved")
+    today = _dt.date.today().isoformat()
+    when = "a date and time: \"YYYY-MM-DD HH:MM\" or YYYY-MM-DDTHH:MM"
+
+    def add_write(name, run, words, flags, required=()):
+        """A write command. ``flags``: ``(form field, metavar, help[, default])``. The flag is the web
+        form field with ``-`` for ``_``; its value goes to the form function as text."""
+        p = sub.add_parser(name, parents=[common, writing], help=f"{words} Saves only with --yes.",
+                           description=f"{words} Same rules as the web form. Without --yes it is a dry run "
+                                       "and nothing is saved.")
+        for field, metavar, help_, *default in flags:
+            p.add_argument("--" + field.replace("_", "-"), dest=field, metavar=metavar, help=help_,
+                           default=default[0] if default else None, required=field in required)
+        p.set_defaults(run=run, fields=[f[0] for f in flags])
+        return p
+
+    add_write("add-person", cmd_add_person, "Add a Person.", [
+        ("full_name", "NAME", "the full name (required)"),
+        ("gender", "M|F", "M or F; leave it out if not known"),
+        ("birth_date", "YYYY-MM-DD", "the birth date, not after today"),
+        ("phone", "PHONE", "the phone number"),
+        ("address", "ADDRESS", "the own address (used when the Person is not in a Family)"),
+        ("note", "TEXT", "a normal note (never a Private note)"),
+        ("status_id", "ID", "the first Status: an id from the lists command"),
+        ("start_date", "YYYY-MM-DD", "the day this Status began, not after today (default today)", today),
+    ], required=("full_name",))
+    money_flags = [
+        ("date", "YYYY-MM-DD", "the day, not after today (default today)", today),
+        ("amount", "DONG", "whole dong, for example 1.250.000 or 1250000"),
+    ]
+    add_write("add-offering", cmd_add_offering, "Record an Offering.", money_flags + [
+        ("fund_id", "ID", "the Fund: an id from the lists command"),
+        ("giver", "person-ID|family-ID", "the Giver, for example person-5 or family-3; "
+                                          "leave it out for a no-name offering"),
+        ("note", "TEXT", "a note; it is never printed on a Giving statement"),
+    ])
+    add_write("add-expense", cmd_add_expense, "Record an Expense.", money_flags + [
+        ("spending_category_id", "ID", "the Spending category: an id from the lists command"),
+        ("note", "TEXT", "what it was for"),
+    ])
+    add_write("add-calendar-item", cmd_add_calendar_item, "Add a Calendar item, or one that repeats.", [
+        ("kind", "KIND", f"one of: {', '.join(schema.CALENDAR_KINDS)}"),
+        ("title", "TEXT", "the title; for a Visit it may stay empty"),
+        ("starts_at", "DATETIME", f"when it starts, {when}"),
+        ("ends_at", "DATETIME", f"when it ends (optional), {when}"),
+        ("place", "TEXT", "the place"),
+        ("note", "TEXT", "a note"),
+        ("repeat", "none|weekly|monthly", "repeat every week or every month (default none); "
+                                          "a Visit does not repeat"),
+        ("repeat_until", "YYYY-MM-DD", "the last day of the repeat, included"),
+        ("person_id", "ID", "for a Visit only: the Person"),
+        ("family_id", "ID", "for a Visit only: the Family"),
+    ])
+    add_write("plan-visit", cmd_plan_visit, "Plan a Visit for one Person or one Family.", [
+        ("starts_at", "DATETIME", f"when, {when}"),
+        ("person_id", "ID", "the Person (or give --family-id)"),
+        ("family_id", "ID", "the Family (or give --person-id)"),
+        ("note", "TEXT", "a note"),
+    ])
+    p = add_write("visit-done", cmd_visit_done, "Mark a planned Visit done. It goes in the Care log.", [
+        ("done_date", "YYYY-MM-DD", "the day of the Visit, not after today (default today)", today),
+        ("care_note", "TEXT", "a short note for the Care log"),
+    ])
+    p.add_argument("id", help="the Calendar item id of the planned Visit")
     return parser
 
 
@@ -261,11 +393,16 @@ def run(argv=None):
     try:
         if not settings.hermes_door_on(conn):  # the only read before the door is open
             raise AgentError("door_off", DOOR_OFF)
-        result = args.run(conn, args, copy, root)
+        if getattr(args, "fields", None) is None:
+            result = args.run(conn, args, copy, root)
+        else:
+            result = _write(conn, args, copy)
     except ValueError as exc:
         raise AgentError("invalid", str(exc)) from exc
+    except db.ChurchCopyError as exc:
+        raise AgentError("no_copy", str(exc)) from exc
     except sqlite3.Error as exc:
-        raise AgentError("no_copy", f"The church copy could not be read ({exc}).") from exc
+        raise AgentError("no_copy", f"The church copy could not be read or saved ({exc}).") from exc
     finally:
         conn.close()
     return {"ok": True, "command": args.command, **result}

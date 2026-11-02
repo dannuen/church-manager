@@ -355,45 +355,53 @@ def new_page(req):
     return _new_form(req)
 
 
+def add_calendar_item_from_form(conn, form):
+    """Add a Calendar item (or its repeat) from the Add a Calendar item form: the one place of its rules,
+    for this page and the Hermes door. ``form`` has ``.get``. Returns the list of new Calendar item ids;
+    a refused value raises ``ValueError`` with the sentence the form shows."""
+    f = form
+    kind = f.get("kind") or ""
+    if kind not in CALENDAR_KINDS:
+        raise ValueError(f"Kind must be one of: {', '.join(CALENDAR_KINDS)}.")
+    starts = form_datetime(f.get("starts_at"), "Starts at")
+    if starts is None:
+        raise ValueError("Starts at is required.")
+    ends = form_datetime(f.get("ends_at"), "Ends at")
+    if ends is not None and ends < starts:
+        raise ValueError("Ends at cannot be before Starts at.")
+    repeat = f.get("repeat") or "none"
+    until = (f.get("repeat_until") or "").strip() or None
+    person_id = f.get("person_id") or None
+    family_id = f.get("family_id") or None
+    if kind == "Visit":
+        if repeat != "none" or until:
+            raise ValueError("Repeat: a Visit does not repeat. Plan each Visit on its own.")
+        with transaction(conn):
+            iid = care.plan_visit(conn, starts, person_id=person_id, family_id=family_id,
+                                  title=f.get("title"), note=f.get("note"))
+            if ends is not None or (f.get("place") or "").strip():
+                cal.update_calendar_item(conn, iid, ends_at=ends, place=f.get("place"))
+        return [iid]
+    if person_id or family_id:
+        raise ValueError("Person: a Person or a Family is only for a Visit. Choose kind Visit, "
+                         "or leave Person and Family empty.")
+    return cal.add_calendar_item(conn, kind, f.get("title"), starts, ends, f.get("place"), f.get("note"),
+                                 repeat, until)
+
+
 def new_post(req):
     conn = req.conn
     f = req.form
     try:
-        kind = f.get("kind") or ""
-        if kind not in CALENDAR_KINDS:
-            raise ValueError(f"Kind must be one of: {', '.join(CALENDAR_KINDS)}.")
-        starts = form_datetime(f.get("starts_at"), "Starts at")
-        if starts is None:
-            raise ValueError("Starts at is required.")
-        ends = form_datetime(f.get("ends_at"), "Ends at")
-        if ends is not None and ends < starts:
-            raise ValueError("Ends at cannot be before Starts at.")
-        repeat = f.get("repeat") or "none"
-        until = (f.get("repeat_until") or "").strip() or None
-        person_id = f.get("person_id") or None
-        family_id = f.get("family_id") or None
-        if kind == "Visit":
-            if repeat != "none" or until:
-                raise ValueError("Repeat: a Visit does not repeat. Plan each Visit on its own.")
-            with transaction(conn):
-                iid = care.plan_visit(conn, starts, person_id=person_id, family_id=family_id,
-                                      title=f.get("title"), note=f.get("note"))
-                if ends is not None or (f.get("place") or "").strip():
-                    cal.update_calendar_item(conn, iid, ends_at=ends, place=f.get("place"))
-            ids = [iid]
-        else:
-            if person_id or family_id:
-                raise ValueError("Person: a Person or a Family is only for a Visit. Choose kind Visit, "
-                                 "or leave Person and Family empty.")
-            ids = cal.add_calendar_item(conn, kind, f.get("title"), starts, ends, f.get("place"), f.get("note"),
-                                        repeat, until)
+        ids = add_calendar_item_from_form(conn, f)
     except ValueError as exc:
         return _new_form(req, f, ("new", str(exc)), 400)
     if len(ids) == 1:
-        msg = f"{kind} added on {ui.fmt_datetime(starts)}."
+        first = cal.get_calendar_item(conn, ids[0])
+        msg = f"{first['kind']} added on {ui.fmt_datetime(first['starts_at'])}."
     else:
-        word = "week" if repeat == "weekly" else "month"
-        msg = f"{len(ids)} Calendar items added: every {word} until {ui.fmt_date(until)}."
+        word = "week" if f.get("repeat") == "weekly" else "month"
+        msg = f"{len(ids)} Calendar items added: every {word} until {ui.fmt_date(f['repeat_until'].strip())}."
     return Response.redirect(ui.url(f"/calendar/{ids[0]}", msg=msg))
 
 
