@@ -1,25 +1,30 @@
 """Editable lists: status, ministry, fund, spending_category, recipient, purpose.
 
 Items are never deleted. Hide an item with ``set_active(conn, item_id, False)``;
-old rows that use it keep working.
+old rows that use it keep working. Item names are data: shown as stored, never translated.
+Errors are ``TextError`` (``str()`` English; a page shows ``i18n.error_text``).
 """
 
 import re
 import sqlite3
 
 from . import text
+from .i18n import TextError, t
 from .schema import LIST_NAMES
 
 _CODE = re.compile(r"[a-z0-9_]+")
-# list name -> the glossary word the pastor reads
+# list name -> the glossary word the pastor reads (English; the agent and old callers use it)
 LABELS = {"status": "Status", "ministry": "Ministry", "fund": "Fund", "spending_category": "Spending category",
           "recipient": "Recipient", "purpose": "Purpose"}
+# list name -> the TEXT key of that word (pages and errors, in the language of the page)
+LABEL_KEYS = {name: f"lists.{name}" for name in LABELS}
 assert set(LABELS) == set(LIST_NAMES), "every list has a label"
+assert all(t(LABEL_KEYS[n], "en") == LABELS[n] for n in LABELS), "the English word of each list is its label"
 
 
 def _check_list_name(list_name):
     if list_name not in LIST_NAMES:
-        raise ValueError(f"Unknown list {list_name!r}. Lists are: {', '.join(LIST_NAMES)}.")
+        raise TextError("lists.err_unknown", name=repr(list_name), names=", ".join(LIST_NAMES))
     return list_name
 
 
@@ -35,7 +40,7 @@ def get_list(conn, list_name, include_hidden=False):
 def get_item(conn, item_id):
     """One list item by id, or ``None``."""
     return conn.execute(
-        "SELECT * FROM list_item WHERE id = ?", (text.to_id(item_id, "List item"),)
+        "SELECT * FROM list_item WHERE id = ?", (text.to_id(item_id, "lists.list_item"),)
     ).fetchone()
 
 
@@ -49,13 +54,13 @@ def find_item(conn, list_name, *, code=None, name=None):
     if name is not None:
         return conn.execute(
             "SELECT * FROM list_item WHERE list_name = ? AND name = ?",
-            (list_name, text.clean_name(name)),
+            (list_name, text.clean_name(name, "lists.name")),
         ).fetchone()
-    raise ValueError("Give a code or a name to find a list item.")
+    raise TextError("lists.err_find")
 
 
 def require_item(conn, item_id, list_name):
-    """Return the item, or raise ``ValueError`` ("Fund: choose one from the list.") if it is not
+    """Return the item, or raise ``TextError`` ("Fund: choose one from the list.") if it is not
     in ``list_name`` (no such id, another list, or not a whole number)."""
     _check_list_name(list_name)
     try:
@@ -63,7 +68,7 @@ def require_item(conn, item_id, list_name):
     except ValueError:  # not a whole number above 0
         item = None
     if item is None or item["list_name"] != list_name:
-        raise ValueError(f"{LABELS[list_name]}: choose one from the list.")
+        raise TextError("lists.err_choose", label=LABEL_KEYS[list_name])
     return item
 
 
@@ -78,11 +83,11 @@ def _name_taken(conn, list_name, name, except_id=None):
 def add_item(conn, list_name, name, code=None):
     """Add an item at the end of the list and return its id."""
     _check_list_name(list_name)
-    name = text.clean_name(name, "Name")
+    name = text.clean_name(name, "lists.name")
     if code is not None and not _CODE.fullmatch(code):
-        raise ValueError("A code uses only a-z, 0-9 and _.")
+        raise TextError("lists.err_code")
     if _name_taken(conn, list_name, name):
-        raise ValueError(f"{name} is already in the {LABELS[list_name]} list.")
+        raise TextError("lists.err_taken", name=name, list=LABEL_KEYS[list_name])
     last = conn.execute(
         "SELECT COALESCE(MAX(sort_order), 0) FROM list_item WHERE list_name = ?", (list_name,)
     ).fetchone()[0]
@@ -92,7 +97,7 @@ def add_item(conn, list_name, name, code=None):
             (list_name, code, name, last + 1),
         )
     except sqlite3.IntegrityError as exc:
-        raise ValueError(f"{name} cannot be added to the {LABELS[list_name]} list: {exc}.") from exc
+        raise TextError("lists.err_cannot_add", name=name, list=LABEL_KEYS[list_name], detail=str(exc)) from exc
     return cur.lastrowid
 
 
@@ -100,10 +105,10 @@ def rename_item(conn, item_id, new_name):
     """Give an item a new name. Rows that use it follow the new name."""
     item = get_item(conn, item_id)
     if item is None:
-        raise ValueError(f"No list item with id {item_id}.")
-    name = text.clean_name(new_name, "Name")
+        raise TextError("lists.err_no_item", id=item_id)
+    name = text.clean_name(new_name, "lists.name")
     if _name_taken(conn, item["list_name"], name, except_id=item["id"]):
-        raise ValueError(f"{name} is already in the {LABELS[item['list_name']]} list.")
+        raise TextError("lists.err_taken", name=name, list=LABEL_KEYS[item["list_name"]])
     conn.execute("UPDATE list_item SET name = ? WHERE id = ?", (name, item["id"]))
 
 
@@ -111,7 +116,7 @@ def set_active(conn, item_id, active):
     """Show (``True``) or hide (``False``) an item. Nothing is deleted."""
     item = get_item(conn, item_id)
     if item is None:
-        raise ValueError(f"No list item with id {item_id}.")
+        raise TextError("lists.err_no_item", id=item_id)
     if active not in (True, False, 0, 1):
-        raise ValueError("active must be True or False.")
+        raise TextError("lists.err_active")
     conn.execute("UPDATE list_item SET active = ? WHERE id = ?", (1 if active else 0, item["id"]))

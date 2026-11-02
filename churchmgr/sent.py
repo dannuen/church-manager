@@ -7,6 +7,7 @@ and there is no delete. The next number is taken inside ``BEGIN IMMEDIATE``.
 from . import lists, text
 from .calendar import check_year as _check_year
 from .db import transaction
+from .i18n import TextError
 
 
 def number_text(seq, year):
@@ -30,16 +31,16 @@ def next_number(conn, year):
 def add_sent_document(conn, date, recipient_id, purpose_id, subject=None, document_id=None):
     """Record a Sent document. The year is the year of ``date``.
     Returns ``(id, number_text)``, for example ``(12, "06/2026")``."""
-    day = text.check_date_years(date, "Date")  # a year from 1900 to 9999, like an Offering
+    day = text.check_date_years(date, "sent.date")  # a year from 1900 to 9999, like an Offering
     year = int(day[:4])
     with transaction(conn):  # BEGIN IMMEDIATE: no one else can take the same number
         recipient = lists.require_item(conn, recipient_id, "recipient")["id"]
         purpose = lists.require_item(conn, purpose_id, "purpose")["id"]
         doc = None
         if document_id not in (None, ""):
-            doc = text.to_id(document_id, "Document")
+            doc = text.to_id(document_id, "documents.document")
             if conn.execute("SELECT 1 FROM document WHERE id = ?", (doc,)).fetchone() is None:
-                raise ValueError(f"No Document with id {doc}.")
+                raise TextError("documents.err_no_row", what="documents.document", id=doc)
         seq = _next_seq(conn, year)
         cur = conn.execute(
             "INSERT INTO sent_document (year, seq, date, recipient_id, purpose_id, subject, document_id, "

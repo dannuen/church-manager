@@ -3,7 +3,7 @@
 The file on disk gets a random name (``uuid4().hex`` + a safe extension), so a
 file name given by a person can never point outside ``documents/``. The name a
 person sees (``original_name``) is kept only in the database. A Document is deleted only by
-``delete_document`` (the row, then its file).
+``delete_document`` (the row, then its file). Errors are ``TextError`` (``str()`` English).
 """
 
 import hashlib
@@ -13,25 +13,27 @@ import uuid
 
 from . import db, paths, text
 from .db import transaction
+from .i18n import TextError
 
 MAX_SIZE = 50 * 1024 * 1024  # 50 MB, card rule
 MAX_NAME_LENGTH = 150  # the shown name is cut to this length (the extension is kept)
 _EXT = re.compile(r"[a-z0-9]{1,8}")
 _STORED = re.compile(r"[0-9a-f]{32}(?:\.[a-z0-9]{1,8})?")
 _LINKS = ("person_id", "family_id", "calendar_item_id")
-_LINK_TABLES = {"person_id": ("person", "Person"), "family_id": ("family", "Family"),
-                "calendar_item_id": ("calendar_item", "Calendar item")}
+# link column -> (table, TEXT key of its glossary word)
+_LINK_TABLES = {"person_id": ("person", "documents.person"), "family_id": ("family", "documents.family"),
+                "calendar_item_id": ("calendar_item", "documents.calendar_item")}
 
 
 def clean_file_name(original_name):
     """The name to show: NFC, only the last part of any path, no control marks,
     at most 150 characters (the extension is kept). Raises ``ValueError`` if empty."""
     if not isinstance(original_name, str):
-        raise ValueError("A Document needs a file name.")
+        raise TextError("documents.err_no_name")
     name = text.nfc(original_name).replace("\\", "/").rsplit("/", 1)[-1]
     name = "".join(ch for ch in name if not unicodedata.category(ch).startswith("C")).strip()
     if name in ("", ".", ".."):
-        raise ValueError("A Document needs a file name.")
+        raise TextError("documents.err_no_name")
     if len(name) > MAX_NAME_LENGTH:
         stem, dot, ext = name.rpartition(".")
         if dot and 0 < len(ext) <= 8:
@@ -57,7 +59,7 @@ def _documents_dir(copy_folder):
 def _links(person_id, family_id, calendar_item_id):
     given = {k: v for k, v in zip(_LINKS, (person_id, family_id, calendar_item_id)) if v not in (None, "")}
     if len(given) > 1:
-        raise ValueError("A Document is linked to one Person, one Family or one Calendar item, not more.")
+        raise TextError("documents.err_links")
     return given
 
 
@@ -71,9 +73,9 @@ def add_document(conn, copy_folder, data, original_name, person_id=None, family_
     if isinstance(data, (bytearray, memoryview)):
         data = bytes(data)
     if not isinstance(data, bytes):
-        raise ValueError("The file content must be bytes.")
+        raise TextError("documents.err_bytes")
     if len(data) > MAX_SIZE:
-        raise ValueError(f"The file is too large. The limit is {MAX_SIZE // (1024 * 1024)} MB.")
+        raise TextError("documents.err_too_large", mb=MAX_SIZE // (1024 * 1024))
     name = clean_file_name(original_name)
     links = _links(person_id, family_id, calendar_item_id)
     folder = _documents_dir(copy_folder)
@@ -89,7 +91,7 @@ def add_document(conn, copy_folder, data, original_name, person_id=None, family_
                 table, what = _LINK_TABLES[column]
                 rid = text.to_id(value, what)
                 if conn.execute(f"SELECT 1 FROM {table} WHERE id = ?", (rid,)).fetchone() is None:
-                    raise ValueError(f"No {what} with id {rid}.")
+                    raise TextError("documents.err_no_row", what=what, id=rid)
                 values[column] = rid
             cols = ["original_name", "stored_name", "size", "sha256", *values, "added_at"]
             params = [name, stored_name, len(data), hashlib.sha256(data).hexdigest(), *values.values(),
@@ -110,7 +112,8 @@ def add_document(conn, copy_folder, data, original_name, person_id=None, family_
 
 def get_document(conn, doc_id):
     """One Document row, or ``None``."""
-    return conn.execute("SELECT * FROM document WHERE id = ?", (text.to_id(doc_id, "Document"),)).fetchone()
+    return conn.execute("SELECT * FROM document WHERE id = ?",
+                        (text.to_id(doc_id, "documents.document"),)).fetchone()
 
 
 def document_path(conn, copy_folder, doc_id):
@@ -118,14 +121,14 @@ def document_path(conn, copy_folder, doc_id):
     anything else raises ``ValueError``. The file itself may be missing."""
     row = get_document(conn, doc_id)
     if row is None:
-        raise ValueError(f"No Document with id {doc_id}.")
+        raise TextError("documents.err_no_row", what="documents.document", id=doc_id)
     stored = row["stored_name"]
     if not isinstance(stored, str) or not _STORED.fullmatch(stored):
-        raise ValueError(f"Document {row['id']} has a bad stored name and is not opened.")
+        raise TextError("documents.err_bad_name", id=row["id"])
     folder = _documents_dir(copy_folder)
     path = (folder / stored).resolve()
     if path.parent != folder or not path.is_relative_to(folder):
-        raise ValueError(f"Document {row['id']} points outside the documents folder and is not opened.")
+        raise TextError("documents.err_outside", id=row["id"])
     return path
 
 
@@ -140,7 +143,7 @@ def delete_document(conn, copy_folder, doc_id):
     not be removed (for example it is open in another program): the row is gone, the file stays.
     """
     path = document_path(conn, copy_folder, doc_id)
-    doc = text.to_id(doc_id, "Document")
+    doc = text.to_id(doc_id, "documents.document")
     with transaction(conn):
         conn.execute("UPDATE sent_document SET document_id = NULL WHERE document_id = ?", (doc,))
         conn.execute("DELETE FROM document WHERE id = ?", (doc,))

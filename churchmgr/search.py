@@ -1,6 +1,7 @@
 """Find a Person by name. Vietnamese works with or without diacritics."""
 
 from . import text
+from .i18n import TextError
 
 
 def _like_escape(token):
@@ -15,7 +16,7 @@ def search_persons(conn, q, limit=20):
     ``None``), name_folded. Whole-word matches come first, then by given name.
     """
     if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
-        raise ValueError("limit must be a whole number above 0.")
+        raise TextError("search.err_limit")
     tokens = text.fold(q).split()
     if not tokens:
         return []

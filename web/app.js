@@ -1,5 +1,6 @@
 // Church Manager: the only script. Two jobs: live search (with a short wait) and the print button.
 // Pages work without it. Results are built with textContent, never innerHTML.
+// No words live here: the form gives them in the language of the page (data-text-none, data-text-failed).
 (function () {
   "use strict";
 
@@ -12,18 +13,18 @@
 
     function hide() { list.hidden = true; list.replaceChildren(); }
 
-    function line(text) {
+    function line(name) {
       var li = document.createElement("li");
       var span = document.createElement("span");
       span.className = "none";
-      span.textContent = text;
+      span.textContent = form.getAttribute("data-text-" + name) || "";
       li.appendChild(span);
       list.replaceChildren(li);
       list.hidden = false;
     }
 
     function show(rows) {
-      if (!rows.length) { line("No Person found. Press Search to see the page."); return; }
+      if (!rows.length) { line("none"); return; }
       var items = rows.map(function (row) {
         var li = document.createElement("li");
         var a = document.createElement("a");
@@ -49,7 +50,7 @@
       fetch("/api/search?q=" + encodeURIComponent(q), { headers: { Accept: "application/json" } })
         .then(function (r) { if (!r.ok) { throw new Error(String(r.status)); } return r.json(); })
         .then(function (rows) { if (mine === seq) { show(rows); } })
-        .catch(function () { if (mine === seq) { line("Could not search right now. Press Search to try again."); } });
+        .catch(function () { if (mine === seq) { line("failed"); } });
     }
 
     input.addEventListener("input", function () {
