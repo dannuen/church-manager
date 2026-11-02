@@ -75,6 +75,55 @@ Stop Church Manager (Ctrl+C), then copy the whole church copy folder (`church.db
 
 Run `python verify.py`. It runs all tests, builds a fake church of 50 People in a temp folder, starts
 the app, checks every Dashboard panel and Search, makes a Handover and proves it has no Private
-notes, and checks two Giving statements. It prints PASS or FAIL for each check and exits with 0
-only when all pass. It never opens your own church copy. `--keep` keeps the temp folder;
-`--people N` sets the number of People (20 to 1000).
+notes, checks two Giving statements, and checks the Hermes door commands (`python -m churchmgr.agent`).
+It prints PASS or FAIL for each check and exits with 0 only when all pass. It never opens your own
+church copy. `--keep` keeps the temp folder; `--people N` sets the number of People (20 to 1000).
+
+## Use with Hermes (optional)
+
+Hermes is an AI helper that runs on this computer. It is optional. Church Manager works the same
+without it, and the app needs nothing new.
+
+When the Hermes door is on, Hermes can read this church copy and save new records for you, but only
+after you say yes. It uses the command `python -m churchmgr.agent` and the guide in the folder
+`hermes\skills\church-manager`. It never sees Private notes.
+
+### Turn it on
+
+1. Open Church Manager, then **Settings**.
+2. Set **Hermes door** to **On**.
+3. Press **Save settings**.
+
+### Add the skill to Hermes
+
+1. Copy the folder `hermes\skills\church-manager` (in this folder) into `%LOCALAPPDATA%\hermes\skills\`.
+   If you use a Hermes profile, copy it into `%LOCALAPPDATA%\hermes\profiles\<name>\skills\` instead.
+2. Run `hermes skills list` and check that `church-manager` is in the list.
+
+### Try it
+
+In a command window in this folder, run `python -m churchmgr.agent status`. It prints the church name
+and how many People, Families, Calendar items, Offerings and Expenses there are. When the Hermes door
+is off, it prints that the door is off and changes nothing.
+
+### How saving works
+
+1. Hermes first runs a command without `--yes`. This is a dry run: nothing is saved.
+2. Hermes tells you what it would save and asks: "Save this? yes or no".
+3. Only after you say yes, Hermes runs the same command with `--yes`. Then it is saved.
+
+No command deletes or changes a record. The one change is marking a planned Visit done.
+
+### Turn it off
+
+- In Church Manager: **Settings** > **Hermes door** > **Off**, then **Save settings**. Every command
+  then stops with a clear message.
+- To remove the skill, delete the `church-manager` folder you copied into the Hermes `skills` folder.
+
+### Safety
+
+- Private notes never leave the app. No command reads them.
+- The Hermes door controls the agent commands. It is NOT a lock on the file: a program on this
+  computer can still read the church copy files. So use only a Hermes you trust.
+- What Hermes reads is sent to the AI model you chose in Hermes. With a cloud model, church data
+  leaves this computer. A local model keeps it here.

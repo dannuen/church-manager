@@ -312,16 +312,24 @@ def new_page(req):
     return _new_form(req)
 
 
+def add_person_from_form(conn, form):
+    """Add a Person from the Add a Person form: the one place of its rules, for this page and the
+    Hermes door. ``form`` has ``.get`` (the server's form or a plain dict). Returns the Person id;
+    a refused value raises ``ValueError`` with the sentence the form shows."""
+    f = form
+    if f.get("birth_date"):
+        past_or_today(f["birth_date"], "Birth date")
+    start = past_or_today(f.get("start_date"), "Start date")
+    status_id = list_choice(conn, f["status_id"], "status", "Status")["id"] if f.get("status_id") else None
+    return people.add_person(conn, f.get("full_name"), gender=f.get("gender"), birth_date=f.get("birth_date"),
+                             phone=f.get("phone"), address=f.get("address"), note=f.get("note"),
+                             status_id=status_id, start_date=start)
+
+
 def new_post(req):
     f = req.form
     try:
-        if f.get("birth_date"):
-            past_or_today(f["birth_date"], "Birth date")
-        start = past_or_today(f.get("start_date"), "Start date")
-        status_id = list_choice(req.conn, f["status_id"], "status", "Status")["id"] if f.get("status_id") else None
-        pid = people.add_person(req.conn, f.get("full_name"), gender=f.get("gender"), birth_date=f.get("birth_date"),
-                                phone=f.get("phone"), address=f.get("address"), note=f.get("note"),
-                                status_id=status_id, start_date=start)
+        pid = add_person_from_form(req.conn, f)
     except ValueError as exc:
         return _new_form(req, f, ("new", str(exc)), 400)
     return Response.redirect(ui.url(f"/people/{pid}", msg="Person added."))

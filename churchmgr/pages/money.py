@@ -318,6 +318,15 @@ def _offering_input(f):
     return day, amount, person_id, family_id
 
 
+def add_offering_from_form(conn, form):
+    """Record an Offering from the Record Offering form: the one place of its rules, for this page and
+    the Hermes door. ``form`` has ``.get``. Returns the Offering id; a refused value raises ``ValueError``
+    with the sentence the form shows."""
+    day, amount, person_id, family_id = _offering_input(form)
+    return money_data.add_offering(conn, day, amount, form["fund_id"], giver_person_id=person_id,
+                                   giver_family_id=family_id, note=form.get("note"))
+
+
 def offering_new_page(req):
     return _offering_form(req)
 
@@ -325,12 +334,11 @@ def offering_new_page(req):
 def offering_new_post(req):
     f = req.form
     try:
-        day, amount, person_id, family_id = _offering_input(f)
-        money_data.add_offering(req.conn, day, amount, f["fund_id"], giver_person_id=person_id,
-                                giver_family_id=family_id, note=f.get("note"))
+        oid = add_offering_from_form(req.conn, f)
     except ValueError as exc:
         return _offering_form(req, f, ("offering", str(exc)), 400)
-    return _saved(req.conn, "Offering", amount, day, f["fund_id"], new=True)
+    row = money_data.get_offering(req.conn, oid)
+    return _saved(req.conn, "Offering", row["amount"], row["date"], row["fund_id"], new=True)
 
 
 def offering_edit_page(req):
@@ -406,6 +414,14 @@ def _expense_input(f):
     return day, amount
 
 
+def add_expense_from_form(conn, form):
+    """Record an Expense from the Record Expense form: the one place of its rules, for this page and
+    the Hermes door. ``form`` has ``.get``. Returns the Expense id; a refused value raises ``ValueError``
+    with the sentence the form shows."""
+    day, amount = _expense_input(form)
+    return money_data.add_expense(conn, day, amount, form["spending_category_id"], note=form.get("note"))
+
+
 def expense_new_page(req):
     return _expense_form(req)
 
@@ -413,11 +429,11 @@ def expense_new_page(req):
 def expense_new_post(req):
     f = req.form
     try:
-        day, amount = _expense_input(f)
-        money_data.add_expense(req.conn, day, amount, f["spending_category_id"], note=f.get("note"))
+        eid = add_expense_from_form(req.conn, f)
     except ValueError as exc:
         return _expense_form(req, f, ("expense", str(exc)), 400)
-    return _saved(req.conn, "Expense", amount, day, f["spending_category_id"], new=True)
+    row = money_data.get_expense(req.conn, eid)
+    return _saved(req.conn, "Expense", row["amount"], row["date"], row["spending_category_id"], new=True)
 
 
 def expense_edit_page(req):

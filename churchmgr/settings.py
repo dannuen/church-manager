@@ -1,6 +1,21 @@
-"""Settings of one church copy (table ``setting``): church_name, care_reminder_months."""
+"""Settings of one church copy (table ``setting``): church_name, care_reminder_months, hermes_door."""
 
 from . import text
+
+HERMES_DOOR = "hermes_door"  # "on" or "off"; no row = off (the default)
+HERMES_DOOR_CHOICES = ("off", "on")
+
+
+def hermes_door_on(conn):
+    """True only when the Hermes door setting is exactly ``on``. No row, or any other text, is off."""
+    return get_setting(conn, HERMES_DOOR) == "on"
+
+
+def check_hermes_door(value):
+    """Return ``value`` if it is ``on`` or ``off``, else raise ``ValueError``."""
+    if value not in HERMES_DOOR_CHOICES:
+        raise ValueError("Hermes door must be On or Off.")
+    return value
 
 
 def get_setting(conn, key, default=None):
@@ -21,6 +36,8 @@ def get_int_setting(conn, key, default):
 def set_setting(conn, key, value):
     """Save a setting. The value is stored as NFC text."""
     key = text.clean_name(key, "Setting name")
+    if key == HERMES_DOOR:
+        check_hermes_door(value)  # exactly "on" or "off": no spaces, no other case, no None
     if value is None:
         raise ValueError(f"Setting {key} needs a value.")
     value = text.nfc(str(value)).strip()

@@ -1,8 +1,9 @@
-"""Settings (card C3): ``/settings`` changes the church name and the care reminder time.
+"""Settings (card C3): ``/settings`` changes the church name, the care reminder time and the Hermes door.
 
 The care reminder time is a whole number of months from 1 to 24: a Person needs a visit when their
 last Visit is older than that. The page shows what the setting gives today (how many People need a
-visit), next to the field that changes it.
+visit), next to the field that changes it. The Hermes door (Off by default) lets the optional Hermes
+helper use this church copy through ``python -m churchmgr.agent``.
 """
 
 from .. import care, settings, text, ui
@@ -13,6 +14,9 @@ from .people import form_error, panel
 
 MIN_MONTHS, MAX_MONTHS = 1, 24
 _MONTHS_ERROR = f"Care reminder time must be a whole number of months from {MIN_MONTHS} to {MAX_MONTHS}."
+_DOOR_OPTIONS = [("off", "Off"), ("on", "On")]
+_DOOR_HINT = ("Optional. On lets the Hermes helper on this computer read this church copy and save new records "
+              "after you say yes. It never sees Private notes.")
 
 
 def parse_months(value):
@@ -27,6 +31,7 @@ def _view(req, values=None, errors=None, status=200):
     conn = req.conn
     errors = errors or {}
     months = care.reminder_months(conn)
+    door = "on" if settings.hermes_door_on(conn) else "off"
     v = values or {"church_name": req.church_name, "care_reminder_months": str(months)}
     inner = (
         ui.field("Church name", "church_name", v.get("church_name", ""), required=True, autocomplete="off",
@@ -37,6 +42,8 @@ def _view(req, values=None, errors=None, status=200):
                    error=errors.get("care_reminder_months"),
                    hint=f"A Person needs a visit when their last Visit is older than this. "
                         f"{MIN_MONTHS} to {MAX_MONTHS} months; 3 is the usual.")
+        + ui.select_field("Hermes door", settings.HERMES_DOOR, _DOOR_OPTIONS, v.get(settings.HERMES_DOOR, door),
+                          error=errors.get(settings.HERMES_DOOR), hint=_DOOR_HINT)
         + form_error(errors) + ui.button("Save settings")
     )
     form_panel = panel("settings-form", "Church", ui.form("/settings", inner))
@@ -69,13 +76,23 @@ def settings_post(req):
         months = parse_months(f.get("care_reminder_months"))
     except ValueError as exc:
         errors["care_reminder_months"] = str(exc)
+    door = f.get(settings.HERMES_DOOR)  # no field (an old form) = keep the door as it is
+    if door is not None:
+        try:
+            settings.check_hermes_door(door)
+        except ValueError as exc:
+            errors[settings.HERMES_DOOR] = str(exc)
     if errors:
         return _view(req, f, errors, 400)
     with transaction(req.conn):
         settings.set_setting(req.conn, "church_name", name)
         settings.set_setting(req.conn, "care_reminder_months", months)
+        if door is not None:
+            settings.set_setting(req.conn, settings.HERMES_DOOR, door)
+    door_now = "on" if settings.hermes_door_on(req.conn) else "off"
     return Response.redirect(ui.url("/settings", msg=f"Settings saved: {name}, care reminder time "
-                                                     f"{ui.plural(months, 'month', 'months')}."))
+                                                     f"{ui.plural(months, 'month', 'months')}, "
+                                                     f"Hermes door {door_now}."))
 
 
 ROUTES = [
