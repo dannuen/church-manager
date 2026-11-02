@@ -4,14 +4,17 @@ before, the Trưởng Chi phái now and before, and the form to set the Trưởn
 
 The Trưởng Chi phái changes only through ``people.set_truong_chi_phai`` (history is kept).
 A Family changes its Chi phái on the Family page.
+Words on screen come from the text table (``t``/``tn``, section ``chi_phai``, and ``people`` /
+``families`` for the shared words); names are shown as stored.
 """
 
 from .. import people, ui
+from ..i18n import t, tn
 from ..server import Response
 from ..ui import h, vi
-from .people import (change_box, date_field, empty, family_link, field_errors, form_error, latest_change,
-                     list_panel, newest_first, not_found, num, panel, past_or_today, period, person_link,
-                     same_change, table)
+from .people import (change_box, date_field, empty, family_link, field_errors, form_error, history_headers,
+                     latest_change, list_panel, newest_first, not_found, num, panel, past_or_today, period,
+                     person_link, same_change, table)
 
 
 def _past_families(conn, chi_phai_id):
@@ -52,27 +55,27 @@ def list_page(req):
             num(len(families)),
             num(len(_people_now(conn, families))),
         ])
-    body = (table([("Chi phái", False), ("Trưởng Chi phái", False), ("Since", True), ("Families now", True),
-                   ("People now", True)], lines, "chi-phai")
-            if lines else empty("No Chi phái yet. Add the first Chi phái."))
-    actions = ui.link_button("Add a Chi phái", "/chi-phai/new", "primary")
-    return Response.html(ui.page("Chi phái", list_panel("chi-phai-list", "Chi phái list", body), "chi-phai",
-                                 sub=h(ui.plural(len(rows), "Chi phái", "Chi phái")), actions=actions))
+    body = (table([(t("people.chi_phai"), False), (t("chi_phai.truong"), False), (t("people.since"), True),
+                   (t("chi_phai.col_families_now"), True), (t("families.col_people_now"), True)], lines, "chi-phai")
+            if lines else empty(t("chi_phai.empty")))
+    actions = ui.link_button(t("chi_phai.add"), "/chi-phai/new", "primary")
+    return Response.html(ui.page(t("chi_phai.title"), list_panel("chi-phai-list", t("chi_phai.list"), body),
+                                 "chi-phai", sub=h(tn("chi_phai.count", len(rows))), actions=actions))
 
 
 # ---------------------------------------------------------------- /chi-phai/new
 
 def _new_form(req, values=None, error=None, status=200):
     values = values or {}
-    errors = field_errors(error, "new", {"name": "Chi phái"})
+    errors = field_errors(error, "new", {"name": "people.chi_phai"})
     inner = (
-        ui.field("Chi phái name", "name", values.get("name", ""), error=errors.get("name"), required=True,
-                 autocomplete="off", lang="vi", hint="For example: Chi phái Hòa Bình")
-        + form_error(errors) + ui.button("Add Chi phái")
+        ui.field(t("chi_phai.name"), "name", values.get("name", ""), error=errors.get("name"), required=True,
+                 autocomplete="off", lang="vi", hint=t("chi_phai.name_hint"))
+        + form_error(errors) + ui.button(t("chi_phai.add_button"))
     )
     body = (f'<section class="panel narrow">{ui.form("/chi-phai/new", inner)}'
-            '<p class="hint">Then put Families in it from each Family page.</p></section>')
-    return Response.html(ui.page("Add a Chi phái", body, "chi-phai"), status)
+            f'<p class="hint">{h(t("chi_phai.new_hint"))}</p></section>')
+    return Response.html(ui.page(t("chi_phai.add"), body, "chi-phai"), status)
 
 
 def new_page(req):
@@ -83,8 +86,8 @@ def new_post(req):
     try:
         cid = people.add_chi_phai(req.conn, req.form.get("name"))
     except ValueError as exc:
-        return _new_form(req, req.form, ("new", str(exc)), 400)
-    return Response.redirect(ui.url(f"/chi-phai/{cid}", msg="Chi phái added."))
+        return _new_form(req, req.form, ("new", exc), 400)
+    return Response.redirect(ui.url(f"/chi-phai/{cid}", msg=t("chi_phai.added")))
 
 
 # ---------------------------------------------------------------- /chi-phai/<id>
@@ -92,15 +95,17 @@ def new_post(req):
 def _families_panels(conn, cid, families):
     now_lines = [[family_link(f["id"], f["name"]), vi(f["address"]), num(ui.fmt_date(f["start_date"]))]
                  for f in families]
-    now_body = (table([("Family", False), ("Address", False), ("Since", True)], now_lines, "families-now")
-                if now_lines else empty("No Family is in this Chi phái now."))
+    now_body = (table([(t("people.family"), False), (t("people.address"), False), (t("people.since"), True)],
+                      now_lines, "families-now")
+                if now_lines else empty(t("chi_phai.no_family_now")))
     past = _past_families(conn, cid)
     past_lines = [[family_link(f["id"], f["name"]), *period(f["start_date"], f["end_date"])] for f in past]
-    past_body = (table([("Family", False), ("From", True), ("To", True)], past_lines, "history")
-                 if past_lines else empty("No Family has left this Chi phái."))
-    hint = '<p class="hint">To add or move a Family, open its Family page.</p>'
-    return (panel("families-now", "Families now", now_body + hint)
-            + panel("families-before", "Families before", past_body, meta="Old Chi phái links, kept with their dates"))
+    past_body = (table(history_headers("people.family"), past_lines, "history")
+                 if past_lines else empty(t("chi_phai.no_family_left")))
+    hint = f'<p class="hint">{h(t("chi_phai.move_hint"))}</p>'
+    return (panel("families-now", t("chi_phai.families_now"), now_body + hint)
+            + panel("families-before", t("chi_phai.families_before"), past_body,
+                    meta=h(t("chi_phai.families_before_meta"))))
 
 
 def _person_select(conn, families, selected, error):
@@ -113,13 +118,13 @@ def _person_select(conn, families, selected, error):
         return "".join(f'<option value="{pid}"{" selected" if str(pid) == str(selected) else ""}>{h(name)}</option>'
                        for pid, name in pairs)
 
-    groups = '<option value="">— No Trưởng Chi phái —</option>'
+    groups = f'<option value="">{h(t("chi_phai.no_truong_option"))}</option>'
     if inside:
-        groups += f'<optgroup label="In this Chi phái">{options(inside)}</optgroup>'
-    groups += f'<optgroup label="Everyone else">{options(others)}</optgroup>'
+        groups += f'<optgroup label="{h(t("chi_phai.inside"))}">{options(inside)}</optgroup>'
+    groups += f'<optgroup label="{h(t("chi_phai.others"))}">{options(others)}</optgroup>'
     error_html = f'<p class="error" id="truong-person-error">{h(error)}</p>' if error else ""
     invalid = ' aria-invalid="true" aria-describedby="truong-person-error"' if error else ""
-    return ('<div class="field"><label for="truong-person">Person</label>'
+    return (f'<div class="field"><label for="truong-person">{h(t("people.person"))}</label>'
             f'<select class="input" id="truong-person" name="person_id" lang="vi"{invalid}>{groups}</select>'
             f"{error_html}</div>")
 
@@ -127,18 +132,19 @@ def _person_select(conn, families, selected, error):
 def _truong_panel(conn, cid, families, error, vals):
     rows = people.truong_chi_phai_history(conn, cid)
     current = next((r for r in rows if r["end_date"] is None), None)
-    errors = field_errors(error, "truong", {"start_date": "Start date", "person_id": "Person"})
+    errors = field_errors(error, "truong", {"start_date": "people.start_date", "person_id": "people.person"})
     selected = vals.get("person_id", current["person_id"] if current else "")
     form = ui.form(f"/chi-phai/{cid}/truong", (
         _person_select(conn, families, selected, errors.get("person_id"))
-        + date_field("Start date", "start_date", "truong-date", vals.get("start_date"), errors.get("start_date"),
-                     min_date=latest_change(rows), hint="The past Trưởng Chi phái is kept with dates.")
-        + form_error(errors) + ui.button("Set Trưởng Chi phái")))
+        + date_field(t("people.start_date"), "start_date", "truong-date", vals.get("start_date"),
+                     errors.get("start_date"), min_date=latest_change(rows), hint=t("chi_phai.truong_hint"))
+        + form_error(errors) + ui.button(t("chi_phai.set_truong"))))
     lines = [[person_link(r["person_id"], r["full_name"]), *period(r["start_date"], r["end_date"])]
              for r in newest_first(rows)]
-    body = (table([("Person", False), ("From", True), ("To", True)], lines, "history")
-            if lines else empty("No Trưởng Chi phái yet."))
-    return panel("truong-chi-phai", "Trưởng Chi phái", body + change_box("Set Trưởng Chi phái", form, bool(errors)))
+    body = (table(history_headers("people.person"), lines, "history")
+            if lines else empty(t("chi_phai.no_truong_yet")))
+    return panel("truong-chi-phai", t("chi_phai.truong"),
+                 body + change_box(t("chi_phai.set_truong"), form, bool(errors)))
 
 
 def _chi_phai_view(req, row, error=None, status=200):
@@ -147,13 +153,13 @@ def _chi_phai_view(req, row, error=None, status=200):
     vals = req.form if error else {}
     families = people.chi_phai_families(conn, cid)
     leader = people.current_truong_chi_phai(conn, cid)
-    finding = [f"Trưởng Chi phái {leader['full_name']} since {ui.fmt_date(leader['start_date'])}" if leader
-               else "No Trưởng Chi phái",
-               ui.plural(len(families), "Family", "Families") + " now",
-               ui.plural(len(_people_now(conn, families)), "Person", "People") + " now"]
+    finding = [t("chi_phai.truong_since", name=leader["full_name"], date=ui.fmt_date(leader["start_date"])) if leader
+               else t("chi_phai.no_truong"),
+               t("people.count_now", count=tn("families.count", len(families))),
+               t("people.count_now", count=tn("people.count", len(_people_now(conn, families))))]
     body = (f'<div class="grid chi-phai"><div class="span-8 stack">{_families_panels(conn, cid, families)}</div>'
             f'<div class="side-4 stack">{_truong_panel(conn, cid, families, error, vals)}</div></div>')
-    actions = ui.link_button("Rename Chi phái", f"/chi-phai/{cid}/edit")
+    actions = ui.link_button(t("chi_phai.rename"), f"/chi-phai/{cid}/edit")
     return Response.html(ui.page(row["name"], body, "chi-phai", sub=h(" · ".join(finding)), actions=actions,
                                  lang="vi"), status)
 
@@ -165,7 +171,7 @@ def _row_or_none(req):
 def chi_phai_page(req):
     row = _row_or_none(req)
     if row is None:
-        return not_found("Chi phái", "/chi-phai", "Go to Chi phái")
+        return not_found("people.chi_phai", "/chi-phai", "chi_phai.go")
     return _chi_phai_view(req, row)
 
 
@@ -174,62 +180,62 @@ def chi_phai_page(req):
 def _edit_form(req, row, values=None, error=None, status=200):
     """Rename a Chi phái. The name is a plain field, not history (its Families and Trưởng Chi phái are)."""
     values = values if values is not None else {"name": row["name"]}
-    errors = field_errors(error, "edit", {"name": "Chi phái"})
+    errors = field_errors(error, "edit", {"name": "people.chi_phai"})
     cid = row["id"]
     inner = (
-        ui.field("Chi phái name", "name", values.get("name", ""), error=errors.get("name"), required=True,
+        ui.field(t("chi_phai.name"), "name", values.get("name", ""), error=errors.get("name"), required=True,
                  autocomplete="off", lang="vi")
-        + form_error(errors) + ui.button("Rename Chi phái")
+        + form_error(errors) + ui.button(t("chi_phai.rename"))
     )
     body = (f'<section class="panel narrow">{ui.form(f"/chi-phai/{cid}/edit", inner)}'
-            '<p class="hint">Its Families and its Trưởng Chi phái stay as they are, with their dates. '
-            'The new name shows on every page at once.</p></section>')
-    return Response.html(ui.page(f"Rename {row['name']}", body, "chi-phai", lang="vi",
-                                 actions=ui.link_button("Back to the Chi phái", f"/chi-phai/{cid}")), status)
+            f'<p class="hint">{h(t("chi_phai.rename_hint"))}</p></section>')
+    return Response.html(ui.page(t("chi_phai.rename_title", name=row["name"]), body, "chi-phai", lang="vi",
+                                 actions=ui.link_button(t("chi_phai.back"), f"/chi-phai/{cid}")), status)
 
 
 def edit_page(req):
     row = _row_or_none(req)
     if row is None:
-        return not_found("Chi phái", "/chi-phai", "Go to Chi phái")
+        return not_found("people.chi_phai", "/chi-phai", "chi_phai.go")
     return _edit_form(req, row)
 
 
 def edit_post(req):
     row = _row_or_none(req)
     if row is None:
-        return not_found("Chi phái", "/chi-phai", "Go to Chi phái")
+        return not_found("people.chi_phai", "/chi-phai", "chi_phai.go")
     try:
         people.rename_chi_phai(req.conn, row["id"], req.form.get("name"))
     except ValueError as exc:
-        return _edit_form(req, row, req.form, ("edit", str(exc)), 400)
+        return _edit_form(req, row, req.form, ("edit", exc), 400)
     name = people.get_chi_phai(req.conn, row["id"])["name"]
-    message = f"Renamed to {name}." if name != row["name"] else same_change(f"The name is already {name}.")
+    message = (t("chi_phai.renamed", name=name) if name != row["name"]
+               else same_change(t("chi_phai.name_same", name=name)))
     return Response.redirect(ui.url(f"/chi-phai/{row['id']}", msg=message))
 
 
 def truong_post(req):
     row = _row_or_none(req)
     if row is None:
-        return not_found("Chi phái", "/chi-phai", "Go to Chi phái")
+        return not_found("people.chi_phai", "/chi-phai", "chi_phai.go")
     conn, cid = req.conn, row["id"]
     try:
-        day = past_or_today(req.form.get("start_date"), "Start date")
+        day = past_or_today(req.form.get("start_date"), "people.start_date")
         person_id = req.form.get("person_id") or None
         before = people.current_truong_chi_phai(conn, cid)
         if person_id is None and before is None:
-            message = same_change("This Chi phái has no Trưởng Chi phái.")
+            message = same_change(t("chi_phai.truong_none"))
         elif person_id is None:
             people.set_truong_chi_phai(conn, cid, None, day)
-            message = f"{before['full_name']} is no longer Trưởng Chi phái from {ui.fmt_date(day)}."
+            message = t("chi_phai.truong_ended", name=before["full_name"], date=ui.fmt_date(day))
         elif before is not None and str(before["person_id"]) == person_id:
-            message = same_change(f"{before['full_name']} is already Trưởng Chi phái.")
+            message = same_change(t("chi_phai.truong_same", name=before["full_name"]))
         else:
             people.set_truong_chi_phai(conn, cid, person_id, day)
             now = people.current_truong_chi_phai(conn, cid)
-            message = f"{now['full_name']} is Trưởng Chi phái from {ui.fmt_date(day)}."
+            message = t("chi_phai.truong_now", name=now["full_name"], date=ui.fmt_date(day))
     except ValueError as exc:
-        return _chi_phai_view(req, row, ("truong", str(exc)), 400)
+        return _chi_phai_view(req, row, ("truong", exc), 400)
     return Response.redirect(ui.url(f"/chi-phai/{cid}", msg=message))
 
 
