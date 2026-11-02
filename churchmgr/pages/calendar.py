@@ -8,29 +8,33 @@ Rules kept here:
   or later (then it could be deleted), and taking a Person off a past item asks "Are you sure?" first.
 - Delete always asks first. The data layer decides what may be deleted; the page shows its reason.
 - A Head count is for a Service on or before today.
+- Words on screen come from the text table (section ``calendar``); kinds through ``ui.calendar_kind``.
+  Titles, places, notes and names are shown as stored.
 """
 
 import datetime as _dt
 import re
 
 from .. import calendar as cal
-from .. import care, people, text, ui
+from .. import care, i18n, people, text, ui
 from ..db import transaction
+from ..i18n import TextError, t, tn
 from ..schema import CALENDAR_KINDS
 from ..server import Response
 from ..ui import clamp2, h, vi
 from . import documents as document_pages  # card C3: the shared Documents block
-from .care import default_start
-from .people import (change_box, empty, family_link, field_errors, form_error, not_found, num, panel,
-                     person_link, today_text)
+from .care import default_start, placed_errors
+from .people import change_box, empty, family_link, form_error, num, panel, person_link, today_text
 
-PART_WORDS = {"serves": "Serves", "joins": "Joins"}
-REPEATS = (("none", "Does not repeat"), ("weekly", "Every week"), ("monthly", "Every month"))
+PART_WORDS = {"serves": "calendar.part_serves", "joins": "calendar.part_joins"}  # TEXT keys
+REPEATS = (("none", "calendar.repeat_none"), ("weekly", "calendar.repeat_weekly"),
+           ("monthly", "calendar.repeat_monthly"))  # (value, TEXT key)
 RECORD_WEEKS = 8  # "Head count to record" looks back this many weeks
 _MONTH = re.compile(r"([0-9]{4})-([0-9]{2})")
 
-_ITEM_LABELS = {"kind": "Kind", "title": "Title", "starts_at": "Starts at", "ends_at": "Ends at",
-                "repeat_until": "Repeat until", "repeat": "Repeat", "person_id": "Person", "family_id": "Family"}
+_ITEM_LABELS = {"kind": "calendar.kind", "title": "calendar.title_label", "starts_at": "calendar.starts_at",
+                "ends_at": "calendar.ends_at", "repeat_until": "calendar.repeat_until", "repeat": "calendar.repeat",
+                "person_id": "calendar.person", "family_id": "calendar.family"}
 
 
 # ---------------------------------------------------------------- small logic (tested)
@@ -44,23 +48,23 @@ def parse_week(value, today):
     """``?week=YYYY-MM-DD`` -> the Monday of that week. Empty -> the Monday of this week."""
     if not (value or "").strip():
         return week_start(today)
-    return week_start(_dt.date.fromisoformat(text.check_date(value, "Week")))
+    return week_start(_dt.date.fromisoformat(text.check_date(value, "calendar.week")))
 
 
 def parse_from(value):
     """``?from=YYYY-MM-DD`` -> that date (the first of 7 days). A bad date raises ``ValueError``."""
-    return _dt.date.fromisoformat(text.check_date(value, "First day"))
+    return _dt.date.fromisoformat(text.check_date(value, "calendar.first_day"))
 
 
 def parse_month(value):
-    """``"2026-11"`` -> ``(2026, 11)``. Anything else raises ``ValueError``: the form sentence, or the
+    """``"2026-11"`` -> ``(2026, 11)``. Anything else raises ``TextError``: the form sentence, or the
     years sentence for the right form with a year outside :data:`FIRST_MONTH` to :data:`LAST_MONTH`."""
     m = _MONTH.fullmatch((value or "").strip())
     if m is None or not 1 <= int(m.group(2)) <= 12:
-        raise ValueError("Month must be written YYYY-MM, for example 2026-11.")
+        raise TextError("calendar.err_month_form")
     year, month = int(m.group(1)), int(m.group(2))
     if month_step(year, month) is None:
-        raise ValueError("Month: use a year from 1900 to 9999.")
+        raise TextError("calendar.err_month_years")
     return year, month
 
 
@@ -98,15 +102,15 @@ def day_step(day, k):
 def month_picker(action, input_id, value):
     """The "Go to a month" form of the Money and Calendar pages, limited to 1900-01 to 9999-12."""
     return (f'<form class="month-picker" action="{action}" method="get">'
-            f'<label for="{input_id}">Go to a month</label><div class="search-line">'
+            f'<label for="{input_id}">{h(t("calendar.go_to_month"))}</label><div class="search-line">'
             f'<input class="input" id="{input_id}" name="month" type="month" value="{h(value)}" '
             f'min="{month_text(*FIRST_MONTH)}" max="{month_text(*LAST_MONTH)}" required>'
-            '<button class="btn secondary" type="submit">Show</button></div></form>')
+            f'<button class="btn secondary" type="submit">{h(t("calendar.show"))}</button></div></form>')
 
 
 def form_datetime(value, what):
     """``2026-11-08T08:00`` (from ``<input type="datetime-local">``) -> ``2026-11-08 08:00``.
-    Empty -> ``None``. A bad value raises ``ValueError`` starting with ``what``."""
+    Empty -> ``None``. A bad value raises ``ValueError`` starting with ``what`` (a TEXT key or a label)."""
     raw = (value or "").strip()
     if not raw:
         return None
@@ -128,10 +132,10 @@ def parse_head_count(value):
     """``" 72 "`` -> ``72``. Only plain digits; too large or anything else raises ``ValueError``."""
     raw = (value or "").strip()
     if not (raw.isascii() and raw.isdigit()):
-        raise ValueError("Head count must be a whole number of people, for example 72.")
+        raise TextError("calendar.err_hc_number")
     count = int(raw)
     if count > cal.MAX_HEAD_COUNT:
-        raise ValueError("Head count is too large.")
+        raise TextError("calendar.err_hc_large")
     return count
 
 
@@ -146,11 +150,12 @@ def time_span(starts_at, ends_at):
 
 
 def _errors(error, key):
-    """Where a refused Calendar form shows its sentence (a repeat message goes to Repeat until)."""
-    errs = field_errors(error, key, _ITEM_LABELS)
+    """Where a refused Calendar form shows its sentence (a repeat message goes to Repeat until).
+    ``error`` is ``(form key, exception)``; the field is found from the English sentence."""
+    errs = placed_errors(error, key, _ITEM_LABELS)
     message = errs.get("")
     if message:
-        low = message.lower()
+        low = str(error[1]).lower()
         if "repeat" in low:
             return {"repeat_until": message}
         if "visit is for" in low:
@@ -163,13 +168,25 @@ def _day_label(day):
 
 
 def _kind(kind):
-    return f'<span class="kind k-{h(kind.lower())}">{h(kind)}</span>'
+    return f'<span class="kind k-{h(kind.lower())}">{h(ui.calendar_kind(kind))}</span>'
+
+
+def _part(part):
+    return t(PART_WORDS[part])
+
+
+def _persons(conn):
+    return [("", t("calendar.choose_person"))] + [(p["id"], p["full_name"]) for p in people.list_persons(conn)]
+
+
+def _kind_options(kinds):
+    return [(k, ui.calendar_kind(k)) for k in kinds]
 
 
 # ---------------------------------------------------------------- /calendar
 
 def _item_row(it):
-    sub, words = [_kind(it["kind"])], [it["kind"]]
+    sub, words = [_kind(it["kind"])], [ui.calendar_kind(it["kind"])]
     if it["kind"] == "Visit" and it["visit_name"] and it["visit_name"] not in it["title"]:
         sub.append(vi(it["visit_name"]))
         words.append(it["visit_name"])
@@ -177,11 +194,11 @@ def _item_row(it):
         sub.append(vi(it["place"]))
         words.append(it["place"])
     if it["kind"] == "Service" and it["head_count"] is not None:
-        sub.append(f'Head count <span class="num">{it["head_count"]}</span>')
-        words.append(f'Head count {it["head_count"]}')
+        sub.append(ui.t_html("calendar.row_head_count", n=f'<span class="num">{it["head_count"]}</span>'))
+        words.append(t("calendar.row_head_count", n=it["head_count"]))
     if it["kind"] == "Visit" and it["visit_done"]:
-        sub.append("done")
-        words.append("done")
+        sub.append(h(t("calendar.row_done")))
+        words.append(t("calendar.row_done"))
     # B26: the title wraps to 2 lines (full text in its title); the grey line under it keeps one line
     link = f'<a href="/calendar/{it["id"]}">{h(it["title"])}</a>'
     return ('<li class="row cal-row" data-row>'
@@ -192,9 +209,9 @@ def _item_row(it):
 
 def _day_block(day, items, today):
     is_today = day == today
-    tag = ' <span class="today-tag">Today</span>' if is_today else ""
+    tag = f' <span class="today-tag">{h(t("calendar.today"))}</span>' if is_today else ""
     rows = (f'<ul class="rows">{"".join(_item_row(it) for it in items)}</ul>' if items
-            else '<p class="cal-none">Nothing on the Calendar.</p>')
+            else f'<p class="cal-none">{h(t("calendar.nothing_day"))}</p>')
     return (f'<div class="cal-day{" today" if is_today else ""}">'
             f'<p class="cal-date"><span class="num">{h(_day_label(day))}</span>{tag}</p>{rows}</div>')
 
@@ -231,27 +248,28 @@ def _toolbar(mode, first, today):
     if mode == "week":
         this = week_start(today)
         shown_month = today if first == this else first  # the month picker starts at the month in view
-        links = (_day_chip("‹ Previous week", day_step(first, -7), "week")
-                 + _chip("This week", "/calendar", first == this)
-                 + _day_chip("Next week ›", day_step(first, 7), "week")
-                 + month_chip("Month", "/calendar", month_step(shown_month.year, shown_month.month)))
+        links = (_day_chip(t("calendar.prev_week"), day_step(first, -7), "week")
+                 + _chip(t("calendar.this_week"), "/calendar", first == this)
+                 + _day_chip(t("calendar.next_week"), day_step(first, 7), "week")
+                 + month_chip(t("calendar.month"), "/calendar", month_step(shown_month.year, shown_month.month)))
         month_value = month_text(shown_month.year, shown_month.month)
     elif mode == "days":  # 7 days from ?from= (the Dashboard's "This week": today and the 6 days after)
-        links = (_day_chip("‹ Previous 7 days", day_step(first, -7), "from")
-                 + _chip("From today", ui.url("/calendar", **{"from": today.isoformat()}), first == today)
-                 + _day_chip("Next 7 days ›", day_step(first, 7), "from")
-                 + _day_chip("Week", first, "week")
-                 + month_chip("Month", "/calendar", month_step(first.year, first.month)))
+        links = (_day_chip(t("calendar.prev_days"), day_step(first, -7), "from")
+                 + _chip(t("calendar.from_today"), ui.url("/calendar", **{"from": today.isoformat()}), first == today)
+                 + _day_chip(t("calendar.next_days"), day_step(first, 7), "from")
+                 + _day_chip(t("calendar.week"), first, "week")
+                 + month_chip(t("calendar.month"), "/calendar", month_step(first.year, first.month)))
         month_value = month_text(first.year, first.month)
     else:
         this_month = (first.year, first.month) == (today.year, today.month)
         links = (month_chip("‹ {}", "/calendar", month_step(first.year, first.month, -1))
-                 + _chip("This month", ui.url("/calendar", month=month_text(today.year, today.month)), this_month)
+                 + _chip(t("calendar.this_month"), ui.url("/calendar", month=month_text(today.year, today.month)),
+                         this_month)
                  + month_chip("{} ›", "/calendar", month_step(first.year, first.month, 1))
-                 + _chip("Week", "/calendar" if this_month else ui.url("/calendar", week=first.isoformat())))
+                 + _chip(t("calendar.week"), "/calendar" if this_month else ui.url("/calendar", week=first.isoformat())))
         month_value = month_text(first.year, first.month)
-    label = {"week": "Calendar weeks", "days": "Calendar 7 days"}.get(mode, "Calendar months")
-    return (f'<div class="list-toolbar"><nav class="chips" aria-label="{label}">{links}</nav>'
+    label = t({"week": "calendar.chips_week", "days": "calendar.chips_days"}.get(mode, "calendar.chips_month"))
+    return (f'<div class="list-toolbar"><nav class="chips" aria-label="{h(label)}">{links}</nav>'
             f'{month_picker("/calendar", "cal-month", month_value)}</div>')
 
 
@@ -259,18 +277,19 @@ def _to_record_panel(conn, today):
     since = today - _dt.timedelta(weeks=RECORD_WEEKS)
     rows = [it for it in cal.items_between(conn, since, today)
             if it["kind"] == "Service" and it["head_count"] is None]
+    record = h(t("calendar.record"))
     lines = "".join(
         '<li class="row" data-row><span class="what wrap">'
         + clamp2(f'<a href="/calendar/{it["id"]}#head-count">{h(it["title"])}</a>', it["title"], lang="vi")
         + f'<span class="sub num">{h(ui.fmt_weekday(it["starts_at"]))} {h(ui.fmt_datetime(it["starts_at"]))}</span></span>'
-        f'<a class="row-action" href="/calendar/{it["id"]}#head-count">Record</a></li>'
+        f'<a class="row-action" href="/calendar/{it["id"]}#head-count">{record}</a></li>'
         for it in reversed(rows)
     )
     body = (f'<ul class="rows">{lines}</ul>' if rows
-            else empty(f"Every Service of the last {RECORD_WEEKS} weeks has a Head count."))
-    count = f'<span class="count num">{h(ui.plural(len(rows), "Service", "Services"))}</span>' if rows else ""
-    return panel("to-record", "Head count to record", body,
-                 meta=f"Services of the last {RECORD_WEEKS} weeks with no Head count", head_right=count)
+            else empty(t("calendar.to_record_none", weeks=RECORD_WEEKS)))
+    count = f'<span class="count num">{h(tn("calendar.services", len(rows)))}</span>' if rows else ""
+    return panel("to-record", t("calendar.to_record"), body,
+                 meta=h(t("calendar.to_record_meta", weeks=RECORD_WEEKS)), head_right=count)
 
 
 def calendar_page(req):
@@ -288,21 +307,20 @@ def calendar_page(req):
     else:
         mode, first = "week", parse_week(req.query.get("week"), today)
         last = day_step(first, 6) or _dt.date.max  # the last week stops on Friday 9999-12-31
-        scope = f"Week {first.strftime('%d/%m')} – {last.strftime('%d/%m/%Y')}"
+        scope = t("calendar.scope_week", first=first.strftime("%d/%m"), last=last.strftime("%d/%m/%Y"))
     items = cal.items_between(conn, first, last)
     services = sum(1 for it in items if it["kind"] == "Service")
-    finding = h(" · ".join((scope, ui.plural(len(items), "Calendar item", "Calendar items"),
-                            ui.plural(services, "Service", "Services"))))
+    finding = h(" · ".join((scope, tn("calendar.items", len(items)), tn("calendar.services", services))))
     agenda = _agenda(items, first, last, today, every_day=mode != "month")
     if not agenda:
-        agenda = empty(f"Nothing on the Calendar in {scope}.")
+        agenda = empty(t("calendar.nothing_in", scope=scope))
     main = (f'<section class="panel list-panel agenda" data-panel="calendar-list" aria-label="{h(scope)}">'
             f"{agenda}</section>")
     body = (_toolbar(mode, first, today)
             + f'<div class="grid calendar"><div class="span-8 stack">{main}</div>'
             f'<div class="side-4 stack">{_to_record_panel(conn, today)}</div></div>')
-    actions = ui.link_button("Add a Calendar item", "/calendar/new", "primary")
-    return Response.html(ui.page("Calendar", body, "calendar", sub=finding, actions=actions))
+    actions = ui.link_button(t("calendar.add"), "/calendar/new", "primary")
+    return Response.html(ui.page(t("calendar.title"), body, "calendar", sub=finding, actions=actions))
 
 
 # ---------------------------------------------------------------- /calendar/new
@@ -319,36 +337,36 @@ def _new_form(req, values=None, error=None, status=200):
     conn = req.conn
     v = (values or {}).get
     errors = _errors(error, "new")
-    persons = [("", "— Choose a Person —")] + [(p["id"], p["full_name"]) for p in people.list_persons(conn)]
-    families = [("", "— or a Family —")] + [(f["id"], f["name"]) for f in people.list_families(conn)]
+    families = [("", t("calendar.or_family"))] + [(f["id"], f["name"]) for f in people.list_families(conn)]
     inner = (
-        ui.select_field("Kind", "kind", [(k, k) for k in CALENDAR_KINDS], selected=v("kind", "Service"),
+        ui.select_field(t("calendar.kind"), "kind", _kind_options(CALENDAR_KINDS), selected=v("kind", "Service"),
                         error=errors.get("kind"))
-        + ui.field("Title", "title", v("title", ""), error=errors.get("title"), autocomplete="off", lang="vi",
-                   hint="For a Visit it may stay empty: it becomes “Visit” and the name.")
+        + ui.field(t("calendar.title_label"), "title", v("title", ""), error=errors.get("title"), autocomplete="off",
+                   lang="vi", hint=t("calendar.title_hint"))
         + '<div class="inline-fields two">'
-        + ui.field("Starts at", "starts_at", v("starts_at") or _start_value(req), type="datetime-local",
+        + ui.field(t("calendar.starts_at"), "starts_at", v("starts_at") or _start_value(req), type="datetime-local",
                    required=True, error=errors.get("starts_at"))
-        + ui.field("Ends at", "ends_at", v("ends_at", ""), type="datetime-local", error=errors.get("ends_at"),
-                   hint="Optional.")
+        + ui.field(t("calendar.ends_at"), "ends_at", v("ends_at", ""), type="datetime-local",
+                   error=errors.get("ends_at"), hint=t("calendar.optional"))
         + "</div>"
-        + ui.field("Place", "place", v("place", ""), autocomplete="off", lang="vi")
-        + ui.textarea_field("Note", "note", v("note", ""), lang="vi", rows=2)
+        + ui.field(t("calendar.place"), "place", v("place", ""), autocomplete="off", lang="vi")
+        + ui.textarea_field(t("calendar.note"), "note", v("note", ""), lang="vi", rows=2)
         + '<div class="inline-fields two">'
-        + ui.select_field("Repeat", "repeat", REPEATS, selected=v("repeat", "none"), error=errors.get("repeat"))
-        + ui.field("Repeat until", "repeat_until", v("repeat_until", ""), type="date",
-                   error=errors.get("repeat_until"), hint="The last day, included.")
+        + ui.select_field(t("calendar.repeat"), "repeat", [(value, t(key)) for value, key in REPEATS],
+                          selected=v("repeat", "none"), error=errors.get("repeat"))
+        + ui.field(t("calendar.repeat_until"), "repeat_until", v("repeat_until", ""), type="date",
+                   error=errors.get("repeat_until"), hint=t("calendar.until_hint"))
         + "</div>"
-        + '<fieldset class="group"><legend>For a Visit only</legend><div class="inline-fields two">'
-        + ui.select_field("Person", "person_id", persons, selected=v("person_id", ""), lang="vi",
+        + f'<fieldset class="group"><legend>{h(t("calendar.visit_only"))}</legend><div class="inline-fields two">'
+        + ui.select_field(t("calendar.person"), "person_id", _persons(conn), selected=v("person_id", ""), lang="vi",
                           error=errors.get("person_id"))
-        + ui.select_field("Family", "family_id", families, selected=v("family_id", ""), lang="vi",
+        + ui.select_field(t("calendar.family"), "family_id", families, selected=v("family_id", ""), lang="vi",
                           error=errors.get("family_id"))
-        + '</div><p class="hint">A Visit is for one Person or one Family. It does not repeat.</p></fieldset>'
-        + form_error(errors) + ui.button("Add to the Calendar")
+        + f'</div><p class="hint">{h(t("calendar.visit_hint"))}</p></fieldset>'
+        + form_error(errors) + ui.button(t("calendar.add_button"))
     )
     body = f'<section class="panel narrow">{ui.form("/calendar/new", inner)}</section>'
-    return Response.html(ui.page("Add a Calendar item", body, "calendar"), status)
+    return Response.html(ui.page(t("calendar.add"), body, "calendar"), status)
 
 
 def new_page(req):
@@ -358,24 +376,24 @@ def new_page(req):
 def add_calendar_item_from_form(conn, form):
     """Add a Calendar item (or its repeat) from the Add a Calendar item form: the one place of its rules,
     for this page and the Hermes door. ``form`` has ``.get``. Returns the list of new Calendar item ids;
-    a refused value raises ``ValueError`` with the sentence the form shows."""
+    a refused value raises ``ValueError`` (a ``TextError``: ``str()`` is the English sentence)."""
     f = form
     kind = f.get("kind") or ""
     if kind not in CALENDAR_KINDS:
-        raise ValueError(f"Kind must be one of: {', '.join(CALENDAR_KINDS)}.")
-    starts = form_datetime(f.get("starts_at"), "Starts at")
+        raise TextError("calendar.err_kind")
+    starts = form_datetime(f.get("starts_at"), "calendar.starts_at")
     if starts is None:
-        raise ValueError("Starts at is required.")
-    ends = form_datetime(f.get("ends_at"), "Ends at")
+        raise TextError("errors.required", label="calendar.starts_at")
+    ends = form_datetime(f.get("ends_at"), "calendar.ends_at")
     if ends is not None and ends < starts:
-        raise ValueError("Ends at cannot be before Starts at.")
+        raise TextError("calendar.err_ends_before")
     repeat = f.get("repeat") or "none"
     until = (f.get("repeat_until") or "").strip() or None
     person_id = f.get("person_id") or None
     family_id = f.get("family_id") or None
     if kind == "Visit":
         if repeat != "none" or until:
-            raise ValueError("Repeat: a Visit does not repeat. Plan each Visit on its own.")
+            raise TextError("calendar.err_visit_repeat")
         with transaction(conn):
             iid = care.plan_visit(conn, starts, person_id=person_id, family_id=family_id,
                                   title=f.get("title"), note=f.get("note"))
@@ -383,8 +401,7 @@ def add_calendar_item_from_form(conn, form):
                 cal.update_calendar_item(conn, iid, ends_at=ends, place=f.get("place"))
         return [iid]
     if person_id or family_id:
-        raise ValueError("Person: a Person or a Family is only for a Visit. Choose kind Visit, "
-                         "or leave Person and Family empty.")
+        raise TextError("calendar.err_not_visit")
     return cal.add_calendar_item(conn, kind, f.get("title"), starts, ends, f.get("place"), f.get("note"),
                                  repeat, until)
 
@@ -395,13 +412,13 @@ def new_post(req):
     try:
         ids = add_calendar_item_from_form(conn, f)
     except ValueError as exc:
-        return _new_form(req, f, ("new", str(exc)), 400)
+        return _new_form(req, f, ("new", exc), 400)
     if len(ids) == 1:
         first = cal.get_calendar_item(conn, ids[0])
-        msg = f"{first['kind']} added on {ui.fmt_datetime(first['starts_at'])}."
+        msg = t("calendar.added_one", kind=ui.calendar_kind(first["kind"]), when=ui.fmt_datetime(first["starts_at"]))
     else:
-        word = "week" if f.get("repeat") == "weekly" else "month"
-        msg = f"{len(ids)} Calendar items added: every {word} until {ui.fmt_date(f['repeat_until'].strip())}."
+        key = "calendar.added_weekly" if f.get("repeat") == "weekly" else "calendar.added_monthly"
+        msg = t(key, n=len(ids), until=ui.fmt_date(f["repeat_until"].strip()))
     return Response.redirect(ui.url(f"/calendar/{ids[0]}", msg=msg))
 
 
@@ -409,11 +426,11 @@ def new_post(req):
 
 def _details_panel(conn, row):
     iid = row["id"]
-    rows = [("Kind", _kind(row["kind"])),
-            ("Starts at", num(f"{ui.fmt_weekday(row['starts_at'])} {ui.fmt_datetime(row['starts_at'])}")),
-            ("Ends at", num(ui.fmt_datetime(row["ends_at"])) if row["ends_at"] else ui.DASH),
-            ("Place", vi(row["place"])),
-            ("Note", vi(row["note"]))]
+    rows = [(t("calendar.kind"), _kind(row["kind"])),
+            (t("calendar.starts_at"), num(f"{ui.fmt_weekday(row['starts_at'])} {ui.fmt_datetime(row['starts_at'])}")),
+            (t("calendar.ends_at"), num(ui.fmt_datetime(row["ends_at"])) if row["ends_at"] else ui.DASH),
+            (t("calendar.place"), vi(row["place"])),
+            (t("calendar.note"), vi(row["note"]))]
     if row["kind"] == "Visit":
         if row["visit_person_id"] is not None:
             who = person_link(row["visit_person_id"], people.get_person(conn, row["visit_person_id"])["full_name"])
@@ -422,12 +439,15 @@ def _details_panel(conn, row):
             who = family_link(row["visit_family_id"], fam["name"])
         else:
             who = ui.DASH
-        rows.append(("For", who))
+        rows.append((t("calendar.for"), who))
         if row["visit_done"]:
-            rows.append(("Visit", f'Done on <span class="num">{h(ui.fmt_date(row["visit_done_date"]))}</span>'))
-            rows.append(("Care note", vi(row["care_note"])))
+            rows.append((t("core.kind_visit"),
+                         ui.t_html("calendar.done_on",
+                                   date=f'<span class="num">{h(ui.fmt_date(row["visit_done_date"]))}</span>')))
+            rows.append((t("calendar.care_note"), vi(row["care_note"])))
         else:
-            rows.append(("Visit", 'Not done yet.<span class="no-print"> <a href="/care">Mark it done in Care</a></span>'))
+            rows.append((t("core.kind_visit"), f'{h(t("calendar.not_done_yet"))}<span class="no-print"> '
+                                               f'<a href="/care">{h(t("calendar.mark_done_in_care"))}</a></span>'))
     if row["series_id"] is not None:
         series = cal.series_items(conn, row["series_id"])
         k = next(i for i, s in enumerate(series) if s["id"] == iid)
@@ -436,11 +456,13 @@ def _details_panel(conn, row):
             links.append(f'<a href="/calendar/{series[k - 1]["id"]}">‹ {h(ui.fmt_date(series[k - 1]["starts_at"]))}</a>')
         if k < len(series) - 1:
             links.append(f'<a href="/calendar/{series[k + 1]["id"]}">{h(ui.fmt_date(series[k + 1]["starts_at"]))} ›</a>')
-        rows.append(("Repeat", f'<span class="num">{k + 1} of {len(series)}</span>, until '
-                               f'<span class="num">{h(ui.fmt_date(series[-1]["starts_at"]))}</span>'
-                               + (f'<br><span class="series-links">{" · ".join(links)}</span>' if links else "")))
+        position = ui.t_html("calendar.repeat_pos",
+                             pos=f'<span class="num">{h(t("calendar.k_of_n", k=k + 1, n=len(series)))}</span>',
+                             until=f'<span class="num">{h(ui.fmt_date(series[-1]["starts_at"]))}</span>')
+        rows.append((t("calendar.repeat"),
+                     position + (f'<br><span class="series-links">{" · ".join(links)}</span>' if links else "")))
     body = '<dl class="kv">' + "".join(f"<div><dt>{h(k)}</dt><dd>{v}</dd></div>" for k, v in rows) + "</dl>"
-    return panel("details", "Details", body)
+    return panel("details", t("calendar.details"), body)
 
 
 def _edit_panel(row, error, vals):
@@ -450,73 +472,73 @@ def _edit_panel(row, error, vals):
         "ends_at": input_datetime(row["ends_at"]), "place": row["place"] or "", "note": row["note"] or "",
     }.get(key, default))
     if row["kind"] == "Visit":
-        kind_field = '<p class="hint">Kind: Visit. A Visit keeps its kind.</p>'
+        kind_field = f'<p class="hint">{h(t("calendar.visit_keeps_kind"))}</p>'
     else:
-        kind_field = ui.select_field("Kind", "kind", [(k, k) for k in CALENDAR_KINDS if k != "Visit"],
+        kind_field = ui.select_field(t("calendar.kind"), "kind", _kind_options(k for k in CALENDAR_KINDS if k != "Visit"),
                                      selected=v("kind", row["kind"]), id="edit-kind", error=errors.get("kind"))
     inner = (
         kind_field
-        + ui.field("Title", "title", v("title", ""), id="edit-title", required=True, lang="vi", autocomplete="off",
-                   error=errors.get("title"))
-        + ui.field("Starts at", "starts_at", v("starts_at", ""), type="datetime-local", id="edit-starts",
+        + ui.field(t("calendar.title_label"), "title", v("title", ""), id="edit-title", required=True, lang="vi",
+                   autocomplete="off", error=errors.get("title"))
+        + ui.field(t("calendar.starts_at"), "starts_at", v("starts_at", ""), type="datetime-local", id="edit-starts",
                    required=True, error=errors.get("starts_at"))
-        + ui.field("Ends at", "ends_at", v("ends_at", ""), type="datetime-local", id="edit-ends",
-                   error=errors.get("ends_at"), hint="Optional.")
-        + ui.field("Place", "place", v("place", ""), id="edit-place", lang="vi", autocomplete="off")
-        + ui.textarea_field("Note", "note", v("note", ""), id="edit-note", lang="vi", rows=2)
-        + form_error(errors) + ui.button("Save")
+        + ui.field(t("calendar.ends_at"), "ends_at", v("ends_at", ""), type="datetime-local", id="edit-ends",
+                   error=errors.get("ends_at"), hint=t("calendar.optional"))
+        + ui.field(t("calendar.place"), "place", v("place", ""), id="edit-place", lang="vi", autocomplete="off")
+        + ui.textarea_field(t("calendar.note"), "note", v("note", ""), id="edit-note", lang="vi", rows=2)
+        + form_error(errors) + ui.button(t("core.btn_save"))
     )
     form = ui.form(f"/calendar/{row['id']}/edit", inner)
-    hint = ('<p class="hint">Only this Calendar item changes, not the rest of its repeat.</p>'
-            if row["series_id"] is not None else "")
-    return panel("edit", "Edit", hint + change_box("Edit this Calendar item", form, bool(errors)))
+    hint = (f'<p class="hint">{h(t("calendar.only_this"))}</p>' if row["series_id"] is not None else "")
+    return panel("edit", t("core.btn_edit"), hint + change_box(t("calendar.edit_this"), form, bool(errors)))
 
 
 def _people_panel(conn, row, error, vals, today):
     iid = row["id"]
     listed = cal.item_people(conn, iid)
-    errors = field_errors(error, "people", {"person_id": "Person", "part": "Part"})
+    errors = placed_errors(error, "people", {"person_id": "calendar.person", "part": "calendar.part"})
     past = row["starts_at"][:10] < today
+    remove = h(t("calendar.remove"))
     lines = "".join(
         '<li class="row" data-row>'
         f'<span class="what wrap">{clamp2(person_link(p["person_id"], p["full_name"]), p["full_name"])}</span>'
-        f'{ui.row_side([h(PART_WORDS[p["part"]])], [PART_WORDS[p["part"]]])}'
+        f'{ui.row_side([h(_part(p["part"]))], [_part(p["part"])])}'
         f'<form class="row-form" action="/calendar/{iid}/people/remove" method="post">'
         f'{ui.hidden("person_id", p["person_id"])}{ui.hidden("part", p["part"])}'
-        f'<button class="link-btn" type="submit" aria-label="Remove {h(p["full_name"])} ({h(PART_WORDS[p["part"]])})">'
-        "Remove</button></form></li>"
+        f'<button class="link-btn" type="submit" '
+        f'aria-label="{h(t("calendar.remove_label", name=p["full_name"], part=_part(p["part"])))}">'
+        f"{remove}</button></form></li>"
         for p in listed
     )
-    body = f'<ul class="rows">{lines}</ul>' if listed else empty("No one is listed yet.")
+    body = f'<ul class="rows">{lines}</ul>' if listed else empty(t("calendar.no_one"))
     if past and listed:
-        body += '<p class="hint">This Calendar item is in the past. Taking a Person off asks you first.</p>'
-    persons = [("", "— Choose a Person —")] + [(p["id"], p["full_name"]) for p in people.list_persons(conn)]
+        body += f'<p class="hint">{h(t("calendar.past_hint"))}</p>'
     form = ui.form(f"/calendar/{iid}/people", (
         '<div class="add-person">'
-        + ui.select_field("Person", "person_id", persons, selected=vals.get("person_id", ""), id="add-person",
-                          lang="vi", error=errors.get("person_id"))
-        + ui.select_field("Part", "part", [("serves", "Serves"), ("joins", "Joins")],
+        + ui.select_field(t("calendar.person"), "person_id", _persons(conn), selected=vals.get("person_id", ""),
+                          id="add-person", lang="vi", error=errors.get("person_id"))
+        + ui.select_field(t("calendar.part"), "part", [(part, _part(part)) for part in ("serves", "joins")],
                           selected=vals.get("part", "serves"), id="add-part", error=errors.get("part"))
-        + ui.button("Add", "secondary") + "</div>" + form_error(errors)))
+        + ui.button(t("core.btn_add"), "secondary") + "</div>" + form_error(errors)))
     form = f'<div class="add-form">{form}</div>'
     serves = sum(1 for p in listed if p["part"] == "serves")
-    meta = f"Serves {serves} · Joins {len(listed) - serves}"
-    return panel("people", "People who serve or join", body + form, meta=meta)
+    meta = h(t("calendar.people_meta", serves=serves, joins=len(listed) - serves))
+    return panel("people", t("calendar.people"), body + form, meta=meta)
 
 
 def _head_count_panel(conn, row, error, vals, today):
     iid = row["id"]
     hc = cal.get_head_count(conn, iid)
-    errors = field_errors(error, "head-count", {"count": "Head count", "absent_note": "Absent"})
+    errors = placed_errors(error, "head-count", {"count": "calendar.head_count", "absent_note": "calendar.absent"})
     if hc is not None:
         absent = (f'<p class="absent" lang="vi">{h(hc["absent_note"])}</p>' if hc["absent_note"]
-                  else '<p class="absent faint">No note about who was absent.</p>')
-        current = (f'<div class="kpi" data-row><span class="kpi-label">Head count</span>'
+                  else f'<p class="absent faint">{h(t("calendar.no_absent_note"))}</p>')
+        current = (f'<div class="kpi" data-row><span class="kpi-label">{h(t("calendar.head_count"))}</span>'
                    f'<span class="kpi-value num">{hc["count"]}</span></div>{absent}')
     else:
         current = ""
     if row["starts_at"][:10] > today:
-        form_html = empty("The Head count can be recorded on the day of the Service or after.")
+        form_html = empty(t("calendar.hc_later"))
         if errors:
             form_html += form_error({"": next(iter(errors.values()))})
     else:
@@ -524,26 +546,27 @@ def _head_count_panel(conn, row, error, vals, today):
             {"count": str(hc["count"]), "absent_note": hc["absent_note"] or ""} if hc else {}).get(key, default))
         form = ui.form(f"/calendar/{iid}/head-count", (
             '<div class="inline-fields">'
-            + ui.field("Head count", "count", v("count", ""), type="number", id="hc-count", min="0", step="1",
-                       required=True, error=errors.get("count"), hint="People at this Service.")
-            + ui.textarea_field("Absent", "absent_note", v("absent_note", ""), id="hc-absent", lang="vi", rows=2,
-                                hint="A note about who was absent. Optional.")
-            + "</div>" + form_error(errors) + ui.button("Save Head count", "secondary")))
-        form_html = change_box("Change Head count", form, bool(errors)) if hc else form
+            + ui.field(t("calendar.head_count"), "count", v("count", ""), type="number", id="hc-count", min="0",
+                       step="1", required=True, error=errors.get("count"), hint=t("calendar.hc_hint"))
+            + ui.textarea_field(t("calendar.absent"), "absent_note", v("absent_note", ""), id="hc-absent", lang="vi",
+                                rows=2, hint=t("calendar.absent_hint"))
+            + "</div>" + form_error(errors) + ui.button(t("calendar.save_hc"), "secondary")))
+        form_html = change_box(t("calendar.change_hc"), form, bool(errors)) if hc else form
     if hc is None and row["starts_at"][:10] <= today and not errors:
-        current = '<p class="hint">No Head count yet.</p>'
-    return f'<div id="head-count">{panel("head-count", "Head count", current + form_html)}</div>'
+        current = f'<p class="hint">{h(t("calendar.no_hc"))}.</p>'
+    return f'<div id="head-count">{panel("head-count", t("calendar.head_count"), current + form_html)}</div>'
 
 
 def _delete_panel(conn, row, error):
-    message = error[1] if error and error[0] == "delete" else None
-    reason = message or cal.delete_refusal(conn, row["id"])  # a read only: no write lock on a page view
+    message = i18n.error_text(error[1]) if error and error[0] == "delete" else None
+    key = None if message else cal.delete_refusal_key(conn, row["id"])  # a read only: no write lock on a page view
+    reason = message or (t(key) if key else None)
     if reason:
         body = f'<p class="{"error" if message else "hint"}" role="{"alert" if message else "note"}">{h(reason)}</p>'
     else:
-        body = (ui.form(f"/calendar/{row['id']}/delete", ui.button("Delete this Calendar item", "danger"))
-                + '<p class="hint">You are asked once more before it goes.</p>')
-    return panel("delete", "Delete", body, cls="no-print")
+        body = (ui.form(f"/calendar/{row['id']}/delete", ui.button(t("calendar.delete_this"), "danger"))
+                + f'<p class="hint">{h(t("calendar.delete_hint"))}</p>')
+    return panel("delete", t("core.btn_delete"), body, cls="no-print")
 
 
 def documents_spot(conn, row):
@@ -567,16 +590,16 @@ def _item_view(req, row, error=None, status=200):
     right = _details_panel(conn, row) + _edit_panel(row, error, vals("edit")) + _delete_panel(conn, row, error)
     body = (f'<div class="grid calendar-item"><div class="span-8 stack">{left}</div>'
             f'<div class="side-4 stack">{right}</div></div>')
-    finding = [row["kind"], f"{ui.fmt_weekday(row['starts_at'])} {ui.fmt_date(row['starts_at'])}",
-               time_span(row["starts_at"], row["ends_at"])]
+    finding = [h(ui.calendar_kind(row["kind"])), h(f"{ui.fmt_weekday(row['starts_at'])} {ui.fmt_date(row['starts_at'])}"),
+               h(time_span(row["starts_at"], row["ends_at"]))]
     if row["place"]:
-        finding.append(row["place"])
+        finding.append(vi(row["place"]))
     if row["kind"] == "Service":
         hc = cal.get_head_count(conn, row["id"])
-        finding.append(f"Head count {hc['count']}" if hc else "No Head count yet")
+        finding.append(h(t("calendar.row_head_count", n=hc["count"]) if hc else t("calendar.no_hc")))
     week = ui.url("/calendar", week=row["starts_at"][:10])
-    actions = ui.link_button("Back to the week", week)
-    return Response.html(ui.page(row["title"], body, "calendar", sub=h(" · ".join(finding)), actions=actions,
+    actions = ui.link_button(t("calendar.back_to_week"), week)
+    return Response.html(ui.page(row["title"], body, "calendar", sub=" · ".join(finding), actions=actions,
                                  lang="vi"), status)
 
 
@@ -585,7 +608,9 @@ def _item_or_none(req):
 
 
 def _missing():
-    return not_found("Calendar item", "/calendar", "Go to the Calendar")
+    body = (f'<p class="lead">{h(t("calendar.not_found_text"))}</p>'
+            f'<p><a href="/calendar">{h(t("calendar.go_to_calendar"))}</a></p>')
+    return Response.html(ui.page(t("calendar.not_found"), body), 404)
 
 
 def item_page(req):
@@ -602,7 +627,7 @@ def _change(req, key, do):
     try:
         result = do(req.conn, row)
     except ValueError as exc:
-        return _item_view(req, cal.get_calendar_item(req.conn, row["id"]) or row, (key, str(exc)), 400)
+        return _item_view(req, cal.get_calendar_item(req.conn, row["id"]) or row, (key, exc), 400)
     if isinstance(result, Response):
         return result
     return Response.redirect(ui.url(f"/calendar/{row['id']}", msg=result))
@@ -611,33 +636,32 @@ def _change(req, key, do):
 def edit_post(req):
     def do(conn, row):
         f = req.form
-        starts = form_datetime(f.get("starts_at"), "Starts at")
+        starts = form_datetime(f.get("starts_at"), "calendar.starts_at")
         if starts is None:
-            raise ValueError("Starts at is required.")
-        ends = form_datetime(f.get("ends_at"), "Ends at")
+            raise TextError("errors.required", label="calendar.starts_at")
+        ends = form_datetime(f.get("ends_at"), "calendar.ends_at")
         if ends is not None and ends < starts:
-            raise ValueError("Ends at cannot be before Starts at.")
+            raise TextError("calendar.err_ends_before")
         if leaves_the_past(row["starts_at"], starts, cal.item_people(conn, row["id"]), today_text()):
-            raise ValueError("Starts at: this Calendar item is in the past and people joined or served it. "
-                             "It cannot move to today or later. Past links are history.")
+            raise TextError("calendar.err_past_move")
         changes = {"title": f.get("title"), "starts_at": starts, "ends_at": ends, "place": f.get("place"),
                    "note": f.get("note")}
         if row["kind"] != "Visit":
             changes["kind"] = f.get("kind") or row["kind"]
         cal.update_calendar_item(conn, row["id"], **changes)
-        return "Calendar item saved."
+        return t("calendar.saved")
     return _change(req, "edit", do)
 
 
 def people_post(req):
     def do(conn, row):
         if not req.form.get("person_id"):
-            raise ValueError("Person: choose a Person.")
+            raise TextError("calendar.err_choose_person")
         part = req.form.get("part") or ""
-        added = cal.add_person_to_item(conn, row["id"], req.form["person_id"], part)
+        added = cal.add_person_to_item(conn, row["id"], req.form["person_id"], part)  # refuses another part
         name = people.get_person(conn, req.form["person_id"])["full_name"]
-        word = PART_WORDS.get(part, part).lower()
-        return f"{name} {word}." if added else f"{name} already {word}. Nothing changed."
+        # calendar.added_serves, calendar.added_joins, calendar.already_serves, calendar.already_joins
+        return t(f"calendar.{'added' if added else 'already'}_{part}", name=name)
     return _change(req, "people", do)
 
 
@@ -645,7 +669,7 @@ def _confirm_page(title, question, action, fields, button_text, back_href):
     inner = "".join(ui.hidden(k, v) for k, v in fields.items()) + ui.hidden("confirm", "yes")
     form = ui.form(action, inner + ui.button(button_text, "danger"))
     body = (f'<section class="panel narrow" data-panel="confirm"><p class="lead">{question}</p>'
-            f'<div class="confirm-actions">{form}{ui.link_button("Cancel", back_href)}</div></section>')
+            f'<div class="confirm-actions">{form}{ui.link_button(t("core.btn_cancel"), back_href)}</div></section>')
     return Response.html(ui.page(title, body, "calendar"))
 
 
@@ -659,47 +683,48 @@ def remove_person_post(req):
         person = people.get_person(conn, f.get("person_id") or "0")
         part = f.get("part") or ""
         if person is None or part not in PART_WORDS:
-            raise ValueError("Person: this Person is not listed here.")
+            raise TextError("calendar.err_not_listed")
         past = row["starts_at"][:10] < today_text()
         if past and f.get("confirm") != "yes":
-            question = (f"Are you sure? Take <strong lang=\"vi\">{h(person['full_name'])}</strong> "
-                        f"({h(PART_WORDS[part])}) off <strong lang=\"vi\">{h(row['title'])}</strong> on "
-                        f"<span class=\"num\">{h(_when(row))}</span>? This Calendar item is in the past, "
-                        "so it leaves this Person's story.")
-            return _confirm_page("Are you sure?", question, f"/calendar/{row['id']}/people/remove",
-                                 {"person_id": person["id"], "part": part}, "Yes, take this Person off",
+            question = ui.t_html("calendar.remove_question",
+                                 name=f'<strong lang="vi">{h(person["full_name"])}</strong>', part=h(_part(part)),
+                                 title=f'<strong lang="vi">{h(row["title"])}</strong>',
+                                 when=f'<span class="num">{h(_when(row))}</span>')
+            return _confirm_page(t("calendar.sure"), question, f"/calendar/{row['id']}/people/remove",
+                                 {"person_id": person["id"], "part": part}, t("calendar.remove_yes"),
                                  f"/calendar/{row['id']}")
         removed = cal.remove_person_from_item(conn, row["id"], person["id"], part)
         if not removed:
-            return f"{person['full_name']} was not listed. Nothing changed."
-        return f"{person['full_name']} is no longer listed ({PART_WORDS[part]})."
+            return t("calendar.not_listed", name=person["full_name"])
+        return t("calendar.removed", name=person["full_name"], part=_part(part))
     return _change(req, "people", do)
 
 
 def head_count_post(req):
     def do(conn, row):
         if row["kind"] != "Service":
-            raise ValueError("Head count: a Head count is only for a Service.")
+            raise TextError("calendar.err_hc_service")
         if row["starts_at"][:10] > today_text():
-            raise ValueError("Head count: this Service has not happened yet. Record it on the day or after.")
+            raise TextError("calendar.err_hc_future")
         count = parse_head_count(req.form.get("count"))
         cal.set_head_count(conn, row["id"], count, req.form.get("absent_note"))
-        return f"Head count {count} saved."
+        return t("calendar.hc_saved", n=count)
     return _change(req, "head-count", do)
 
 
 def delete_post(req):
     def do(conn, row):
         if req.form.get("confirm") != "yes":
-            reason = cal.delete_refusal(conn, row["id"])
-            if reason:
-                raise ValueError(reason)
-            question = (f"Delete <strong lang=\"vi\">{h(row['title'])}</strong> ({h(row['kind'])}) on "
-                        f"<span class=\"num\">{h(_when(row))}</span>? This cannot be undone.")
-            return _confirm_page("Delete this Calendar item?", question, f"/calendar/{row['id']}/delete", {},
-                                 "Yes, delete it", f"/calendar/{row['id']}")
+            key = cal.delete_refusal_key(conn, row["id"])
+            if key:
+                raise TextError(key)
+            question = ui.t_html("calendar.delete_question", title=f'<strong lang="vi">{h(row["title"])}</strong>',
+                                 kind=h(ui.calendar_kind(row["kind"])),
+                                 when=f'<span class="num">{h(_when(row))}</span>')
+            return _confirm_page(t("calendar.delete_title"), question, f"/calendar/{row['id']}/delete", {},
+                                 t("calendar.delete_yes"), f"/calendar/{row['id']}")
         cal.delete_calendar_item(conn, row["id"])
-        msg = f"Deleted {row['title']} ({ui.fmt_datetime(row['starts_at'])})."
+        msg = t("calendar.deleted", title=row["title"], when=ui.fmt_datetime(row["starts_at"]))
         return Response.redirect(ui.url("/calendar", week=row["starts_at"][:10], msg=msg))
     return _change(req, "delete", do)
 
