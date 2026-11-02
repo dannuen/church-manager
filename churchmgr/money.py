@@ -2,6 +2,9 @@
 
 Every amount is a whole number of dong (INTEGER). There are no decimals
 anywhere in money code. Totals use SQL ``SUM`` on INTEGER columns.
+
+A refused value raises a ``TextError`` (a ``ValueError``): ``str()`` is the English sentence (the Hermes
+door and the logs read it); a page shows ``i18n.error_text(e)``. Labels are TEXT keys (``money.*``).
 """
 
 import datetime as _dt
@@ -11,6 +14,7 @@ from . import lists, settings, text
 from .calendar import check_year as _check_year
 from .calendar import month_days as _month_days
 from .db import transaction
+from .i18n import TextError
 
 MAX_AMOUNT = 999_999_999_999_999  # dong; far below the SQLite INTEGER limit
 _SPACES = re.compile(r"\s+")
@@ -18,7 +22,7 @@ _CURRENCY = re.compile(r"^(?:vnđ|vnd|₫|đ)|(?:vnđ|vnd|₫|đ)$", re.IGNORECA
 _PLAIN = re.compile(r"[0-9]+")
 # Thousands split by "." or ",". The first block has no leading zero, so "000.001" is refused.
 _THOUSANDS = re.compile(r"[1-9][0-9]{0,2}(?:\.[0-9]{3})+|[1-9][0-9]{0,2}(?:,[0-9]{3})+")
-_AMOUNT_HELP = "Write a whole number of dong above 0, for example 1250000 or 1.250.000."
+_AMOUNT_HELP = "money.amount_help"  # TEXT key: the sentence at the end of a refused amount
 
 
 # ---------------------------------------------------------------- amounts
@@ -34,38 +38,38 @@ def parse_amount(value):
     if type(value) is int:
         return check_amount(value)
     if not isinstance(value, str):
-        raise ValueError(f"Amount not understood. {_AMOUNT_HELP}")
+        raise TextError("money.err_amount_type", help=_AMOUNT_HELP)
     s = _SPACES.sub("", text.nfc(value))
     s = _CURRENCY.sub("", s)
     if not s:
-        raise ValueError(f"Amount is empty. {_AMOUNT_HELP}")
+        raise TextError("money.err_amount_empty", help=_AMOUNT_HELP)
     if _PLAIN.fullmatch(s):
         digits = s
     elif _THOUSANDS.fullmatch(s):
         digits = s.replace(".", "").replace(",", "")
     else:
-        raise ValueError(f'Amount "{value.strip()}" not understood. No decimals, no minus sign. {_AMOUNT_HELP}')
+        raise TextError("money.err_amount_bad", value=value.strip(), help=_AMOUNT_HELP)
     digits = digits.lstrip("0") or "0"  # leading zeros count too in Python's 4300-digit limit of int()
     if len(digits) > len(str(MAX_AMOUNT)):
-        raise ValueError("Amount is too large.")  # before int(), whose own error text is not for people
+        raise TextError("money.err_amount_large")  # before int(), whose own error text is not for people
     return check_amount(int(digits))
 
 
 def check_amount(amount):
     """Return ``amount`` if it is a whole number of dong from 1 up to the limit, else raise ``ValueError``."""
     if type(amount) is not int:
-        raise ValueError(f"Amount must be a whole number of dong. {_AMOUNT_HELP}")
+        raise TextError("money.err_amount_int", help=_AMOUNT_HELP)
     if amount <= 0:
-        raise ValueError(f"Amount must be above 0. {_AMOUNT_HELP}")
+        raise TextError("money.err_amount_zero", help=_AMOUNT_HELP)
     if amount > MAX_AMOUNT:
-        raise ValueError("Amount is too large.")
+        raise TextError("money.err_amount_large")
     return amount
 
 
 def format_vnd(n):
     """Whole dong as text with dots between thousands: ``1250000 -> "1.250.000 ₫"``."""
     if type(n) is not int:
-        raise ValueError("Only a whole number of dong can be shown as money.")
+        raise TextError("money.err_show_whole")
     sign = "-" if n < 0 else ""
     return f"{sign}{abs(n):,}".replace(",", ".") + " ₫"
 
@@ -76,22 +80,23 @@ def _check_month(month):
     if isinstance(month, str) and month.strip().isascii() and month.strip().isdigit():
         month = int(month.strip())
     if type(month) is not int or not 1 <= month <= 12:
-        raise ValueError("Month must be a whole number from 1 to 12.")
+        raise TextError("money.err_month")
     return month
 
 
 def _date_range(start, end):
-    first = text.check_date(start, "Start date")
-    last = text.check_date(end, "End date")
+    first = text.check_date(start, "money.start_date")
+    last = text.check_date(end, "money.end_date")
     if last < first:
-        raise ValueError("The end date is before the start date.")
+        raise TextError("money.err_end_before_start")
     return first, last
 
 
 def _require(conn, table, row_id, what):
+    """The id of an existing row of ``table``; ``what`` is the TEXT key of its name (``money.offering``)."""
     rid = text.to_id(row_id, what)
     if conn.execute(f"SELECT 1 FROM {table} WHERE id = ?", (rid,)).fetchone() is None:
-        raise ValueError(f"No {what} with id {rid}.")
+        raise TextError("money.err_no_id", what=what, id=rid)
     return rid
 
 
@@ -112,7 +117,7 @@ def _sum(conn, sql, params):
 def _money_date(value):
     """The date of an Offering or Expense as ``YYYY-MM-DD``: a real date with a year from 1900 to
     9999 (:func:`text.check_date_years`, shared with a Sent document)."""
-    return text.check_date_years(value, "Date")
+    return text.check_date_years(value, "money.date")
 
 
 def _offering_values(conn, date, amount, fund_id, giver_person_id, giver_family_id, note):
@@ -123,10 +128,10 @@ def _offering_values(conn, date, amount, fund_id, giver_person_id, giver_family_
     has_person = giver_person_id not in (None, "")
     has_family = giver_family_id not in (None, "")
     if has_person and has_family:
-        raise ValueError("An Offering has one Giver: a Person or a Family, not both.")
+        raise TextError("money.err_two_givers")
     fund = lists.require_item(conn, fund_id, "fund")["id"]
-    pid = _require(conn, "person", giver_person_id, "Person") if has_person else None
-    fid = _require(conn, "family", giver_family_id, "Family") if has_family else None
+    pid = _require(conn, "person", giver_person_id, "money.person") if has_person else None
+    fid = _require(conn, "family", giver_family_id, "money.family") if has_family else None
     return day, amount, fund, pid, fid, text.clean_text(note)
 
 
@@ -156,7 +161,7 @@ def update_offering(conn, offering_id, *, date, amount, fund_id, giver_person_id
     """Correct an Offering in place: every column is set again, with the same checks as
     :func:`add_offering`. ``created_at`` is kept. A missing id raises ``ValueError``."""
     with transaction(conn):
-        oid = _require(conn, "offering", offering_id, "Offering")
+        oid = _require(conn, "offering", offering_id, "money.offering")
         values = _offering_values(conn, date, amount, fund_id, giver_person_id, giver_family_id, note)
         conn.execute(
             "UPDATE offering SET date = ?, amount = ?, fund_id = ?, giver_person_id = ?, giver_family_id = ?, "
@@ -168,7 +173,7 @@ def update_offering(conn, offering_id, *, date, amount, fund_id, giver_person_id
 def delete_offering(conn, offering_id):
     """Delete one Offering (a mistake). A missing id raises ``ValueError``."""
     with transaction(conn):
-        oid = _require(conn, "offering", offering_id, "Offering")
+        oid = _require(conn, "offering", offering_id, "money.offering")
         conn.execute("DELETE FROM offering WHERE id = ?", (oid,))
 
 
@@ -186,7 +191,7 @@ def add_expense(conn, date, amount, spending_category_id, note=None):
 def update_expense(conn, expense_id, *, date, amount, spending_category_id, note=None):
     """Correct an Expense in place, with the same checks as :func:`add_expense`. ``created_at`` is kept."""
     with transaction(conn):
-        eid = _require(conn, "expense", expense_id, "Expense")
+        eid = _require(conn, "expense", expense_id, "money.expense")
         values = _expense_values(conn, date, amount, spending_category_id, note)
         conn.execute("UPDATE expense SET date = ?, amount = ?, spending_category_id = ?, note = ? WHERE id = ?",
                      (*values, eid))
@@ -195,7 +200,7 @@ def update_expense(conn, expense_id, *, date, amount, spending_category_id, note
 def delete_expense(conn, expense_id):
     """Delete one Expense (a mistake). A missing id raises ``ValueError``."""
     with transaction(conn):
-        eid = _require(conn, "expense", expense_id, "Expense")
+        eid = _require(conn, "expense", expense_id, "money.expense")
         conn.execute("DELETE FROM expense WHERE id = ?", (eid,))
 
 
@@ -214,12 +219,12 @@ _EXPENSE_SELECT = (
 
 def get_offering(conn, offering_id):
     """One Offering with the columns of :func:`list_offerings`, or ``None``."""
-    return conn.execute(_OFFERING_SELECT + "WHERE o.id = ?", (text.to_id(offering_id, "Offering"),)).fetchone()
+    return conn.execute(_OFFERING_SELECT + "WHERE o.id = ?", (text.to_id(offering_id, "money.offering"),)).fetchone()
 
 
 def get_expense(conn, expense_id):
     """One Expense with the columns of :func:`list_expenses`, or ``None``."""
-    return conn.execute(_EXPENSE_SELECT + "WHERE e.id = ?", (text.to_id(expense_id, "Expense"),)).fetchone()
+    return conn.execute(_EXPENSE_SELECT + "WHERE e.id = ?", (text.to_id(expense_id, "money.expense"),)).fetchone()
 
 
 def list_offerings(conn, start, end):
@@ -275,18 +280,18 @@ def giving_statement(conn, year, person_id=None, family_id=None):
     has_person = person_id not in (None, "")
     has_family = family_id not in (None, "")
     if has_person == has_family:
-        raise ValueError("A Giving statement is for one Person or one Family: give exactly one of them.")
+        raise TextError("money.err_statement_giver")
     params = {"start": f"{year:04d}-01-01", "end": f"{year:04d}-12-31"}
     if has_person:
-        params["pid"] = text.to_id(person_id, "Person")
+        params["pid"] = text.to_id(person_id, "money.person")
         giver = conn.execute("SELECT full_name AS name FROM person WHERE id = :pid", params).fetchone()
         where, kind, giver_id = "o.giver_person_id = :pid", "person", params["pid"]
     else:
-        params["fid"] = text.to_id(family_id, "Family")
+        params["fid"] = text.to_id(family_id, "money.family")
         giver = conn.execute("SELECT name FROM family WHERE id = :fid", params).fetchone()
         where, kind, giver_id = _FAMILY_WHERE, "family", params["fid"]
     if giver is None:
-        raise ValueError(f"No {kind.title()} with id {giver_id}.")
+        raise TextError("money.err_no_id", what=f"money.{kind}", id=giver_id)
     base = f"FROM offering o WHERE o.date BETWEEN :start AND :end AND {where}"
     rows = conn.execute(
         "SELECT o.date, li.name AS fund, o.amount, COALESCE(p.full_name, f.name) AS given_by "
