@@ -1,25 +1,34 @@
-"""Cards HD1 and HD2: the Hermes door Setting, the read commands and the write commands of
-``python -m churchmgr.agent``.
+"""Cards HD1, HD2 and HD3: the Hermes door Setting, the read commands and the write commands of
+``python -m churchmgr.agent``; the app without the agent module; AGENTS.md and the Hermes skill.
 
 Fake churches in temp folders only. Every agent run names ``--copy`` and ``--copies-root``.
 """
 
 import argparse
+import ast
 import contextlib
 import datetime as dt
 import hashlib
+import http.client
 import inspect
 import io
 import json
 import os
 import pathlib
 import re
+import shutil
+import socket
 import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
+
+_TESTS = str(pathlib.Path(__file__).resolve().parent)
+if _TESTS not in sys.path:  # so `python -m unittest tests.test_agent` finds _support as well
+    sys.path.insert(0, _TESTS)
 
 import _support  # noqa: F401 - puts the repo root on sys.path
 from churchmgr import agent, care, db, fake, lists, money, paths, people, schema, settings, ui
@@ -841,6 +850,159 @@ class WriteRulesInOnePlaceTest(unittest.TestCase):
             self.assertIn(f"{name}(", source, handler.__name__)
             for code in moved:
                 self.assertNotIn(code, source, (handler.__name__, code))
+
+
+# ---------------------------------------------------------------- card HD3: the app needs no agent; the guide
+
+SKILL = ROOT / "hermes" / "skills" / "church-manager" / "SKILL.md"
+APP_PAGES = ("/", "/settings", "/people", "/calendar", "/money", "/care")
+
+
+def free_port():
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def http_status(port, path):
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+    try:
+        conn.request("GET", path)
+        resp = conn.getresponse()
+        resp.read()
+        return resp.status
+    finally:
+        conn.close()
+
+
+class AppWithoutAgentTest(unittest.TestCase):
+    """Church Manager runs the same when churchmgr/agent.py is not there at all."""
+
+    @staticmethod
+    def stop(proc):
+        if proc.poll() is None:
+            proc.terminate()
+        proc.wait(timeout=30)
+
+    def test_the_app_starts_and_serves_its_pages_without_agent_py(self):
+        work = _support.temp_folder(self)
+        app_dir = work / "app"
+        app_dir.mkdir()
+        shutil.copy2(ROOT / "app.py", app_dir / "app.py")
+        shutil.copytree(ROOT / "churchmgr", app_dir / "churchmgr",
+                        ignore=shutil.ignore_patterns("agent.py", "__pycache__"))
+        shutil.copytree(ROOT / "web", app_dir / "web", ignore=shutil.ignore_patterns("__pycache__"))
+        self.assertFalse((app_dir / "churchmgr" / "agent.py").exists())
+        self.assertEqual(list(app_dir.rglob("__pycache__")), [])
+        copies = work / "copies"
+        fake.build_fake_church(copies / "church1", people=20)
+        env = {k: v for k, v in os.environ.items() if k not in (paths.ENV_COPY, paths.ENV_HOME, "PYTHONPATH")}
+
+        # the copy really has no agent: python finds churchmgr in app_dir, and churchmgr.agent nowhere
+        proc = subprocess.run([sys.executable, "-m", "churchmgr.agent", "status"], cwd=app_dir, env=env,
+                              capture_output=True, timeout=60)
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+        self.assertIn(b"No module named churchmgr.agent", proc.stderr)
+
+        port, log_path = free_port(), work / "app.log"
+        with log_path.open("wb") as log:  # a file, not a pipe: the child's output never blocks it
+            proc = subprocess.Popen([sys.executable, "-u", "app.py", "--copy", str(copies / "church1"),
+                                     "--copies-root", str(copies), "--port", str(port), "--no-browser"],
+                                    cwd=app_dir, env=env, stdout=log, stderr=subprocess.STDOUT)
+        self.addCleanup(self.stop, proc)  # runs before the temp folder is removed
+
+        def log_text():
+            return log_path.read_text(encoding="utf-8", errors="replace")
+
+        deadline = time.monotonic() + 30
+        while True:
+            if proc.poll() is not None:
+                self.fail(f"app.py stopped with exit code {proc.returncode}: {log_text()}")
+            try:
+                http_status(port, "/")
+                break
+            except OSError:
+                if time.monotonic() > deadline:
+                    self.fail(f"app.py did not answer within 30 seconds: {log_text()}")
+                time.sleep(0.2)
+        statuses = {path: http_status(port, path) for path in APP_PAGES}
+        self.assertEqual(statuses, dict.fromkeys(APP_PAGES, 200), log_text())
+        self.assertIn(f"Church Manager is running at http://127.0.0.1:{port}", log_text())
+        self.stop(proc)
+
+
+class NoImportOfTheAgentTest(unittest.TestCase):
+    """No file of churchmgr/ but agent.py imports the agent. The code is read with ast, so a docstring that
+    names the command ``python -m churchmgr.agent`` (pages/settings.py has one) is not an import."""
+
+    @staticmethod
+    def agent_imports(source):
+        """The names in ``source`` that import the agent module."""
+        found = []
+        for node in ast.walk(ast.parse(source)):
+            if isinstance(node, ast.Import):
+                names = [a.name for a in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                base = "." * node.level + (node.module or "")
+                names = [base] + [f"{base}.{a.name}" for a in node.names]
+            elif isinstance(node, ast.Call) and getattr(node.func, "attr", getattr(node.func, "id", None)) in (
+                    "import_module", "__import__"):
+                names = [a.value for a in node.args if isinstance(a, ast.Constant) and isinstance(a.value, str)]
+            else:
+                continue
+            found += [name for name in names if "agent" in re.split(r"\.+", name)]
+        return found
+
+    def test_the_finder_sees_every_way_to_import_it(self):
+        for code in ("from . import agent", "from .. import db, agent", "from .agent import run", "import churchmgr.agent",
+                     "import churchmgr.agent as door", "from churchmgr import agent", "from churchmgr.agent import main",
+                     "importlib.import_module('churchmgr.agent')", "__import__('churchmgr.agent')",
+                     "def later():\n    from . import agent\n"):
+            self.assertTrue(self.agent_imports(code), code)
+        for code in ('"""Run python -m churchmgr.agent."""', "# from . import agent", "from . import agents_page",
+                     "agent = 1", "from .pages import care"):
+            self.assertEqual(self.agent_imports(code), [], code)
+
+    def test_no_module_but_agent_py_imports_the_agent(self):
+        door = ROOT / "churchmgr" / "agent.py"
+        files = [p for p in sorted((ROOT / "churchmgr").rglob("*.py")) if p != door]
+        self.assertIn(ROOT / "churchmgr" / "pages" / "settings.py", files)
+        sources = {p.relative_to(ROOT).as_posix(): p.read_text(encoding="utf-8") for p in files}
+        self.assertEqual({name: hits for name, src in sources.items() if (hits := self.agent_imports(src))}, {})
+        # plain text too: "import agent" is also in "from . import agent" and "from churchmgr import agent"
+        self.assertEqual([name for name, src in sources.items() if "import agent" in src], [])
+
+
+class GuideTest(unittest.TestCase):
+    """AGENTS.md and the Hermes skill exist, and the skill keeps up with the agent's parser."""
+
+    def skill(self):
+        return SKILL.read_text(encoding="utf-8")
+
+    def test_agents_md_and_the_skill_exist(self):
+        agents_md = ROOT / "AGENTS.md"
+        self.assertTrue(agents_md.is_file())
+        self.assertLessEqual(len(agents_md.read_text(encoding="utf-8").splitlines()), 80)
+        self.assertTrue(SKILL.is_file())
+        text = self.skill()
+        self.assertTrue(text.startswith("---\n"), text[:40])
+        head = text[4:].split("\n---\n", 1)[0].splitlines()
+        self.assertIn("name: church-manager", head)
+        self.assertTrue([line for line in head if line.startswith(
+            "description: Use when the pastor asks about Church Manager data (people, Family, calendar, Offering, "
+            "Expense, Visits)")], head)
+
+    def test_the_skill_shows_every_command_and_names_no_flag_the_code_lacks(self):
+        text = self.skill()
+        sub = next(a for a in agent.build_parser()._actions if isinstance(a, argparse._SubParsersAction))
+        self.assertEqual(set(sub.choices), {argv[0] for argv in READ_COMMANDS} | set(WRITE_NAMES))
+        missing = [name for name in sub.choices
+                   if not re.search(rf"`python -m churchmgr\.agent {re.escape(name)}(?![\w-])", text)]
+        self.assertEqual(missing, [])  # each command has an example
+        flags = {s for command in sub.choices.values() for a in command._actions for s in a.option_strings}
+        self.assertEqual(sorted(set(re.findall(r"(?<![\w-])--[a-z][a-z-]*", text)) - flags), [])
+        self.assertEqual([code for code in agent.EXIT if f"`{code}`" not in text], [])  # every error code
+        self.assertIn("Save this? yes or no", text)
 
 
 if __name__ == "__main__":

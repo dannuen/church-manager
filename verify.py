@@ -8,6 +8,10 @@
 3. Starts the real server on 127.0.0.1 and checks the 6 Dashboard panels and Search.
 4. Makes a Handover through the app (POST /copies/handover) and proves the zip has no Private notes.
 5. Checks the Giving statement of one Person and one Family has no Private note.
+   Then checks the Hermes door (``python -m churchmgr.agent``): with the door off, ``status`` stops with
+   exit 3; the door is turned on through the app (POST /settings); ``status``, ``search``, ``person``,
+   ``care-due`` and ``money`` answer ok; a dry run of ``add-person`` saves nothing; no answer holds a
+   Private note.
 6. Stops the server and removes the temp folder (``--keep`` keeps it and prints its path).
 
 Exit code 0 only when every check passes, else 1. Standard library only.
@@ -34,13 +38,14 @@ from datetime import date
 from html.parser import HTMLParser
 from pathlib import Path
 
-from churchmgr import db, fake, paths, server
+from churchmgr import care, db, fake, paths, server, settings
 
 ROOT = Path(__file__).resolve().parent
 MARKER = b"PRIVATE-NOTE-MARKER"  # every Private note of the fake church starts with it
 PANELS = ("this-week", "needs-visit", "services", "money-month", "sent-documents", "search")
 DATA_PANELS = PANELS[:-1]  # the search panel is a form; its rows come live from /api/search
 TEST_TIMEOUT = 600  # seconds; tests that hang longer are a FAIL (Checks.run), not a stuck window
+AGENT_DRY_RUN_NAME = "Verify Agent Dry Run"  # add-person without --yes: this Person must not be saved
 
 
 class Checks:
@@ -287,6 +292,89 @@ def check_statement(port, source_db, kind, bodies):
                 f"in the source); {'PRIVATE NOTE FOUND' if leak else 'no PRIVATE-NOTE-MARKER'}")
 
 
+def agent(copy, root, *argv):
+    """``python -m churchmgr.agent ARGV --copy COPY --copies-root ROOT``, run in this folder.
+    Returns ``(exit code, the JSON answer, stdout + stderr bytes)``."""
+    env = {k: v for k, v in os.environ.items() if k not in (paths.ENV_COPY, paths.ENV_HOME)}
+    proc = subprocess.run([sys.executable, "-m", "churchmgr.agent", *argv, "--copy", str(copy),
+                           "--copies-root", str(root)], cwd=ROOT, capture_output=True, env=env, timeout=60)
+    try:
+        answer = json.loads(proc.stdout.decode("utf-8"))
+    except ValueError:
+        raise RuntimeError(f"{argv[0]}: exit {proc.returncode}, no JSON answer; "
+                           f"{proc.stderr.decode('utf-8', 'replace')[-300:]}") from None
+    return proc.returncode, answer, proc.stdout + proc.stderr
+
+
+def json_texts(value):
+    """Every text inside a JSON answer (a Private note could hide behind JSON escapes in the raw bytes)."""
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from json_texts(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from json_texts(item)
+
+
+def check_agent(port, root, source_db, bodies):
+    """The Hermes door from end to end, on the running server and the fake church."""
+    copy, runs, failed, steps = source_db.parent, [], [], []
+
+    def run(*argv):
+        code, answer, raw = agent(copy, root, *argv)
+        runs.append((argv[0], raw, answer))
+        return code, answer
+
+    def run_ok(*argv):
+        code, answer = run(*argv)
+        if code != 0 or answer.get("ok") is not True:
+            failed.append(f"{argv[0]} -> exit {code}, {answer.get('error')}: {answer.get('message')}")
+        return answer
+
+    code, answer = run("status")
+    if (code, answer.get("error")) != (3, "door_off"):
+        return False, f"door off: status -> exit {code}, {answer}"
+    steps.append("door off: status -> exit 3 door_off")
+
+    with closing(read_only(source_db)) as conn:
+        conn.row_factory = sqlite3.Row
+        form = {"church_name": settings.get_setting(conn, "church_name"),
+                "care_reminder_months": str(care.reminder_months(conn)), settings.HERMES_DOOR: "on"}
+    status, _headers, body = request(port, "POST", "/settings", urllib.parse.urlencode(form).encode("utf-8"))
+    if status != 303:
+        return False, f"POST /settings hermes_door=on -> {status}: {strip_tags(body.decode('utf-8', 'replace'))[:300]}"
+    steps.append("door turned on through the app: POST /settings -> 303")
+
+    run_ok("status")
+    found = run_ok("search", "nguyen hai dang").get("results") or []
+    if not found:
+        return False, "search \"nguyen hai dang\" found no one" + (f"; {'; '.join(failed)}" if failed else "")
+    run_ok("person", str(found[0]["id"]))
+    run_ok("care-due")
+    run_ok("money")
+    steps.append(f"status, search ({found[0]['full_name']}, id {found[0]['id']}), person, care-due, money -> "
+                 + ("exit 0 ok" if not failed else "NOT ALL OK"))
+
+    before = count(source_db, "person")
+    dry = run_ok("add-person", "--full-name", AGENT_DRY_RUN_NAME)
+    after = count(source_db, "person")
+    if dry.get("saved") is not False or after != before:
+        failed.append(f"add-person dry run: saved {dry.get('saved')}, {before} People before, {after} after")
+    steps.append(f"add-person dry run: saved {dry.get('saved')}, {before} People before and {after} after")
+
+    texts = [note.decode("utf-8") for note in bodies]
+    leaks = [command for command, raw, answer in runs
+             if MARKER in raw or any(b in raw for b in bodies)
+             or any(t in s for s in json_texts(answer) for t in texts)]
+    if leaks:
+        failed.append(f"Private note FOUND in: {', '.join(leaks)}")
+    steps.append(f"{len(runs)} answers: " + ("no PRIVATE-NOTE-MARKER, no Private note text" if not leaks
+                                              else "PRIVATE NOTE FOUND"))
+    return not failed, "; ".join(steps) + (f"; FAILED: {'; '.join(failed)}" if failed else "")
+
+
 def start_server(copy, root, state):
     """Start the real server on 127.0.0.1 and a free port, in a thread."""
     httpd = server.make_server(copy, root, 0, remember=False)  # remember=False: never writes current.txt
@@ -339,6 +427,7 @@ def check_app(checks, port, tmp, source_db, people, state):
 
     for kind in ("person", "family"):
         checks.run(f"5. Giving statement of a {kind.title()}", check_statement, port, source_db, kind, bodies)
+    checks.run("5. Agent CLI (Hermes door)", check_agent, port, tmp, source_db, bodies)
 
 
 def main(argv=None):
