@@ -262,7 +262,7 @@ class NewChurchSetupTest(unittest.TestCase):
         self.assertEqual(settings.get_setting(conn, "care_reminder_months"), "3")
         for list_name, items in schema.DEFAULT_LISTS.items():
             self.assertEqual([(r["code"], r["name"]) for r in lists.get_list(conn, list_name, include_hidden=True)],
-                             list(items))
+                             [(code, vi) for code, vi, _en in items])  # New church setup is Vietnamese by default
         for table in ("person", "family", "chi_phai", "private_note", "calendar_item", "offering", "expense",
                       "document", "sent_document", "head_count"):
             self.assertEqual(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0], 0, table)

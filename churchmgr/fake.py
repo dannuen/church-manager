@@ -1,11 +1,12 @@
 """Fake church: a made-up church copy with real-looking data for every dashboard panel.
 
-    python -m churchmgr.fake <folder> [--people 50] [--seed 1] [--today YYYY-MM-DD]
+    python -m churchmgr.fake <folder> [--people 50] [--seed 1] [--today YYYY-MM-DD] [--lang vi|en]
 
 The same seed and the same today give the same data (only clock stamps such as
 ``created_at`` and the random file names of Documents differ). It uses only
 the public data-layer functions. A OneDrive folder or a folder that already
-has ``church.db`` is refused.
+has ``church.db`` is refused. ``--lang`` (default ``en``) is the language of the
+copy and of its default list items; both languages build the same church.
 """
 
 import argparse
@@ -14,7 +15,7 @@ import random
 import shutil
 import sys
 
-from . import calendar, care, db, documents, lists, money, paths, sent, text
+from . import calendar, care, db, documents, lists, money, paths, schema, sent, text
 from . import people as people_data
 from .db import transaction
 
@@ -47,8 +48,9 @@ PRIVATE_TEXTS = ("Cần cầu nguyện cho hôn nhân.", "Đang gặp khó khăn
 class _Fake:
     """Builds the fake church step by step on one open connection."""
 
-    def __init__(self, conn, folder, rng, today, n_people):
+    def __init__(self, conn, folder, rng, today, n_people, lang):
         self.conn, self.folder, self.rng, self.today, self.n = conn, folder, rng, today, n_people
+        self.lang = lang
         self.used_names = {FIRST_PERSON}
         self.status = {code: lists.find_item(conn, "status", code=code)["id"]
                        for code in ("member", "attender", "visitor", "left", "passed_away")}
@@ -61,7 +63,9 @@ class _Fake:
     def ahead(self, days):
         return (self.today + _dt.timedelta(days=days)).isoformat()
 
-    def item(self, list_name, name):
+    def item(self, list_name, position):
+        """Id of default item ``position`` (0, 1, ...) of ``list_name``, found by its name in ``self.lang``."""
+        name = schema.default_name(schema.DEFAULT_LISTS[list_name][position], self.lang)
         return lists.find_item(self.conn, list_name, name=name)["id"]
 
     def add_count(self, key, k=1):
@@ -228,7 +232,7 @@ class _Fake:
 
     def make_ministries(self):
         rng = self.rng
-        worship, youth, children = (self.item("ministry", n) for n in ("Worship", "Youth", "Children"))
+        worship, youth, children = (self.item("ministry", k) for k in range(3))
         active = set(self.active)
         by_age = sorted((p for p in self.people if p["id"] in active), key=lambda p: p["birth"])
         adults = [p["id"] for p in by_age if (self.today - p["birth"]).days > 25 * 365]
@@ -323,7 +327,7 @@ class _Fake:
 
     def make_money(self):
         rng, conn, today = self.rng, self.conn, self.today
-        general, building, missions = (self.item("fund", n) for n in ("General", "Building", "Missions"))
+        general, building, missions = (self.item("fund", k) for k in range(3))
         funds = [general] * 7 + [building] * 2 + [missions]
         offerings = 0
         sundays = [today - _dt.timedelta(days=(today.weekday() + 1) % 7) - _dt.timedelta(weeks=k)
@@ -345,7 +349,7 @@ class _Fake:
         money.add_offering(conn, self.move_date, 700_000, building, giver_person_id=self.mover)
         money.add_offering(conn, today.isoformat(), 1_000_000, general, giver_family_id=self.families[0]["id"])
         offerings += 3
-        rent, utilities, events = (self.item("spending_category", n) for n in ("Rent", "Utilities", "Events"))
+        rent, utilities, events = (self.item("spending_category", k) for k in range(3))
         expenses = 0
         for back in range(6, -1, -1):
             month_first = calendar.add_months(today.replace(day=1), -back)
@@ -371,8 +375,8 @@ class _Fake:
         sent_file = documents.add_document(conn, self.folder, "Kính mời quý Hội Thánh...\n".encode("utf-8"),
                                            "Giấy mời Lễ Cung Hiến.txt")
         self.add_count("documents", 3)
-        r = {n: self.item("recipient", n) for n in ("Chính quyền", "Giáo hội", "Hội Thánh")}
-        p = {n: self.item("purpose", n) for n in ("Invitation", "Notice", "Certificate", "Report")}
+        r = {n: self.item("recipient", k) for k, n in enumerate(("Chính quyền", "Giáo hội", "Hội Thánh"))}
+        p = {n: self.item("purpose", k) for k, n in enumerate(("Invitation", "Notice", "Certificate", "Report"))}
         last_year = today.year - 1
         sent.add_sent_document(conn, f"{last_year}-11-05", r["Giáo hội"], p["Report"], "Báo cáo tổng kết năm")
         sent.add_sent_document(conn, f"{last_year}-12-10", r["Chính quyền"], p["Notice"],
@@ -399,10 +403,11 @@ def _check_people(value):
     return value
 
 
-def build_fake_church(folder, people=50, seed=1, today=None):
+def build_fake_church(folder, people=50, seed=1, today=None, lang="en"):
     """Make a new church copy in ``folder`` filled with a fake church. Returns a dict of counts.
 
     ``today`` (a date or ``YYYY-MM-DD``; default: today) is the day the data is built around.
+    ``lang`` (``vi`` or ``en``) is the language of the copy and of its default list items.
     """
     n_people = _check_people(people)
     if isinstance(seed, bool) or not isinstance(seed, int):
@@ -411,11 +416,11 @@ def build_fake_church(folder, people=50, seed=1, today=None):
     target = paths.check_not_onedrive(folder)
     existed = target.exists()
     docs_existed = db.documents_folder(target).exists()
-    conn = db.create_church_copy(target, CHURCH_NAME)
+    conn = db.create_church_copy(target, CHURCH_NAME, lang)
     ok = False
     try:
         with transaction(conn):
-            counts = _Fake(conn, target, random.Random(seed), day, n_people).run()
+            counts = _Fake(conn, target, random.Random(seed), day, n_people, lang).run()
         ok = True
     finally:
         conn.close()
@@ -439,9 +444,12 @@ def main(argv=None):
     parser.add_argument("--people", type=int, default=50, help="number of Persons (20 to 1000, default 50)")
     parser.add_argument("--seed", type=int, default=1, help="random seed (default 1)")
     parser.add_argument("--today", default=None, help="build around this date, YYYY-MM-DD (default today)")
+    parser.add_argument("--lang", choices=("vi", "en"), default="en",
+                        help="language of the copy and its default list items (default en)")
     args = parser.parse_args(argv)
     try:
-        counts = build_fake_church(args.folder, people=args.people, seed=args.seed, today=args.today)
+        counts = build_fake_church(args.folder, people=args.people, seed=args.seed, today=args.today,
+                                   lang=args.lang)
     except (db.ChurchCopyError, paths.CopyPathError, ValueError) as exc:
         print(f"Not made: {exc}", file=sys.stderr)
         return 2

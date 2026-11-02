@@ -297,7 +297,7 @@ class CopySwitchTest(LiveServer, unittest.TestCase):
         try:
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM person").fetchone()[0], 0)
             got = sorted((r["list_name"], r["name"]) for r in conn.execute("SELECT list_name, name FROM list_item"))
-            want = sorted((list_name, name) for list_name, items in schema.DEFAULT_LISTS.items() for _c, name in items)
+            want = sorted((list_name, vi) for list_name, items in schema.DEFAULT_LISTS.items() for _c, vi, _ in items)
             self.assertEqual(got, want)  # the default lists only
             self.assertEqual(settings.get_setting(conn, "church_name"), "Hội Thánh Mới C3")
             for table in ("offering", "expense", "calendar_item", "document", "sent_document", "private_note"):

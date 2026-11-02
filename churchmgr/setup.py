@@ -6,7 +6,7 @@ from . import db, paths, text
 def free_folder(copies_root, church_name):
     """``<copies_root>/<slug>``, or ``<slug>-2``, ``<slug>-3``, ... if that folder is taken."""
     root = paths.check_not_onedrive(copies_root)
-    slug = text.slugify(text.clean_name(church_name, "Church name"))
+    slug = text.slugify(text.clean_name(church_name, "settings.church_name"))
     folder = root / slug
     n = 2
     while folder.exists():
@@ -15,12 +15,13 @@ def free_folder(copies_root, church_name):
     return folder
 
 
-def new_church_setup(copies_root, church_name):
+def new_church_setup(copies_root, church_name, lang="vi"):
     """Make a blank church copy for ``church_name`` inside ``copies_root`` and return its folder.
 
-    The copy has the default lists and settings only. Refused inside OneDrive.
+    The copy has the default lists (names in ``lang``: ``vi`` or ``en``) and settings only.
+    Refused inside OneDrive.
     """
     folder = free_folder(copies_root, church_name)
-    conn = db.create_church_copy(folder, church_name)
+    conn = db.create_church_copy(folder, church_name, lang)
     conn.close()
     return folder
