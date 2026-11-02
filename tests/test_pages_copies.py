@@ -426,8 +426,8 @@ class SmallLogicTest(unittest.TestCase):
         readme = " ".join((ROOT / "README.md").read_text(encoding="utf-8").split())
         self.assertNotIn("for a Document change the Private note", readme)
         self.assertNotIn("cannot be changed in the app", readme)
-        self.assertIn("press **Delete** next to a Document", readme)
-        self.assertIn("Changing the Private note does not change a Document file", readme)
+        self.assertIn("bấm **Delete** bên cạnh giấy tờ đó", readme)
+        self.assertIn("Sửa ghi chú riêng không làm thay đổi tệp giấy tờ", readme)
 
 
 if __name__ == "__main__":
