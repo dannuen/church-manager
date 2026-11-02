@@ -408,7 +408,6 @@ def handover_file(req):
 
 
 def new_church_post(req):
-    page_lang = ui.current_lang()  # the flash is in the words of the page where the button was pressed
     name = req.form.get("church_name", "")
     lang = req.form.get(settings.LANGUAGE) or i18n.DEFAULT_LANG  # no field: Tiếng Việt, as on the form
     try:
@@ -424,11 +423,11 @@ def new_church_post(req):
     except (ValueError, db.ChurchCopyError) as exc:  # paths.CopyPathError is a ValueError
         return _view(req, ("setup", "church_name", exc), status=400, lang=lang)
     church = text.clean_name(name, "settings.church_name")
-    return Response.redirect(ui.url("/", msg=t("copies.setup_done", page_lang, church=church)))
+    # the flash is in the language the next page shows: the new church copy's
+    return Response.redirect(ui.url("/", msg=t("copies.setup_done", lang, church=church)))
 
 
 def open_post(req):
-    page_lang = ui.current_lang()  # the flash is in the words of the page where the button was pressed
     wanted = req.form.get("folder") or ""
     found = next((c for c in list_copies(req.state.copies_root) if c["folder"].name == wanted), None)
     try:
@@ -437,11 +436,17 @@ def open_post(req):
         if found["onedrive"]:
             raise i18n.TextError("copies.err_copy_in_onedrive")
         if found["folder"] == req.state.copy_folder:
-            return Response.redirect(ui.url("/", msg=t("copies.already_open", page_lang)))
+            return Response.redirect(ui.url("/", msg=t("copies.already_open")))
         req.state.switch_copy(found["folder"])
     except (ValueError, db.ChurchCopyError) as exc:
         return _view(req, ("open", exc), status=400)
-    return Response.redirect(ui.url("/", msg=t("copies.opened", page_lang, name=found["name"] or found["folder"].name)))
+    # the flash is in the language the next page shows: the opened church copy's (req.conn may be the old one)
+    conn = db.connect(found["folder"] / db.DB_NAME)
+    try:
+        lang = settings.get_language(conn)
+    finally:
+        conn.close()
+    return Response.redirect(ui.url("/", msg=t("copies.opened", lang, name=found["name"] or found["folder"].name)))
 
 
 ROUTES = [

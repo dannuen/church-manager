@@ -323,7 +323,7 @@ class PeopleErrorsTest(_support.CopyTestCase):
             (lambda: people.set_status(conn, 999999, member, "2026-02-01"), "No Person with id 999999.",
              "Không có Người với mã số 999999."),
             (lambda: people.set_status(conn, pid, self.status("attender"), "2026-01-01"),
-             "Start date 2026-01-01 is before 2026-01-10, the date of the last change. History is never rewritten; "
+             "Start date 01/01/2026 is before 10/01/2026, the date of the last change. History is never rewritten; "
              "use a date on or after it.",
              "Ngày bắt đầu 01/01/2026 sớm hơn 10/01/2026, ngày của lần thay đổi gần nhất. Những gì đã qua không bao "
              "giờ bị viết lại; hãy dùng ngày 10/01/2026 hoặc sau đó."),

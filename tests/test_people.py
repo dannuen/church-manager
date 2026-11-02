@@ -99,7 +99,7 @@ class StatusHistoryTest(CopyTestCase):
         self.assertEqual(len(people.status_history(self.conn, self.pid)), 1)
 
     def test_earlier_start_date_refused(self):
-        with self.assertRaisesRegex(ValueError, "before 2024-01-07"):
+        with self.assertRaisesRegex(ValueError, "before 07/01/2024"):
             people.set_status(self.conn, self.pid, self.status("member"), "2023-12-31")
         self.assertEqual(len(people.status_history(self.conn, self.pid)), 1)
         self.assertIsNone(people.current_status(self.conn, self.pid)["end_date"])

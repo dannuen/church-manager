@@ -280,12 +280,28 @@ def _head(title):
 
 def _here():
     """The path and query of this request (ASCII, for the switch to come back to). ``msg`` is left out:
-    the flash was for one time."""
+    the flash was for one time. A page shown for a POST (a refused form) whose path has no GET page comes
+    back to the page the form was on (the ``Referer``) when that path has a GET page, else to ``/``:
+    the switch never leads to a 405."""
     req = current_request()
     if req is None:
         return "/"
-    query = {k: v for k, v in req.query_all.items() if k != "msg"}
-    return urllib.parse.quote(req.path) + ("?" + urllib.parse.urlencode(query, doseq=True) if query else "")
+
+    def where(path, query_all):
+        query = {k: v for k, v in query_all.items() if k != "msg"}
+        return urllib.parse.quote(path) + ("?" + urllib.parse.urlencode(query, doseq=True) if query else "")
+
+    routes = getattr(req.state, "routes", None)
+    if req.method == "GET" or routes is None:
+        return where(req.path, req.query_all)
+    get_pages = [regex for method, regex, *_rest in routes if method == "GET"]
+    if any(regex.match(req.path) for regex in get_pages):
+        return where(req.path, req.query_all)
+    referer = urllib.parse.urlsplit((req.headers.get("Referer") if req.headers is not None else None) or "")
+    path = urllib.parse.unquote(referer.path, errors="replace")
+    if any(regex.match(path) for regex in get_pages):
+        return where(path, urllib.parse.parse_qs(referer.query, keep_blank_values=True, errors="replace"))
+    return "/"
 
 
 def lang_switch():
