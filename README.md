@@ -1,7 +1,7 @@
 # Church Manager
 
-Church Manager giúp một mục sư quản nhiệm điều hành một Hội Thánh: tín hữu, gia đình, chi phái,
-lịch, tài chính, thăm viếng, giấy tờ và công văn đi. Chương trình chạy trên máy của bạn, mở trong
+Church Manager giúp một mục sư quản nhiệm điều hành một Hội Thánh: mọi người, gia đình, chi phái,
+lịch, tài chính, thăm viếng, tài liệu và công văn đi. Chương trình chạy trên máy của bạn, mở trong
 trình duyệt web. **Không cần Internet. Dữ liệu không gửi lên mạng.**
 
 Bạn chỉ cần làm phần **Cài đặt** một lần. Những lần sau, chỉ cần làm phần **Mở chương trình**.
@@ -49,7 +49,7 @@ Nếu trình duyệt không tự mở: mở trình duyệt và gõ địa chỉ 
 > rồi bấm **Run anyway / Vẫn chạy**.
 
 **Lần đầu tiên**, chương trình hỏi tên Hội Thánh. Gõ tên Hội Thánh, rồi bấm nút bắt đầu.
-Chương trình tạo một **bản dữ liệu Hội Thánh** mới, trống, với các danh sách có sẵn.
+Chương trình tạo **dữ liệu Hội Thánh** mới, trống, với các danh sách có sẵn.
 
 ### Tắt chương trình
 
@@ -61,10 +61,10 @@ Chương trình tạo một **bản dữ liệu Hội Thánh** mới, trống, v
 
 ## Dữ liệu được lưu ở đâu
 
-Toàn bộ dữ liệu của một Hội Thánh nằm trong **một thư mục** (gọi là **bản dữ liệu Hội Thánh**):
+Toàn bộ dữ liệu của một Hội Thánh nằm trong **một thư mục** (gọi là **dữ liệu Hội Thánh**):
 
 - tệp `church.db`: cơ sở dữ liệu,
-- thư mục `documents`: các giấy tờ bạn đính kèm.
+- thư mục `documents`: các tài liệu bạn đính kèm.
 
 Thư mục này nằm ở: `%LOCALAPPDATA%\ChurchManager\<tên-hội-thánh>\`
 (tên viết không dấu, ví dụ `hoi-thanh-tin-lanh-binh-an`).
@@ -85,8 +85,8 @@ Cách mở thư mục đó: bấm phím **Windows + R**, gõ `%LOCALAPPDATA%\Chu
 
 ## Bàn giao cho mục sư kế nhiệm (Handover)
 
-Bàn giao tạo một bản sao dữ liệu để trao cho mục sư kế tiếp của cùng Hội Thánh.
-**Ghi chú riêng (Private notes) của bạn bị xoá khỏi bản sao này.** Dữ liệu của bạn không bị thay đổi.
+Bàn giao tạo một bản bàn giao để trao cho mục sư kế tiếp của cùng Hội Thánh.
+**Ghi chú cá nhân (Private notes) của bạn bị xoá khỏi bản bàn giao này.** Dữ liệu của bạn không bị thay đổi.
 
 1. Trong chương trình, bấm **Copies** ở thanh menu.
 2. Bấm **Make Handover**.
@@ -94,11 +94,11 @@ Bàn giao tạo một bản sao dữ liệu để trao cho mục sư kế tiếp
    Tệp cũng được lưu trong `%LOCALAPPDATA%\ChurchManager\handovers\`.
 4. Chép tệp ZIP vào USB và trao cho mục sư kế nhiệm.
 
-Nếu chương trình **không tạo tệp ZIP** và hiện một danh sách: lời trong một ghi chú riêng cũng
-được viết ở chỗ khác (ví dụ trong một giấy tờ). Trang cho biết chỗ đó. Hãy xoá hoặc sửa lời đó ở
-từng chỗ (với giấy tờ: bấm **Delete** bên cạnh giấy tờ đó, cũng có trong **Documents**). Sửa ghi chú
-riêng không làm thay đổi tệp giấy tờ, nên tệp vẫn sẽ đi theo bản bàn giao. Sau đó bấm
-**Make Handover** lại. Lưu ý: chương trình chỉ đọc được giấy tờ dạng chữ thường; chữ bên trong tệp
+Nếu chương trình **không tạo tệp ZIP** và hiện một danh sách: lời trong một ghi chú cá nhân cũng
+được viết ở chỗ khác (ví dụ trong một tài liệu). Trang cho biết chỗ đó. Hãy xoá hoặc sửa lời đó ở
+từng chỗ (với tài liệu: bấm **Delete** bên cạnh tài liệu đó, cũng có trong **Documents**). Sửa ghi chú
+cá nhân không làm thay đổi tệp tài liệu, nên tệp vẫn sẽ đi theo bản bàn giao. Sau đó bấm
+**Make Handover** lại. Lưu ý: chương trình chỉ đọc được tài liệu dạng chữ thường; chữ bên trong tệp
 Word hoặc PDF không được kiểm tra.
 
 ### Mục sư kế nhiệm mở dữ liệu được bàn giao
@@ -117,12 +117,12 @@ Word hoặc PDF không được kiểm tra.
 
 ---
 
-## Bắt đầu một Hội Thánh mới (New church setup)
+## Lập dữ liệu Hội Thánh mới (New church setup)
 
 1. Bấm **Copies** ở thanh menu, rồi chọn **New church setup**.
 2. Gõ tên Hội Thánh, rồi bấm **Start New church setup**.
 
-Chương trình tạo một bản dữ liệu mới, trống, chỉ có các danh sách có sẵn. Dữ liệu cũ vẫn còn.
+Chương trình tạo dữ liệu mới, trống, chỉ có các danh sách có sẵn. Dữ liệu cũ vẫn còn.
 Để mở lại dữ liệu cũ: **Copies** → **Church copies**.
 
 ---
@@ -146,7 +146,7 @@ cũ khi không có Hermes.
 
 Khi bật **Hermes door** (cửa cho Hermes), Hermes có thể đọc dữ liệu Hội Thánh và lưu thông tin
 mới giúp bạn, nhưng **chỉ sau khi bạn đồng ý**. Hermes dùng lệnh `python -m churchmgr.agent` và
-hướng dẫn trong thư mục `hermes\skills\church-manager`. Hermes **không bao giờ** thấy ghi chú riêng.
+hướng dẫn trong thư mục `hermes\skills\church-manager`. Hermes **không bao giờ** thấy ghi chú cá nhân.
 
 ### Bật
 
@@ -164,7 +164,7 @@ hướng dẫn trong thư mục `hermes\skills\church-manager`. Hermes **không 
 ### Thử
 
 Trong cửa sổ lệnh ở thư mục chương trình, chạy `python -m churchmgr.agent status`. Lệnh in tên
-Hội Thánh và số người, gia đình, mục lịch, dâng hiến và chi phí. Khi Hermes door đang tắt, lệnh
+Hội Thánh và số người, gia đình, lịch, dâng hiến và khoản chi. Khi Hermes door đang tắt, lệnh
 báo cửa đang tắt và không thay đổi gì.
 
 ### Cách lưu dữ liệu
@@ -183,7 +183,7 @@ Không lệnh nào xoá hoặc sửa thông tin cũ. Thay đổi duy nhất là 
 
 ### An toàn
 
-- Ghi chú riêng không bao giờ ra khỏi chương trình. Không lệnh nào đọc chúng.
+- Ghi chú cá nhân không bao giờ ra khỏi chương trình. Không lệnh nào đọc chúng.
 - Hermes door chỉ điều khiển các lệnh của Hermes. Nó **không** khoá tệp dữ liệu: một chương trình
   khác trên máy vẫn đọc được tệp. Chỉ dùng Hermes mà bạn tin cậy.
 - Những gì Hermes đọc sẽ được gửi tới mô hình AI bạn chọn trong Hermes. Nếu mô hình chạy trên mạng
@@ -199,14 +199,14 @@ Chạy trực tiếp: `python app.py`. Chỉ cần Python 3.14, không cần cà
 |---|---|
 | `--port N` | Dùng cổng N. Mặc định: 8765, hoặc cổng trống kế tiếp đến 8785. |
 | `--no-browser` | Không tự mở trình duyệt. Cửa sổ in ra địa chỉ. |
-| `--copy THƯ_MỤC` | Mở bản dữ liệu Hội Thánh trong THƯ_MỤC (phải có `church.db`). Không đổi `current.txt`. Biến môi trường tương ứng: `CHURCH_MANAGER_COPY`. |
-| `--copies-root THƯ_MỤC` | Đổi thư mục chứa các bản dữ liệu (mặc định `%LOCALAPPDATA%\ChurchManager\`). Biến môi trường: `CHURCH_MANAGER_HOME`. Nếu chỉ có `--copy`, thư mục chứa là thư mục cha của bản dữ liệu. |
+| `--copy THƯ_MỤC` | Mở dữ liệu Hội Thánh trong THƯ_MỤC (phải có `church.db`). Không đổi `current.txt`. Biến môi trường tương ứng: `CHURCH_MANAGER_COPY`. |
+| `--copies-root THƯ_MỤC` | Đổi thư mục chứa các dữ liệu Hội Thánh (mặc định `%LOCALAPPDATA%\ChurchManager\`). Biến môi trường: `CHURCH_MANAGER_HOME`. Nếu chỉ có `--copy`, thư mục chứa là thư mục cha của dữ liệu Hội Thánh. |
 
-Tệp `current.txt` trong thư mục chứa ghi bản dữ liệu nào được mở khi khởi động.
+Tệp `current.txt` trong thư mục chứa ghi dữ liệu Hội Thánh nào được mở khi khởi động.
 
 **Kiểm tra toàn bộ:** `python verify.py`. Lệnh này chạy mọi bài kiểm tra, tạo một Hội Thánh giả
 50 người trong thư mục tạm, mở chương trình, kiểm tra mọi ô trên Dashboard và ô Tìm kiếm, tạo một
-bản bàn giao và chứng minh không có ghi chú riêng, kiểm tra hai bản Giving statement và các lệnh
+bản bàn giao và chứng minh không có ghi chú cá nhân, kiểm tra hai bản Giving statement và các lệnh
 Hermes door (`python -m churchmgr.agent`). In PASS hoặc FAIL cho từng mục; trả về 0 chỉ khi tất cả
 đều đạt. Không bao giờ mở dữ liệu thật của bạn. `--keep` giữ thư mục tạm; `--people N` đặt số
 người (20 đến 1000).
