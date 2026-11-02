@@ -163,8 +163,9 @@ TEXT = {
         "people.err_after_today": "{label} không được sau hôm nay ({today}). Hãy dùng hôm nay hoặc một ngày trước đó.",
         "people.err_list_choice": "{label}: hãy chọn một mục trong danh sách.",
         "people.err_no_row": "Không có {what} với mã số {id}.",
-        "people.err_history": "Ngày bắt đầu {start} sớm hơn {latest}, ngày của lần thay đổi gần nhất. Những gì đã qua "
-                              "không bao giờ bị viết lại; hãy dùng ngày {latest} hoặc sau đó.",
+        "people.err_history": "Ngày bắt đầu {start:%d/%m/%Y} sớm hơn {latest:%d/%m/%Y}, ngày của lần thay đổi gần "
+                              "nhất. Những gì đã qua không bao giờ bị viết lại; hãy dùng ngày {latest:%d/%m/%Y} "
+                              "hoặc sau đó.",
         "people.err_gender": "Giới tính phải là M (Nam) hoặc F (Nữ), hoặc để trống.",
         "people.err_family_role": "Vai trò trong gia đình phải là một trong: Chủ gia đình, Vợ/Chồng, Con, Người thân "
                                   "khác.",
@@ -228,7 +229,7 @@ TEXT = {
         "people.note_added": "Đã thêm Ghi chú cá nhân.",
         "people.note_changed": "Đã sửa Ghi chú cá nhân.",
         "people.no_visit_done": "Chưa có lần Thăm viếng nào.",
-        "people.plan_visit": "Lên kế hoạch Thăm viếng",
+        "people.plan_visit": "Lên lịch Thăm viếng",
         "people.care_meta": "Các lần Thăm viếng đã xong, mới nhất trước",
         "people.status_since": "{status} từ {date}",
         "people.last_visit": "Thăm viếng gần nhất {date}",
@@ -950,6 +951,19 @@ TEXT = {
         "search.title": "Tìm kiếm",
         "search.find_person": "Tìm Người",
         # --- errors
+        "errors.copy_plain": "{message}",
+        "errors.copy_foreign_keys": "Không bật được khóa ngoại của SQLite.",
+        "errors.copy_journal_mode": "Chế độ nhật ký của SQLite đang là {mode}, cần là chế độ xóa.",
+        "errors.copy_exists": "Nơi lưu {folder} đã có Dữ liệu Hội Thánh. Dữ liệu đó không bị thay đổi.",
+        "errors.copy_missing": "Không có Dữ liệu Hội Thánh trong {folder}: thiếu {db}.",
+        "errors.copy_not_database": "{path} không phải là cơ sở dữ liệu Church Manager ({detail}).",
+        "errors.copy_version": "{path} là cơ sở dữ liệu bản {version}; ứng dụng này cần bản {needed}.",
+        "errors.copy_root_is_copy": "Nơi chứa dữ liệu {root} chính là nơi lưu của Dữ liệu Hội Thánh, nên các tệp "
+                                    "ZIP Bàn giao và các Dữ liệu Hội Thánh mới lập sẽ bị lưu bên trong Dữ liệu Hội "
+                                    "Thánh đó: hãy chọn một nơi chứa dữ liệu ở ngoài.",
+        "errors.copy_root_inside": "Nơi chứa dữ liệu {root} nằm bên trong Dữ liệu Hội Thánh {folder}, nên các tệp "
+                                   "ZIP Bàn giao và các Dữ liệu Hội Thánh mới lập sẽ bị lưu bên trong Dữ liệu Hội "
+                                   "Thánh đó: hãy chọn một nơi chứa dữ liệu ở ngoài.",
         "errors.not_done": "Chưa làm được",
         "errors.go_back": "Bấm nút Quay lại của trình duyệt, sửa lại rồi thử lần nữa.",
         "errors.not_allowed": "Không được phép",
@@ -1895,6 +1909,19 @@ TEXT = {
         "search.title": "Search",
         "search.find_person": "Find a Person",
         # --- errors
+        "errors.copy_plain": "{message}",
+        "errors.copy_foreign_keys": "SQLite foreign keys could not be turned on.",
+        "errors.copy_journal_mode": "SQLite journal mode is {mode}, expected delete.",
+        "errors.copy_exists": "A church copy already exists in {folder}. It was not changed.",
+        "errors.copy_missing": "No church copy in {folder}: {db} is missing.",
+        "errors.copy_not_database": "{path} is not a Church Manager database ({detail}).",
+        "errors.copy_version": "{path} has database version {version}; this app needs version {needed}.",
+        "errors.copy_root_is_copy": "The copies folder {root} is the church copy folder itself, so Handover zips and "
+                                    "New church setups would be saved in the church copy: choose a copies folder "
+                                    "outside it.",
+        "errors.copy_root_inside": "The copies folder {root} is inside the church copy {folder}, so Handover zips and "
+                                   "New church setups would be saved in the church copy: choose a copies folder "
+                                   "outside it.",
         "errors.not_done": "Not done",
         "errors.go_back": "Use the Back button of the browser, fix it and try again.",
         "errors.not_allowed": "Not allowed",
@@ -1967,9 +1994,11 @@ class TextError(ValueError):
 
 
 def error_text(exc, lang=None):
-    """The text of an error in ``lang``. For a ``TextError`` every param that is a TEXT key (such
-    as a field label) is first put in that language too. Any other error: ``str(exc)``."""
-    if not isinstance(exc, TextError):
+    """The text of an error in ``lang``. For a ``TextError``, or any error with a ``key`` of the text
+    table and a ``params`` dict (``db.ChurchCopyError``), every param that is a TEXT key (such as a
+    field label) is first put in that language too. Any other error: ``str(exc)``."""
+    key, params = getattr(exc, "key", None), getattr(exc, "params", None)
+    if not (isinstance(exc, TextError) or (isinstance(key, str) and key in TEXT["en"] and isinstance(params, dict))):
         return str(exc)
     lang = _lang(lang)
     params = {k: t(v, lang) if isinstance(v, str) and v in TEXT[lang] else v for k, v in exc.params.items()}

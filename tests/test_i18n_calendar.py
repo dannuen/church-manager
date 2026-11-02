@@ -129,7 +129,8 @@ class _Screens(LiveServer, unittest.TestCase):
         page = self.page(location)
         self.check_lang(page, location)
         self.assertIn(f'<h1 lang="vi">{ACCENTS}</h1>', page)
-        self.assertIn(f"<title>{ACCENTS} · ", page)
+        title_tag = '<title lang="vi">' if self.LANG == "vi" else "<title>"
+        self.assertIn(f"{title_tag}{ACCENTS} · ", page)
         self.assertIn(f">{ACCENTS}</a>", self.page(f"/calendar?week={days(2)}"))
         when = f"{TODAY + dt.timedelta(days=2):%d/%m/%Y} 19:00"
         self.assertEqual(flash(page), t("calendar.added_one", self.LANG, kind=t("core.kind_meeting", self.LANG),

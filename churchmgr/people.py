@@ -8,6 +8,8 @@ A refused value raises ``TextError`` (``str()`` is the English sentence; a page 
 ``i18n.error_text(e)``). Field names given to ``text.py`` checks are TEXT keys.
 """
 
+import datetime as _dt
+
 from . import lists, text
 from .db import transaction
 from .i18n import TextError
@@ -45,8 +47,9 @@ def _set_history(conn, table, owner, values, start_date):
     if open_row is None and values is None:
         return None
     latest = max((r["end_date"] or r["start_date"] for r in rows), default=None)
-    if latest is not None and start < latest:
-        raise TextError("people.err_history", start=start, latest=latest)
+    if latest is not None and start < latest:  # dates: the Vietnamese text shows them dd/mm/yyyy
+        raise TextError("people.err_history", start=_dt.date.fromisoformat(start),
+                        latest=_dt.date.fromisoformat(latest))
     if open_row is not None:
         conn.execute(f"UPDATE {table} SET end_date = ? WHERE id = ?", (start, open_row["id"]))
     if values is None:
