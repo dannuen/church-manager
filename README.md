@@ -1,10 +1,10 @@
 # Church Manager
 
 Church Manager giúp một mục sư quản nhiệm điều hành một Hội Thánh: mọi người, gia đình, chi phái,
-lịch, tài chính, thăm viếng, tài liệu và công văn đi. Chương trình chạy trên máy của bạn, mở trong
+lịch, tài chính, thăm viếng, tài liệu và công văn đi. Phần mềm chạy trên máy của bạn, mở trong
 trình duyệt web. **Không cần Internet. Dữ liệu không gửi lên mạng.**
 
-Bạn chỉ cần làm phần **Cài đặt** một lần. Những lần sau, chỉ cần làm phần **Mở chương trình**.
+Bạn chỉ cần làm phần **Cài đặt** một lần. Những lần sau, chỉ cần làm phần **Mở phần mềm**.
 
 ---
 
@@ -30,32 +30,53 @@ Python là phần mềm miễn phí. Church Manager cần nó để chạy.
    chọn **Extract All... / Giải nén tất cả...**, rồi bấm **Extract / Giải nén**.
 4. Bạn sẽ có thư mục `church-manager-main`. Có thể kéo thư mục này ra **Desktop** cho dễ tìm.
 
-> Quan trọng: phải giải nén. Đừng mở chương trình từ bên trong tệp ZIP.
+> Quan trọng: phải giải nén. Đừng mở phần mềm từ bên trong tệp ZIP.
 
 Xong. Bạn đã cài đặt xong.
 
 ---
 
-## Mở chương trình (mỗi lần dùng)
+## Mở phần mềm (mỗi lần dùng)
 
 1. Mở thư mục `church-manager-main`.
 2. Bấm đúp (nhấp nhanh 2 lần) vào tệp **`Mo Church Manager.bat`**.
 3. Một cửa sổ đen hiện ra. Sau vài giây, trình duyệt tự mở Church Manager.
-4. **Đừng đóng cửa sổ đen** khi đang làm việc. Nó là "máy chạy" của chương trình.
+4. **Đừng đóng cửa sổ đen** khi đang làm việc. Nó là "máy chạy" của phần mềm.
 
 Nếu trình duyệt không tự mở: mở trình duyệt và gõ địa chỉ **http://127.0.0.1:8765**
 
 > Nếu Windows hiện khung xanh "Windows protected your PC": bấm **More info / Thông tin thêm**,
 > rồi bấm **Run anyway / Vẫn chạy**.
 
-**Lần đầu tiên**, chương trình hỏi tên Hội Thánh. Gõ tên Hội Thánh, rồi bấm nút bắt đầu.
-Chương trình tạo **dữ liệu Hội Thánh** mới, trống, với các danh sách có sẵn.
+**Lần đầu tiên**, phần mềm hỏi tên Hội Thánh. Gõ tên Hội Thánh, rồi bấm nút **Lập dữ liệu Hội Thánh**.
+Phần mềm tạo **dữ liệu Hội Thánh** mới, trống, với các danh sách có sẵn.
 
-### Tắt chương trình
+### Tắt phần mềm
 
 1. Đóng trang Church Manager trong trình duyệt.
 2. Bấm vào cửa sổ đen, rồi bấm **Ctrl + C** (giữ phím Ctrl, bấm phím C).
 3. Nếu cửa sổ hỏi `Terminate batch job (Y/N)?`, gõ **Y** rồi bấm **Enter**.
+
+---
+
+## Đổi ngôn ngữ
+
+Phần mềm hiện chữ bằng **Tiếng Việt** hoặc **English** (tiếng Anh). Bạn chọn.
+
+1. Nhìn lên góc trên bên phải của trang. Có hai nút: **Tiếng Việt** và **English**. Nút của ngôn ngữ
+   đang dùng có khung viền và chữ đậm.
+2. Bấm một lần vào ngôn ngữ bạn muốn. Trang hiện lại ngay bằng ngôn ngữ đó, và bạn vẫn ở đúng trang
+   đang xem.
+3. Xong. Sau khi đã có dữ liệu Hội Thánh, phần mềm nhớ lựa chọn này. Lần sau mở phần mềm, chữ vẫn hiện
+   bằng ngôn ngữ bạn đã chọn. Mỗi dữ liệu Hội Thánh nhớ ngôn ngữ riêng của nó.
+
+Hai nút này có ở mọi trang. Bạn cũng có thể đổi ngôn ngữ trong trang **Cài đặt** (ở thanh menu): chọn
+ô **Ngôn ngữ**, rồi bấm **Lưu cài đặt**.
+
+- Một Hội Thánh mới (**Lập dữ liệu Hội Thánh mới**) bắt đầu bằng **Tiếng Việt**. Lúc lập, bạn cũng có thể
+  chọn **English** ở ô **Ngôn ngữ**.
+- Phần mềm chỉ đổi chữ của phần mềm. Tên người, ghi chú và các mục trong **Danh mục** giữ y như lúc
+  được nhập. Phần mềm **không bao giờ dịch** chúng.
 
 ---
 
@@ -71,13 +92,13 @@ Thư mục này nằm ở: `%LOCALAPPDATA%\ChurchManager\<tên-hội-thánh>\`
 
 Cách mở thư mục đó: bấm phím **Windows + R**, gõ `%LOCALAPPDATA%\ChurchManager`, bấm **Enter**.
 
-> Chương trình **không bao giờ** lưu dữ liệu trong OneDrive. Như vậy dữ liệu không bị đưa lên mạng.
+> Phần mềm **không bao giờ** lưu dữ liệu trong OneDrive. Như vậy dữ liệu không bị đưa lên mạng.
 
 ---
 
 ## Sao lưu (nên làm mỗi tháng)
 
-1. Tắt chương trình (xem "Tắt chương trình" ở trên).
+1. Tắt phần mềm (xem "Tắt phần mềm" ở trên).
 2. Bấm **Windows + R**, gõ `%LOCALAPPDATA%\ChurchManager`, bấm **Enter**.
 3. Chép **cả thư mục** của Hội Thánh sang USB hoặc ổ cứng ngoài.
 
@@ -88,17 +109,17 @@ Cách mở thư mục đó: bấm phím **Windows + R**, gõ `%LOCALAPPDATA%\Chu
 Bàn giao tạo một bản bàn giao để trao cho mục sư kế tiếp của cùng Hội Thánh.
 **Ghi chú cá nhân (Private notes) của bạn bị xoá khỏi bản bàn giao này.** Dữ liệu của bạn không bị thay đổi.
 
-1. Trong chương trình, bấm **Copies** ở thanh menu.
-2. Bấm **Make Handover**.
-3. Chương trình tạo một tệp ZIP. Trang có đường link để tải tệp này.
+1. Trong phần mềm, bấm **Dữ liệu** ở thanh menu.
+2. Bấm **Tạo Bàn giao**.
+3. Phần mềm tạo một tệp ZIP. Trang có đường link để tải tệp này.
    Tệp cũng được lưu trong `%LOCALAPPDATA%\ChurchManager\handovers\`.
 4. Chép tệp ZIP vào USB và trao cho mục sư kế nhiệm.
 
-Nếu chương trình **không tạo tệp ZIP** và hiện một danh sách: lời trong một ghi chú cá nhân cũng
+Nếu phần mềm **không tạo tệp ZIP** và hiện một danh sách: lời trong một ghi chú cá nhân cũng
 được viết ở chỗ khác (ví dụ trong một tài liệu). Trang cho biết chỗ đó. Hãy xoá hoặc sửa lời đó ở
-từng chỗ (với tài liệu: bấm **Delete** bên cạnh tài liệu đó, cũng có trong **Documents**). Sửa ghi chú
+từng chỗ (với tài liệu: bấm **Xóa** bên cạnh tài liệu đó, cũng có trong **Tài liệu**). Sửa ghi chú
 cá nhân không làm thay đổi tệp tài liệu, nên tệp vẫn sẽ đi theo bản bàn giao. Sau đó bấm
-**Make Handover** lại. Lưu ý: chương trình chỉ đọc được tài liệu dạng chữ thường; chữ bên trong tệp
+**Tạo Bàn giao** lại. Lưu ý: phần mềm chỉ đọc được tài liệu dạng chữ thường; chữ bên trong tệp
 Word hoặc PDF không được kiểm tra.
 
 ### Mục sư kế nhiệm mở dữ liệu được bàn giao
@@ -113,17 +134,17 @@ Word hoặc PDF không được kiểm tra.
    "Mo Church Manager.bat" --copy "C:\HoiThanh"
    ```
 
-   Mỗi lần mở chương trình, làm lại bước 3 và 4.
+   Mỗi lần mở phần mềm, làm lại bước 3 và 4.
 
 ---
 
 ## Lập dữ liệu Hội Thánh mới (New church setup)
 
-1. Bấm **Copies** ở thanh menu, rồi chọn **New church setup**.
-2. Gõ tên Hội Thánh, rồi bấm **Start New church setup**.
+1. Bấm **Dữ liệu** ở thanh menu, rồi chọn **Lập dữ liệu Hội Thánh mới**.
+2. Gõ tên Hội Thánh, rồi bấm **Lập dữ liệu Hội Thánh mới**.
 
-Chương trình tạo dữ liệu mới, trống, chỉ có các danh sách có sẵn. Dữ liệu cũ vẫn còn.
-Để mở lại dữ liệu cũ: **Copies** → **Church copies**.
+Phần mềm tạo dữ liệu mới, trống, chỉ có các danh sách có sẵn. Dữ liệu cũ vẫn còn.
+Để mở lại dữ liệu cũ: **Dữ liệu** → **Các Dữ liệu Hội Thánh**.
 
 ---
 
@@ -133,7 +154,7 @@ Chương trình tạo dữ liệu mới, trống, chỉ có các danh sách có 
 |---|---|
 | `Khong tim thay Python` | Làm lại Bước 1. Nhớ đánh dấu ô **Add python.exe to PATH**. Sau đó khởi động lại máy. |
 | Cửa sổ đen hiện rồi tắt ngay | Làm lại Bước 2. Nhớ giải nén tệp ZIP trước khi mở. |
-| `Not started: ... busy` | Chương trình đã đang chạy ở một cửa sổ đen khác. Dùng cửa sổ đó, hoặc tắt nó rồi mở lại. |
+| `Not started: ... busy` | Phần mềm đã đang chạy ở một cửa sổ đen khác. Dùng cửa sổ đó, hoặc tắt nó rồi mở lại. |
 | `Not started: ... OneDrive` | Thư mục dữ liệu nằm trong OneDrive. Chuyển nó ra chỗ khác, ví dụ `C:\HoiThanh`. |
 | Trình duyệt báo "không truy cập được trang" | Cửa sổ đen đã bị đóng. Bấm đúp **`Mo Church Manager.bat`** lần nữa. |
 
@@ -144,27 +165,27 @@ Chương trình tạo dữ liệu mới, trống, chỉ có các danh sách có 
 Hermes là trợ lý AI chạy trên máy này. Bạn **không cần** Hermes. Church Manager vẫn chạy y như
 cũ khi không có Hermes.
 
-Khi bật **Hermes door** (cửa cho Hermes), Hermes có thể đọc dữ liệu Hội Thánh và lưu thông tin
+Khi bật **Cổng Hermes** (cửa cho Hermes), Hermes có thể đọc dữ liệu Hội Thánh và lưu thông tin
 mới giúp bạn, nhưng **chỉ sau khi bạn đồng ý**. Hermes dùng lệnh `python -m churchmgr.agent` và
 hướng dẫn trong thư mục `hermes\skills\church-manager`. Hermes **không bao giờ** thấy ghi chú cá nhân.
 
 ### Bật
 
-1. Mở Church Manager, bấm **Settings**.
-2. Đặt **Hermes door** thành **On**.
-3. Bấm **Save settings**.
+1. Mở Church Manager, bấm **Cài đặt**.
+2. Đặt **Cổng Hermes** thành **Bật**.
+3. Bấm **Lưu cài đặt**.
 
 ### Thêm hướng dẫn (skill) vào Hermes
 
-1. Chép thư mục `hermes\skills\church-manager` (trong thư mục chương trình) vào
+1. Chép thư mục `hermes\skills\church-manager` (trong thư mục phần mềm) vào
    `%LOCALAPPDATA%\hermes\skills\`. Nếu bạn dùng một hồ sơ (profile) Hermes, chép vào
    `%LOCALAPPDATA%\hermes\profiles\<tên>\skills\`.
 2. Chạy lệnh `hermes skills list` và xem có `church-manager` trong danh sách.
 
 ### Thử
 
-Trong cửa sổ lệnh ở thư mục chương trình, chạy `python -m churchmgr.agent status`. Lệnh in tên
-Hội Thánh và số người, gia đình, lịch, dâng hiến và khoản chi. Khi Hermes door đang tắt, lệnh
+Trong cửa sổ lệnh ở thư mục phần mềm, chạy `python -m churchmgr.agent status`. Lệnh in tên
+Hội Thánh và số người, gia đình, lịch, dâng hiến và khoản chi. Khi Cổng Hermes đang tắt, lệnh
 báo cửa đang tắt và không thay đổi gì.
 
 ### Cách lưu dữ liệu
@@ -177,14 +198,14 @@ Không lệnh nào xoá hoặc sửa thông tin cũ. Thay đổi duy nhất là 
 
 ### Tắt
 
-- Trong Church Manager: **Settings** → **Hermes door** → **Off**, rồi **Save settings**. Sau đó mọi
+- Trong Church Manager: **Cài đặt** → **Cổng Hermes** → **Tắt**, rồi **Lưu cài đặt**. Sau đó mọi
   lệnh đều dừng và báo rõ lý do.
 - Để gỡ hướng dẫn: xoá thư mục `church-manager` bạn đã chép vào thư mục `skills` của Hermes.
 
 ### An toàn
 
-- Ghi chú cá nhân không bao giờ ra khỏi chương trình. Không lệnh nào đọc chúng.
-- Hermes door chỉ điều khiển các lệnh của Hermes. Nó **không** khoá tệp dữ liệu: một chương trình
+- Ghi chú cá nhân không bao giờ ra khỏi phần mềm. Không lệnh nào đọc chúng.
+- Cổng Hermes chỉ điều khiển các lệnh của Hermes. Nó **không** khoá tệp dữ liệu: một chương trình
   khác trên máy vẫn đọc được tệp. Chỉ dùng Hermes mà bạn tin cậy.
 - Những gì Hermes đọc sẽ được gửi tới mô hình AI bạn chọn trong Hermes. Nếu mô hình chạy trên mạng
   (cloud), dữ liệu Hội Thánh rời khỏi máy này. Mô hình chạy trên máy (local) giữ dữ liệu tại đây.
@@ -205,8 +226,9 @@ Chạy trực tiếp: `python app.py`. Chỉ cần Python 3.14, không cần cà
 Tệp `current.txt` trong thư mục chứa ghi dữ liệu Hội Thánh nào được mở khi khởi động.
 
 **Kiểm tra toàn bộ:** `python verify.py`. Lệnh này chạy mọi bài kiểm tra, tạo một Hội Thánh giả
-50 người trong thư mục tạm, mở chương trình, kiểm tra mọi ô trên Dashboard và ô Tìm kiếm, tạo một
-bản bàn giao và chứng minh không có ghi chú cá nhân, kiểm tra hai bản Giving statement và các lệnh
-Hermes door (`python -m churchmgr.agent`). In PASS hoặc FAIL cho từng mục; trả về 0 chỉ khi tất cả
-đều đạt. Không bao giờ mở dữ liệu thật của bạn. `--keep` giữ thư mục tạm; `--people N` đặt số
-người (20 đến 1000).
+50 người trong thư mục tạm, mở phần mềm, kiểm tra mọi ô trên Trang chủ và ô Tìm kiếm, tạo một
+bản bàn giao và chứng minh không có ghi chú cá nhân, kiểm tra hai bản Tổng kết dâng hiến và các lệnh
+Cổng Hermes (`python -m churchmgr.agent`). Sau đó lệnh mở mọi trang bằng Tiếng Việt và bằng English,
+kiểm tra nút đổi ngôn ngữ, và kiểm tra trang Tiếng Việt không còn chữ tiếng Anh. In PASS hoặc FAIL cho
+từng mục; trả về 0 chỉ khi tất cả đều đạt. Không bao giờ mở dữ liệu thật của bạn. `--keep` giữ thư mục
+tạm; `--people N` đặt số người (20 đến 1000).

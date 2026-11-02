@@ -422,12 +422,47 @@ class SmallLogicTest(unittest.TestCase):
         self.assertEqual(copy_pages._safe_label("x BÍ MẬT C3", ["BÍ MẬT C3"], "Person 2"), "Person 2")
 
     def test_readme_tells_the_same_as_the_refusal_page(self):
-        """B22: the README Handover advice no longer sends the pastor to the Private note for a Document."""
+        """B22: the README Handover advice no longer sends the pastor to the Private note for a Document.
+        I18N-U7: README names the words of the refusal page as a Tiếng Việt church copy shows it."""
+        from churchmgr import server  # this test runs its own server on a Tiếng Việt church copy
+
         readme = " ".join((ROOT / "README.md").read_text(encoding="utf-8").split())
         self.assertNotIn("for a Document change the Private note", readme)
         self.assertNotIn("cannot be changed in the app", readme)
-        self.assertIn("bấm **Delete** bên cạnh tài liệu đó", readme)
+        tmp = tempfile.TemporaryDirectory(prefix="cm-test-")
+        self.addCleanup(tmp.cleanup)
+        root = pathlib.Path(tmp.name)
+        copy = root / "vi"
+        fake.build_fake_church(copy, lang="vi")
+        conn = db.connect(copy / db.DB_NAME)
+        self.addCleanup(conn.close)
+        owner = people.list_persons(conn)[2]["id"]
+        words = "U7 lời riêng tư 9182"
+        people.add_private_note(conn, owner, words)
+        doc_id = documents.add_document(conn, copy, f"Ghi chú: {words}\n".encode("utf-8"), "ghichu.txt",
+                                        person_id=owner)
+        httpd = server.make_server(copy, root, 0, remember=False)
+        server.serve_in_thread(httpd)
+        self.addCleanup(httpd.server_close)
+        self.addCleanup(httpd.shutdown)
+        live = LiveServer()  # its request helper, on this server
+        live.httpd = httpd
+
+        status, _h, data = live.request("POST", "/copies/handover", {})
+        page = data.decode("utf-8")
+        self.assertEqual(status, 400)
+        self.assertIn('<html lang="vi">', page)
+        refusal = " ".join(section(page, "handover").split())
+        self.assertIn(f'<a href="/documents/{doc_id}/delete" aria-label="Xóa Tài liệu ghichu.txt">Xóa</a></li>',
+                      refusal)
+        self.assertIn("bấm **Xóa** bên cạnh tài liệu đó", readme)
+        self.assertIn('<a class="nav-item" href="/documents">Tài liệu</a>', page)
+        self.assertIn("cũng có trong **Tài liệu**", readme)
+        self.assertIn("sửa Ghi chú cá nhân không làm thay đổi tệp Tài liệu", refusal)
         self.assertIn("Sửa ghi chú cá nhân không làm thay đổi tệp tài liệu", readme)
+        self.assertIn(">Tạo Bàn giao</button>", refusal)
+        self.assertIn("bấm **Tạo Bàn giao** lại", readme)
+        self.assertNotIn(words, page)
 
 
 if __name__ == "__main__":
