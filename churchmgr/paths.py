@@ -10,28 +10,28 @@ This is the only module that knows the default ``%LOCALAPPDATA%\\ChurchManager``
 import os
 from pathlib import Path
 
+from .i18n import TextError
+
 ENV_COPY = "CHURCH_MANAGER_COPY"
 ENV_HOME = "CHURCH_MANAGER_HOME"
 CURRENT_FILE = "current.txt"
 DEFAULT_DIR_NAME = "ChurchManager"
 
 
-class CopyPathError(ValueError):
-    """The folder cannot hold a church copy (for example it is inside OneDrive)."""
+class CopyPathError(TextError):
+    """The folder cannot hold a church copy (for example it is inside OneDrive). A ``ValueError``;
+    ``str()`` is English, pages show ``i18n.error_text(e)``."""
 
 
 def check_not_onedrive(path):
     """Return the resolved ``Path``. Raise ``CopyPathError`` if it is inside OneDrive."""
     if path is None or str(path).strip() == "":
-        raise CopyPathError("A folder is required for the church copy.")
+        raise CopyPathError("copies.err_folder_required")
     raw = Path(path)
     resolved = raw.resolve()
     for candidate in (str(raw), str(raw.absolute()), str(resolved)):
         if "onedrive" in candidate.lower():
-            raise CopyPathError(
-                f"The church copy must not be inside OneDrive: {resolved}. "
-                "Choose a folder outside OneDrive, for example under %LOCALAPPDATA%."
-            )
+            raise CopyPathError("copies.err_onedrive", path=resolved, example="%LOCALAPPDATA%")
     return resolved
 
 

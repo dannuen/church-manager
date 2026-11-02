@@ -5,19 +5,23 @@ Rules kept here:
 - A Handover is made only by ``handover.make_handover`` into ``<copies root>/handovers/``; the open
   church copy is never changed. A refused Handover says why in plain words and never shows the
   text of a Private note.
-- New church setup makes a new folder in the copies root (``setup.new_church_setup``); it never
-  touches the open church copy. The server then opens the new copy (``switch_copy`` also writes
-  ``current.txt`` when the app was started the default way).
+- New church setup makes a new folder in the copies root (``setup.new_church_setup``), with the default
+  lists in the language picked on the form (Tiếng Việt at the start); it never touches the open church
+  copy. The server then opens the new copy (``switch_copy`` also writes ``current.txt`` when the app was
+  started the default way).
 - A church copy is opened, and a Handover zip is given back, only by a name this page found in the
   folder itself, never by a path from the request. OneDrive folders are refused.
+- Words on screen come from the text table (section ``copies``). Paths and file names are data: shown
+  as they are, never translated.
 """
 
 import sqlite3
 from pathlib import Path
 
-from .. import db, documents, handover, paths
+from .. import db, documents, handover, i18n, paths, settings
 from .. import setup as church_setup
 from .. import text, ui
+from ..i18n import t, tn
 from ..server import Response
 from ..ui import h, vi
 from .documents import fmt_size
@@ -26,15 +30,21 @@ from .people import empty, panel, person_link, table
 HANDOVERS = "handovers"  # the folder in the copies root that holds the Handover zips
 HANDOVER_ROWS = 5
 
-# Where the text of a Private note was found: table -> (glossary word, page of the row or of the list).
+# Where the text of a Private note was found: table -> (TEXT key of its word, page of the row or of the list).
 _PLACES = {
-    "person": ("Person", "/people/{}"), "family": ("Family", "/families/{}"),
-    "chi_phai": ("Chi phái", "/chi-phai/{}"), "calendar_item": ("Calendar item", "/calendar/{}"),
-    "head_count": ("Head count", "/calendar"), "offering": ("Offering", "/money"), "expense": ("Expense", "/money"),
-    "document": ("Document", "/documents"), "sent_document": ("Sent document", "/sent"),
-    "list_item": ("Lists", "/lists"), "setting": ("Settings", "/settings"),
+    "person": ("copies.word_person", "/people/{}"), "family": ("copies.word_family", "/families/{}"),
+    "chi_phai": ("copies.word_chi_phai", "/chi-phai/{}"), "calendar_item": ("copies.word_calendar_item", "/calendar/{}"),
+    "head_count": ("copies.word_head_count", "/calendar"), "offering": ("copies.word_offering", "/money"),
+    "expense": ("copies.word_expense", "/money"), "document": ("copies.word_document", "/documents"),
+    "sent_document": ("copies.word_sent_document", "/sent"), "list_item": ("core.nav_lists", "/lists"),
+    "setting": ("core.nav_settings", "/settings"),
 }
-_FIELDS = {"full_name": "name", "original_name": "file name", "care_note": "Care note", "absent_note": "absent note"}
+# The words of a column the pastor can type into; any other column is ``copies.field_other``.
+_FIELDS = {"full_name": "copies.field_name", "name": "copies.field_name", "original_name": "copies.field_file_name",
+           "care_note": "copies.field_care_note", "absent_note": "copies.field_absent_note",
+           "note": "copies.field_note", "address": "copies.field_address", "phone": "copies.field_phone",
+           "title": "copies.field_title", "place": "copies.field_place", "subject": "copies.field_subject",
+           "value": "copies.field_value"}
 PLACE_ROWS = 10  # a refused Handover lists at most this many places
 
 
@@ -44,9 +54,30 @@ def handovers_dir(copies_root):
     return Path(copies_root) / HANDOVERS
 
 
+def _lang_attr(code):
+    """`` lang="<code>"`` on a page that is not in English, ``""`` on an English page (it keeps the markup
+    it always had). ``zxx`` (no language) marks a path, a file name or a flag; ``en`` the English name of a
+    column or table. A screen reader and the check for English words then leave those words out."""
+    return "" if ui.current_lang() == "en" else f' lang="{code}"'
+
+
+def mark(value, code="zxx"):
+    """``value`` escaped; in ``<span lang="<code>">`` on a page that is not in English (see ``_lang_attr``)."""
+    attr = _lang_attr(code)
+    return f"<span{attr}>{h(value)}</span>" if attr else h(value)
+
+
 def path_html(path):
     """A folder or file path, escaped, that may wrap only after a ``\\`` or ``/`` (never inside a name)."""
-    return '<span class="path">' + h(path).replace("\\", "\\<wbr>").replace("/", "/<wbr>") + "</span>"
+    return (f'<span class="path"{_lang_attr("zxx")}>' + h(path).replace("\\", "\\<wbr>").replace("/", "/<wbr>")
+            + "</span>")
+
+
+def size_text(size):
+    """``fmt_size`` in the words of the page: below 1 KB it says ``byte`` itself.
+    shortcut: ``pages/documents.py`` (another card) still writes ``byte``/``bytes`` in English; use its
+    ``fmt_size`` alone once that card puts it in the text table."""
+    return tn("copies.bytes", size) if size < 1024 else fmt_size(size)
 
 
 def _read_copy(folder):
@@ -154,29 +185,31 @@ def _safe_label(label, bodies, fallback):
 def _this_copy(req):
     state = req.state
     current = paths.read_current(state.copies_root)
+    current_txt = mark(paths.CURRENT_FILE)
     if current is not None and current.resolve() == state.copy_folder:
-        at_start = "This church copy (named in current.txt)"
+        at_start = ui.t_html("copies.start_this", file=current_txt)
     elif current is not None:
-        at_start = f'{path_html(current)} (named in current.txt)'
+        at_start = ui.t_html("copies.start_other", path=path_html(current), file=current_txt)
     else:
         at_start = ui.DASH
     if not state.remember:
-        at_start += ('<br><span class="faint">Church Manager was started with a set folder (--copy), '
-                     "so opening another copy does not change current.txt.</span>")
+        at_start += ('<br><span class="faint">'
+                     + ui.t_html("copies.set_folder", flag=mark("--copy"), file=current_txt) + "</span>")
     counts = req.conn.execute(
         "SELECT (SELECT COUNT(*) FROM person), (SELECT COUNT(*) FROM document), "
         "(SELECT COALESCE(SUM(size), 0) FROM document)").fetchone()
+    inside = ui.t_html("copies.inside", db=mark(db.DB_NAME), people=h(tn("people.count", counts[0])),
+                       documents=h(tn("copies.documents", counts[1])), size=h(size_text(counts[2])))
     rows = [
-        ("Church", vi(req.church_name)),
-        ("Saved in", f'{path_html(state.copy_folder)}'),
-        ("Copies folder", f'{path_html(state.copies_root)}'),
-        ("Inside", h(f"{db.DB_NAME} ({ui.plural(counts[0], 'Person', 'People')}) and the documents folder "
-                     f"({ui.plural(counts[1], 'Document', 'Documents')}, {fmt_size(counts[2])})")),
-        ("Opens at start", at_start),
+        (t("copies.church"), vi(req.church_name)),
+        (t("copies.saved_in_row"), path_html(state.copy_folder)),
+        (t("copies.copies_folder"), path_html(state.copies_root)),
+        (t("copies.inside_row"), inside),
+        (t("copies.opens_at_start"), at_start),
     ]
     kv = '<dl class="kv wide">' + "".join(f"<div><dt>{h(k)}</dt><dd>{v}</dd></div>" for k, v in rows) + "</dl>"
-    note = '<p class="hint">A church copy is kept outside OneDrive. Copy the whole folder to keep a spare.</p>'
-    return panel("this-copy", "This church copy", kv + note)
+    note = f'<p class="hint">{h(t("copies.keep_outside"))}</p>'
+    return panel("this-copy", t("copies.this_copy"), kv + note)
 
 
 def _copies_panel(req, error):
@@ -184,36 +217,41 @@ def _copies_panel(req, error):
     lines = []
     for c in list_copies(state.copies_root):
         is_open = c["folder"] == state.copy_folder
-        name = vi(c["name"]) if c["name"] else '<span class="faint">Cannot be read</span>'
+        name = vi(c["name"]) if c["name"] else f'<span class="faint">{h(t("copies.cannot_read"))}</span>'
         if is_open:
-            action = '<span class="tag open">Open now</span>'
+            action = f'<span class="tag open">{h(t("copies.open_now"))}</span>'
         elif c["onedrive"]:
-            action = '<span class="faint">Inside OneDrive: not opened</span>'
+            action = f'<span class="faint">{h(t("copies.in_onedrive"))}</span>'
         elif c["name"] is None:
             action = ui.DASH
         else:
+            label = h(t("copies.open_label", name=c["name"]))
             action = (f'<form class="row-form" action="/copies/open" method="post">{ui.hidden("folder", c["folder"].name)}'
-                      f'<button class="btn secondary" type="submit" aria-label="Open {h(c["name"])}">Open</button></form>')
-        persons = f'<span class="num">{h(ui.plural(c["persons"], "Person", "People"))}</span>' if c["persons"] is not None else ui.DASH
-        lines.append([name, f'<span class="path">{h(c["folder"].name)}</span>', persons, action])
+                      f'<button class="btn secondary" type="submit" aria-label="{label}">{h(t("core.btn_open"))}</button>'
+                      "</form>")
+        persons = (f'<span class="num">{h(tn("people.count", c["persons"]))}</span>' if c["persons"] is not None
+                   else ui.DASH)
+        lines.append([name, path_html(c["folder"].name), persons, action])
     if lines:
-        body = table([("Church", False), ("Folder", False), ("People", True), ("", True)], lines, "copies")
+        body = table([(t("copies.church"), False), (t("copies.folder"), False), (t("copies.people"), True), ("", True)],
+                     lines, "copies")
     else:
-        body = empty("No church copy in the copies folder.")
+        body = empty(t("copies.no_copies"))
     if error and error[0] == "open":
-        body = f'<p class="error" role="alert">{h(error[1])}</p>' + body
-    meta = "Folders of the copies folder that hold a church.db"
-    return panel("copies", "Church copies", body, meta=meta)
+        body = f'<p class="error" role="alert">{h(i18n.error_text(error[1]))}</p>' + body
+    meta = ui.t_html("copies.list_meta", db=mark(db.DB_NAME))
+    return panel("copies", t("copies.list_title"), body, meta=meta)
 
 
 def _handover_result(req):
     made = find_handover(req.state.copies_root, req.query.get("made") or "")
     if made is None:
         return ""
+    saved_as = ui.t_html("copies.saved_as", path=path_html(made), size=h(size_text(made.stat().st_size)))
     return ('<div class="result" role="status" data-row>'
-            '<p><strong>Handover made.</strong> Private notes were removed.</p>'
-            f'<p class="hint">Saved as {path_html(made)} ({h(fmt_size(made.stat().st_size))})</p>'
-            f'<p><a class="btn secondary" href="/copies/handovers/{h(made.name)}">Download the Handover zip</a></p>'
+            f'<p><strong>{h(t("copies.made"))}</strong> {h(t("copies.notes_removed"))}</p>'
+            f'<p class="hint">{saved_as}</p>'
+            f'<p><a class="btn secondary" href="/copies/handovers/{h(made.name)}">{h(t("copies.download"))}</a></p>'
             "</div>")
 
 
@@ -222,21 +260,33 @@ _LABEL_SQL = {"person": "SELECT full_name FROM person WHERE id = ?", "family": "
               "calendar_item": "SELECT title FROM calendar_item WHERE id = ?"}
 
 
+def _word_html(table_name):
+    """The word on screen for a table of the church copy, as HTML. A link table has no word of its own:
+    ``copies.word_other`` with its English name (``person status``)."""
+    if table_name in _PLACES:
+        return h(t(_PLACES[table_name][0]))
+    return ui.t_html("copies.word_other", table=mark(table_name.replace("_", " "), "en"))
+
+
 def _row_link(conn, table_name, rowid, bodies):
     """A link to the Person, Family, Chi phái or Calendar item ``rowid``, named safely."""
-    word, href = _PLACES[table_name]
+    key, href = _PLACES[table_name]
     label = conn.execute(_LABEL_SQL[table_name], (rowid,)).fetchone()[0]
     return (f'<a href="{h(href.format(rowid))}" lang="vi">'
-            f'{h(_safe_label(label, bodies, f"{word} {rowid}"))}</a>')
+            f'{h(_safe_label(label, bodies, f"{t(key)} {rowid}"))}</a>')
 
 
 def _db_place(conn, place, bodies, _docs_folder):
     _person_id, table_name, rowid, col = place
-    word, href = _PLACES.get(table_name, (table_name.replace("_", " "), "/"))
-    field = _FIELDS.get(col, col.replace("_", " "))
+    href = _PLACES.get(table_name, (None, "/"))[1]
+    if col in _FIELDS:
+        field = h(t(_FIELDS[col]))
+    else:  # a column the pastor does not type into (a date, a code): its English name
+        field = ui.t_html("copies.field_other", col=mark(col.replace("_", " "), "en"))
     if table_name in _LABEL_SQL:
-        return f"the {h(field)} of the {h(word)} {_row_link(conn, table_name, rowid, bodies)}."
-    return f'a {h(field)} in <a href="{h(href)}">{h(word)}</a>.'
+        return ui.t_html("copies.place_field_of", field=field, word=_word_html(table_name),
+                         link=_row_link(conn, table_name, rowid, bodies))
+    return ui.t_html("copies.place_field_in", field=field, link=f'<a href="{h(href)}">{_word_html(table_name)}</a>')
 
 
 def _document_place(conn, place, bodies, docs_folder):
@@ -245,27 +295,31 @@ def _document_place(conn, place, bodies, docs_folder):
     _person_id, doc_id, stored = place
     if doc_id is None:
         shown = _safe_label(stored, bodies, "")
-        file_html = f"the file {path_html(shown)}" if shown else "a file"
-        return (f"{file_html} of the documents folder. No Document in the app has this file: remove it from "
-                f"the folder {path_html(docs_folder)} in File Explorer.")
+        file_html = ui.t_html("copies.place_file", path=path_html(shown)) if shown else h(t("copies.place_a_file"))
+        return ui.t_html("copies.place_stray", file=file_html, folder=path_html(docs_folder))
     doc = documents.get_document(conn, doc_id)
-    name = _safe_label(doc["original_name"], bodies, f"Document {doc_id}")
-    where = f'the Document <span lang="vi">{h(name)}</span>'
-    for col, table_name in (("person_id", "person"), ("family_id", "family"), ("calendar_item_id", "calendar_item")):
-        if doc[col] is not None:
-            where += f" of {_row_link(conn, table_name, doc[col], bodies)}"
-            break
-    return (f'{where}. <a href="/documents/{int(doc_id)}/delete" aria-label="Delete the Document {h(name)}">'
-            "Delete</a>")
+    name = _safe_label(doc["original_name"], bodies, f"{t('copies.word_document')} {doc_id}")
+    name_html = f'<span lang="vi">{h(name)}</span>'
+    owner = next(((col, table_name) for col, table_name in
+                  (("person_id", "person"), ("family_id", "family"), ("calendar_item_id", "calendar_item"))
+                  if doc[col] is not None), None)
+    if owner:
+        where = ui.t_html("copies.place_doc_of", name=name_html,
+                          link=_row_link(conn, owner[1], doc[owner[0]], bodies))
+    else:
+        where = ui.t_html("copies.place_doc", name=name_html)
+    return (f'{where}. <a href="/documents/{int(doc_id)}/delete" aria-label="{h(t("copies.delete_doc", name=name))}">'
+            f'{h(t("core.btn_delete"))}</a>')
 
 
 def _refusal_html(conn, copy_folder, refusal):
     """A refused Handover (a ``handover.HandoverError``) in plain words: what was found and where
     (in the database or in a Document file, each Document with its Delete link), never the words of
     the Private note. Changing the Private note does not change a Document file, so the page says so."""
+    not_made = f'<strong>{h(t("copies.not_made"))}</strong>'
     if not refusal.private_text_found:
-        return (f'<div class="refusal" role="alert"><p><strong>Handover not made.</strong> {h(refusal)}</p>'
-                "<p>Nothing was changed. Fix this, then press Make Handover again.</p></div>")
+        return (f'<div class="refusal" role="alert"><p>{not_made} {h(i18n.error_text(refusal))}</p>'
+                f'<p>{h(t("copies.nothing_changed"))}</p></div>')
     bodies = [r[0] for r in conn.execute("SELECT body FROM private_note") if len(r[0]) >= handover.MIN_CHECK_LENGTH]
     places = ([(p, _db_place) for p in private_text_places(conn)]
               + [(p, _document_place) for p in private_text_documents(conn, copy_folder)])
@@ -275,62 +329,61 @@ def _refusal_html(conn, copy_folder, refusal):
         person_id = place[0]
         owner = conn.execute("SELECT full_name FROM person WHERE id = ?", (person_id,)).fetchone()[0]
         # whose Private note: the link opens their Private note panel, where each note has its Edit link
-        owner_html = person_link(person_id, _safe_label(owner, bodies, f"Person {person_id}"), "#private-note")
-        lines.append(f"<li>The Private note of {owner_html} is also written in "
-                     f"{where(conn, place, bodies, docs_folder)}</li>")
+        owner_html = person_link(person_id, _safe_label(owner, bodies, f"{t('copies.word_person')} {person_id}"),
+                                 "#private-note")
+        lines.append("<li>" + ui.t_html("copies.place_line", owner=owner_html,
+                                        where=where(conn, place, bodies, docs_folder)) + "</li>")
     if len(places) > PLACE_ROWS:
-        lines.append(f"<li>And {len(places) - PLACE_ROWS} more places.</li>")
+        lines.append(f'<li>{h(t("copies.more_places", n=len(places) - PLACE_ROWS))}</li>')
     found = f'<ul class="places">{"".join(lines)}</ul>' if lines else ""
     return ('<div class="refusal" role="alert">'
-            "<p><strong>Handover not made.</strong> The words of a Private note are also written somewhere else "
-            "in this church copy, so they would go to the next pastor.</p>"
+            f'<p>{not_made} {h(t("copies.found_elsewhere"))}</p>'
             f"{found}"
-            "<p>To fix it, take the private words out of each place above. For a Document, press Delete: "
-            "changing the Private note does not change a Document file, and the file still goes to the next "
-            "pastor. For other text, open it and change it. Then press Make Handover again. "
-            "Nothing was changed and no zip was saved.</p></div>")
+            f'<p>{h(t("copies.fix_places"))}</p></div>')
 
 
 def _handover_panel(req, refusal):
     root = req.state.copies_root
     out = handovers_dir(root)
-    intro = ("<p>A Handover is one zip file for the next pastor of this church: the database and every "
-             "Document. Private notes are removed from it. This church copy is not changed.</p>")
-    form = ui.form("/copies/handover", ui.button("Make Handover"))
-    where = f'<p class="hint">Saved in {path_html(out)}</p>'
+    intro = f'<p>{h(t("copies.handover_intro"))}</p>'
+    form = ui.form("/copies/handover", ui.button(t("copies.make")))
+    where = f'<p class="hint">{ui.t_html("copies.saved_in", path=path_html(out))}</p>'
     made = list_handovers(root)
     if made:
         rows = "".join(
             f'<li class="row" data-row><span class="what wrap">'
-            f'<a class="file-name" href="/copies/handovers/{h(p.name)}">{h(p.name)}</a></span>'
-            f'<span class="side num">{h(fmt_size(size))}</span></li>' for p, size in made[:HANDOVER_ROWS])
-        listing = f'<h3 class="sub-head">Handovers made</h3><ul class="rows">{rows}</ul>'
+            f'<a class="file-name" href="/copies/handovers/{h(p.name)}"{_lang_attr("zxx")}>{h(p.name)}</a></span>'
+            f'<span class="side num">{h(size_text(size))}</span></li>' for p, size in made[:HANDOVER_ROWS])
+        listing = f'<h3 class="sub-head">{h(t("copies.made_list"))}</h3><ul class="rows">{rows}</ul>'
     else:
         listing = ""
     refusal_html = _refusal_html(req.conn, req.state.copy_folder, refusal) if refusal else ""
     body = _handover_result(req) + refusal_html + intro + form + where + listing
-    return panel("handover", "Handover", body)
+    return panel("handover", t("copies.handover"), body)
 
 
-def _setup_panel(error):
-    message = error[1] if error and error[0] == "setup" else None
+def _setup_panel(error, lang):
+    """The New church setup form: the church name and the language of the new church copy (its default
+    lists are made in that language; Tiếng Việt at the start)."""
+    errors = {error[1]: i18n.error_text(error[2])} if error and error[0] == "setup" else {}
     form = ui.form("/copies/new",
-                   ui.field("Church name", "church_name", "", error=message, required=True, autocomplete="off",
-                            lang="vi", hint="For example: Hội Thánh Tin Lành Bình An")
-                   + ui.button("Start New church setup", "secondary"))
-    intro = ("<p>Starts a blank church copy that keeps only the default lists, in a new folder of the copies "
-             "folder. Church Manager then opens it. This church copy is kept; open it again from Church copies.</p>")
-    return panel("new-church-setup", "New church setup", intro + form)
+                   ui.field(t("settings.church_name"), "church_name", "", error=errors.get("church_name"),
+                            required=True, autocomplete="off", lang="vi", hint=t("setup.name_hint"))
+                   + ui.select_field(t("core.language"), settings.LANGUAGE, ui.LANG_NAMES, lang,
+                                     error=errors.get(settings.LANGUAGE), hint=t("setup.language_hint"))
+                   + ui.button(t("copies.setup_start"), "secondary"))
+    intro = f'<p>{h(t("copies.setup_intro"))}</p>'
+    return panel("new-church-setup", t("setup.title"), intro + form)
 
 
-def _view(req, error=None, refusal=None, status=200):
+def _view(req, error=None, refusal=None, status=200, lang=i18n.DEFAULT_LANG):
     left = _this_copy(req) + _copies_panel(req, error)
-    right = _handover_panel(req, refusal) + _setup_panel(error)
+    right = _handover_panel(req, refusal) + _setup_panel(error, lang)
     body = (f'<div class="grid copies"><div class="span-7 stack">{left}</div>'
             f'<div class="span-5 stack">{right}</div></div>')
     n = len(list_copies(req.state.copies_root))
-    sub = h(f"{req.church_name} is open · {ui.plural(n, 'church copy', 'church copies')} in the copies folder")
-    return Response.html(ui.page("Copies", body, "copies", sub=sub), status)
+    sub = ui.t_html("copies.sub", church=vi(req.church_name), copies=h(tn("copies.copies", n)))
+    return Response.html(ui.page(t("copies.title"), body, "copies", sub=sub), status)
 
 
 def copies_page(req):
@@ -342,46 +395,53 @@ def handover_post(req):
         made = handover.make_handover(req.state.copy_folder, handovers_dir(req.state.copies_root))
     except handover.HandoverError as exc:
         return _view(req, refusal=exc, status=400)
-    return Response.redirect(ui.url("/copies", made=made.name, msg="Handover made. Private notes were removed."))
+    return Response.redirect(ui.url("/copies", made=made.name, msg=f'{t("copies.made")} {t("copies.notes_removed")}'))
 
 
 def handover_file(req):
     found = find_handover(req.state.copies_root, req.params["name"])
     if found is None:
-        body = '<p class="lead">There is no Handover zip with this name.</p><p><a href="/copies">Go to Copies</a></p>'
-        return Response.html(ui.page("Handover not found", body, "copies"), 404)
+        body = (f'<p class="lead">{h(t("copies.no_zip"))}</p>'
+                f'<p><a href="/copies">{h(t("copies.go_copies"))}</a></p>')
+        return Response.html(ui.page(t("copies.zip_not_found"), body, "copies"), 404)
     return Response.file(found, found.name)
 
 
 def new_church_post(req):
+    page_lang = ui.current_lang()  # the flash is in the words of the page where the button was pressed
     name = req.form.get("church_name", "")
+    lang = req.form.get(settings.LANGUAGE) or i18n.DEFAULT_LANG  # no field: Tiếng Việt, as on the form
     try:
-        text.clean_name(name, "Church name")  # refuse an empty name before anything is made
+        settings.check_language(lang)
+    except ValueError as exc:
+        return _view(req, ("setup", settings.LANGUAGE, exc), status=400)
+    try:
+        text.clean_name(name, "settings.church_name")  # refuse an empty name before anything is made
         # The handovers folder exists first, so a church called "Handovers" gets "handovers-2", not that folder.
         handovers_dir(req.state.copies_root).mkdir(parents=True, exist_ok=True)
-        folder = church_setup.new_church_setup(req.state.copies_root, name)
+        folder = church_setup.new_church_setup(req.state.copies_root, name, lang)
         req.state.switch_copy(folder)
     except (ValueError, db.ChurchCopyError) as exc:  # paths.CopyPathError is a ValueError
-        return _view(req, ("setup", str(exc)), status=400)
-    church = text.clean_name(name, "Church name")
-    return Response.redirect(ui.url("/", msg=f"New church setup is done: {church}. This is its Dashboard. "
-                                             "The other church copies are kept in Copies."))
+        return _view(req, ("setup", "church_name", exc), status=400, lang=lang)
+    church = text.clean_name(name, "settings.church_name")
+    return Response.redirect(ui.url("/", msg=t("copies.setup_done", page_lang, church=church)))
 
 
 def open_post(req):
+    page_lang = ui.current_lang()  # the flash is in the words of the page where the button was pressed
     wanted = req.form.get("folder") or ""
     found = next((c for c in list_copies(req.state.copies_root) if c["folder"].name == wanted), None)
     try:
         if found is None:
-            raise ValueError("There is no church copy with this folder name in the copies folder.")
+            raise i18n.TextError("copies.err_no_such_copy")
         if found["onedrive"]:
-            raise ValueError("This church copy is inside OneDrive, so it is not opened. Move it outside OneDrive first.")
+            raise i18n.TextError("copies.err_copy_in_onedrive")
         if found["folder"] == req.state.copy_folder:
-            return Response.redirect(ui.url("/", msg="This church copy is already open."))
+            return Response.redirect(ui.url("/", msg=t("copies.already_open", page_lang)))
         req.state.switch_copy(found["folder"])
     except (ValueError, db.ChurchCopyError) as exc:
-        return _view(req, ("open", str(exc)), status=400)
-    return Response.redirect(ui.url("/", msg=f"Opened {found['name'] or found['folder'].name}."))
+        return _view(req, ("open", exc), status=400)
+    return Response.redirect(ui.url("/", msg=t("copies.opened", page_lang, name=found["name"] or found["folder"].name)))
 
 
 ROUTES = [
