@@ -9,8 +9,9 @@ Visits are made with :func:`churchmgr.care.plan_visit`, not here.
 
 import datetime as _dt
 
-from . import text
+from . import i18n, text
 from .db import transaction
+from .i18n import TextError
 from .schema import CALENDAR_KINDS, CALENDAR_PARTS
 
 REPEATS = ("none", "weekly", "monthly")
@@ -43,9 +44,9 @@ def check_year(year):
     if isinstance(year, str) and year.strip().isascii() and year.strip().isdigit():
         year = text.digits_to_int(year.strip())
     if type(year) is not int:
-        raise ValueError("Year must be a whole number like 2026.")
+        raise TextError("calendar.err_year_number")
     if not 1900 <= year <= 9999:
-        raise ValueError("Year: use a year from 1900 to 9999.")
+        raise TextError("calendar.err_year_range")
     return year
 
 
@@ -60,29 +61,29 @@ def _to_datetime(value, what):
 # ---------------------------------------------------------------- helpers
 
 def _require_item(conn, item_id):
-    iid = text.to_id(item_id, "Calendar item")
+    iid = text.to_id(item_id, "calendar.item")
     row = conn.execute("SELECT * FROM calendar_item WHERE id = ?", (iid,)).fetchone()
     if row is None:
-        raise ValueError(f"No Calendar item with id {iid}.")
+        raise TextError("calendar.err_no_item", id=iid)
     return row
 
 
 def _require_person(conn, person_id):
-    pid = text.to_id(person_id, "Person")
+    pid = text.to_id(person_id, "calendar.person")
     if conn.execute("SELECT 1 FROM person WHERE id = ?", (pid,)).fetchone() is None:
-        raise ValueError(f"No Person with id {pid}.")
+        raise TextError("calendar.err_no_person", id=pid)
     return pid
 
 
 def _check_kind(kind):
     if kind not in CALENDAR_KINDS:
-        raise ValueError(f"Kind must be one of: {', '.join(CALENDAR_KINDS)}.")
+        raise TextError("calendar.err_kind")  # names the CALENDAR_KINDS
     return kind
 
 
 def _check_part(part):
     if part not in CALENDAR_PARTS:
-        raise ValueError(f"Part must be one of: {', '.join(CALENDAR_PARTS)}.")
+        raise TextError("calendar.err_part")  # names the CALENDAR_PARTS
     return part
 
 
@@ -91,16 +92,16 @@ def _start_dates(start, repeat, repeat_until):
     if repeat is None or repeat == "":
         repeat = "none"
     if repeat not in REPEATS:
-        raise ValueError(f"Repeat must be one of: {', '.join(REPEATS)}.")
+        raise TextError("calendar.err_repeat")  # names the REPEATS
     if repeat == "none":
         if repeat_until not in (None, ""):
-            raise ValueError("A repeat end date needs a repeat (weekly or monthly).")
+            raise TextError("calendar.err_until_no_repeat")
         return [start]
     if repeat_until in (None, ""):
-        raise ValueError("A repeat needs an end date (repeat until).")
-    until = _to_date(repeat_until, "Repeat until")
+        raise TextError("calendar.err_repeat_no_until")
+    until = _to_date(repeat_until, "calendar.repeat_until")
     if until < start.date():
-        raise ValueError("The repeat end date is before the first date.")
+        raise TextError("calendar.err_until_before")
     out = []
     k = 0
     while True:
@@ -112,9 +113,7 @@ def _start_dates(start, repeat, repeat_until):
             break
         out.append(nxt)
         if len(out) > MAX_REPEAT_ROWS:
-            raise ValueError(
-                f"A repeat can make at most {MAX_REPEAT_ROWS} Calendar items. Choose an earlier end date."
-            )
+            raise TextError("calendar.err_too_many", max=MAX_REPEAT_ROWS)
         k += 1
     return out
 
@@ -126,13 +125,13 @@ def _add_items(conn, kind, title, starts_at, ends_at=None, place=None, note=None
     Shared by :func:`add_calendar_item` and :func:`churchmgr.care.plan_visit`.
     """
     _check_kind(kind)
-    clean_title = text.clean_name(title, "Title")
-    start = _to_datetime(starts_at, "Start")
+    clean_title = text.clean_name(title, "calendar.title_label")
+    start = _to_datetime(starts_at, "calendar.start")
     length = None
     if ends_at not in (None, ""):
-        end = _to_datetime(ends_at, "End")
+        end = _to_datetime(ends_at, "calendar.end")
         if end < start:
-            raise ValueError("The end is before the start.")
+            raise TextError("calendar.err_end_before_start")
         length = end - start
     starts = _start_dates(start, repeat, repeat_until)
     clean_place = text.clean_text(place)
@@ -172,7 +171,7 @@ def add_calendar_item(conn, kind, title, starts_at, ends_at=None, place=None, no
 def get_calendar_item(conn, item_id):
     """One Calendar item row, or ``None``."""
     return conn.execute(
-        "SELECT * FROM calendar_item WHERE id = ?", (text.to_id(item_id, "Calendar item"),)
+        "SELECT * FROM calendar_item WHERE id = ?", (text.to_id(item_id, "calendar.item"),)
     ).fetchone()
 
 
@@ -180,7 +179,7 @@ def series_items(conn, series_id):
     """All rows of one repeat series, by start."""
     return conn.execute(
         "SELECT * FROM calendar_item WHERE series_id = ? ORDER BY starts_at, id",
-        (text.to_id(series_id, "Series"),),
+        (text.to_id(series_id, "calendar.series"),),
     ).fetchall()
 
 
@@ -197,16 +196,16 @@ def update_calendar_item(conn, item_id, *, kind=_KEEP, title=_KEEP, starts_at=_K
         if kind is not _KEEP and kind != row["kind"]:
             _check_kind(kind)
             if kind == "Visit" or row["kind"] == "Visit":
-                raise ValueError("A Visit cannot change kind. Plan a new Visit or a new Calendar item instead.")
+                raise TextError("calendar.err_visit_kind")
             if row["kind"] == "Service" and _has_head_count(conn, row["id"]):
-                raise ValueError("This Service has a Head count, so it stays a Service.")
+                raise TextError("calendar.err_service_stays")
             changes["kind"] = kind
         if title is not _KEEP:
-            changes["title"] = text.clean_name(title, "Title")
+            changes["title"] = text.clean_name(title, "calendar.title_label")
         if starts_at is not _KEEP:
-            changes["starts_at"] = text.check_datetime(starts_at, "Start")
+            changes["starts_at"] = text.check_datetime(starts_at, "calendar.start")
         if ends_at is not _KEEP:
-            changes["ends_at"] = None if ends_at in (None, "") else text.check_datetime(ends_at, "End")
+            changes["ends_at"] = None if ends_at in (None, "") else text.check_datetime(ends_at, "calendar.end")
         if place is not _KEEP:
             changes["place"] = text.clean_text(place)
         if note is not _KEEP:
@@ -214,7 +213,7 @@ def update_calendar_item(conn, item_id, *, kind=_KEEP, title=_KEEP, starts_at=_K
         start = changes.get("starts_at", row["starts_at"])
         end = changes.get("ends_at", row["ends_at"])
         if end is not None and end < start:
-            raise ValueError("The end is before the start.")
+            raise TextError("calendar.err_end_before_start")
         if changes:
             sets = ", ".join(f"{col} = ?" for col in changes)
             conn.execute(f"UPDATE calendar_item SET {sets} WHERE id = ?", [*changes.values(), row["id"]])
@@ -227,46 +226,53 @@ def _has_head_count(conn, item_id):
 def delete_calendar_item(conn, item_id, today=None):
     """Delete one Calendar item (and its list of people).
 
-    Refused (``ValueError`` with the reason of :func:`delete_refusal`) when it has a Head count,
+    Refused (``TextError`` with the reason of :func:`delete_refusal_key`) when it has a Head count,
     a Document, or is a done Visit: that is history. Also refused when it is before ``today`` and
     people joined or served it, so the Person story keeps them. ``today`` (a date or
     ``YYYY-MM-DD``) defaults to the local date.
     """
     with transaction(conn):
-        reason = delete_refusal(conn, item_id, today)
-        if reason is not None:
-            raise ValueError(reason)
-        conn.execute("DELETE FROM calendar_item WHERE id = ?", (text.to_id(item_id, "Calendar item"),))
+        key = delete_refusal_key(conn, item_id, today)
+        if key is not None:
+            raise TextError(key)
+        conn.execute("DELETE FROM calendar_item WHERE id = ?", (text.to_id(item_id, "calendar.item"),))
 
 
-def delete_refusal(conn, item_id, today=None):
-    """Why :func:`delete_calendar_item` would refuse this Calendar item, or ``None`` when it may go.
+def delete_refusal_key(conn, item_id, today=None):
+    """The TEXT key of why :func:`delete_calendar_item` would refuse this Calendar item, or ``None``
+    when it may go. A page shows ``i18n.t(key)``.
 
     Only reads (no transaction, no write lock), so a page can ask it on every view.
     A missing Calendar item raises ``ValueError``, as the delete does.
     """
-    day = text.today_text() if today is None else text.check_date(today, "Today")
+    day = text.today_text() if today is None else text.check_date(today, "calendar.today")
     row = _require_item(conn, item_id)
     if _has_head_count(conn, row["id"]):
-        return "This Service has a Head count, so it is kept."
+        return "calendar.err_kept_head_count"
     if conn.execute("SELECT 1 FROM document WHERE calendar_item_id = ?", (row["id"],)).fetchone():
-        return "This Calendar item has a Document, so it is kept."
+        return "calendar.err_kept_document"
     if row["kind"] == "Visit" and row["visit_done"]:
-        return "This Visit is done and is part of the Care log, so it is kept."
+        return "calendar.err_kept_visit"
     if row["starts_at"][:10] < day and conn.execute(
         "SELECT 1 FROM calendar_person WHERE calendar_item_id = ?", (row["id"],)
     ).fetchone():
-        return "This Calendar item is in the past and people joined or served it, so it is kept."
+        return "calendar.err_kept_past"
     return None
+
+
+def delete_refusal(conn, item_id, today=None):
+    """:func:`delete_refusal_key` as English text (the agent and the logs read it), or ``None``."""
+    key = delete_refusal_key(conn, item_id, today)
+    return None if key is None else i18n.t(key, "en")
 
 
 def items_between(conn, start_date, end_date):
     """Calendar items that start on a day from ``start_date`` to ``end_date`` (both included),
     in time order. Extra columns: ``head_count``, ``absent_note``, ``visit_name``."""
-    start = text.check_date(start_date, "Start date")
-    end = text.check_date(end_date, "End date")
+    start = text.check_date(start_date, "calendar.start_date")
+    end = text.check_date(end_date, "calendar.end_date")
     if end < start:
-        raise ValueError("The end date is before the start date.")
+        raise TextError("calendar.err_end_date_before")
     return conn.execute(
         "SELECT ci.*, hc.count AS head_count, hc.absent_note, "
         "COALESCE(vp.full_name, vf.name) AS visit_name "
@@ -298,7 +304,7 @@ def remove_person_from_item(conn, item_id, person_id, part=None):
     """Take a Person off a Calendar item (one part, or both when ``part`` is ``None``).
     Returns the number of rows removed."""
     iid = _require_item(conn, item_id)["id"]
-    pid = text.to_id(person_id, "Person")
+    pid = text.to_id(person_id, "calendar.person")
     if part is None:
         cur = conn.execute(
             "DELETE FROM calendar_person WHERE calendar_item_id = ? AND person_id = ?", (iid, pid)
@@ -317,7 +323,7 @@ def item_people(conn, item_id):
         "SELECT cp.person_id, p.full_name, cp.part FROM calendar_person cp "
         "JOIN person p ON p.id = cp.person_id WHERE cp.calendar_item_id = ? "
         "ORDER BY CASE cp.part WHEN 'serves' THEN 0 ELSE 1 END, p.name_folded, p.id",
-        (text.to_id(item_id, "Calendar item"),),
+        (text.to_id(item_id, "calendar.item"),),
     ).fetchall()
 
 
@@ -327,13 +333,13 @@ def set_head_count(conn, item_id, count, absent_note=None):
     """Record the Head count of a Service (a whole number from 0). A new count
     replaces the old one for that Service."""
     if isinstance(count, bool) or not isinstance(count, int):
-        raise ValueError("A Head count must be a whole number.")
+        raise TextError("calendar.err_hc_whole")
     if not 0 <= count <= MAX_HEAD_COUNT:
-        raise ValueError("A Head count must be 0 or more.")
+        raise TextError("calendar.err_hc_min")
     with transaction(conn):
         row = _require_item(conn, item_id)
         if row["kind"] != "Service":
-            raise ValueError("A Head count is only for a Service.")
+            raise TextError("calendar.err_hc_only_service")
         conn.execute(
             "INSERT INTO head_count (calendar_item_id, count, absent_note) VALUES (?, ?, ?) "
             "ON CONFLICT (calendar_item_id) DO UPDATE SET count = excluded.count, "
@@ -346,7 +352,7 @@ def get_head_count(conn, item_id):
     """The Head count row of a Service (count, absent_note), or ``None``."""
     return conn.execute(
         "SELECT calendar_item_id, count, absent_note FROM head_count WHERE calendar_item_id = ?",
-        (text.to_id(item_id, "Calendar item"),),
+        (text.to_id(item_id, "calendar.item"),),
     ).fetchone()
 
 
@@ -358,7 +364,7 @@ def recent_head_counts(conn, n=8, now=None):
     """
     if isinstance(n, bool) or not isinstance(n, int) or n < 1:
         raise ValueError("n must be a whole number above 0.")
-    limit = text.now_text() if now is None else text.check_datetime(now, "Now")
+    limit = text.now_text() if now is None else text.check_datetime(now, "calendar.now")
     rows = conn.execute(
         "SELECT ci.id, ci.title, ci.starts_at, hc.count, hc.absent_note "
         "FROM calendar_item ci JOIN head_count hc ON hc.calendar_item_id = ci.id "

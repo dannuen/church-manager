@@ -6,9 +6,10 @@ Done Visits make up the Care log.
 
 import datetime as _dt
 
-from . import settings, text
+from . import i18n, settings, text
 from .calendar import _add_items, add_months
 from .db import transaction
+from .i18n import TextError
 
 DEFAULT_REMINDER_MONTHS = 3
 NOT_CARED_STATUS_CODES = ("left", "passed_away")
@@ -25,27 +26,28 @@ _FOR_PERSON = (
 
 def plan_visit(conn, starts_at, person_id=None, family_id=None, title=None, note=None):
     """Plan a Visit for exactly one Person or one Family. Returns the Calendar item id.
-    The title defaults to "Visit <name>", cut to ``text.MAX_NAME_LENGTH`` characters with "…"
-    when the name is long. A title the caller gives is never cut (it is still checked)."""
+    The title defaults to "Visit <name>" ("Thăm viếng <name>" in a church copy in Tiếng Việt: the
+    word of its ``language`` setting), cut to ``text.MAX_NAME_LENGTH`` characters with "…" when the
+    name is long. A title the caller gives is never cut (it is still checked)."""
     has_person = person_id not in (None, "")
     has_family = family_id not in (None, "")
     if has_person == has_family:
-        raise ValueError("A Visit is for one Person or one Family: give exactly one of them.")
+        raise TextError("care.err_one_of")
     with transaction(conn):
         if has_person:
-            pid = text.to_id(person_id, "Person")
+            pid = text.to_id(person_id, "calendar.person")
             row = conn.execute("SELECT full_name AS name FROM person WHERE id = ?", (pid,)).fetchone()
             if row is None:
-                raise ValueError(f"No Person with id {pid}.")
+                raise TextError("calendar.err_no_person", id=pid)
             fid = None
         else:
-            fid = text.to_id(family_id, "Family")
+            fid = text.to_id(family_id, "calendar.family")
             row = conn.execute("SELECT name FROM family WHERE id = ?", (fid,)).fetchone()
             if row is None:
-                raise ValueError(f"No Family with id {fid}.")
+                raise TextError("care.err_no_family", id=fid)
             pid = None
         if title is None or (isinstance(title, str) and not title.strip()):
-            title = f"Visit {row['name']}"
+            title = f"{i18n.t('core.kind_visit', settings.get_language(conn))} {row['name']}"
             if len(title) > text.MAX_NAME_LENGTH:
                 title = title[: text.MAX_NAME_LENGTH - 1].rstrip() + "…"
         return _add_items(conn, "Visit", title, starts_at, note=note,
@@ -55,14 +57,14 @@ def plan_visit(conn, starts_at, person_id=None, family_id=None, title=None, note
 def mark_visit_done(conn, item_id, done_date, care_note=None):
     """Mark a Visit done on ``done_date`` with an optional short Care note.
     Marking it again changes the date and the note."""
-    day = text.check_date(done_date, "Done date")
+    day = text.check_date(done_date, "care.done_date")
     with transaction(conn):
-        iid = text.to_id(item_id, "Calendar item")
+        iid = text.to_id(item_id, "calendar.item")
         row = conn.execute("SELECT kind FROM calendar_item WHERE id = ?", (iid,)).fetchone()
         if row is None:
-            raise ValueError(f"No Calendar item with id {iid}.")
+            raise TextError("calendar.err_no_item", id=iid)
         if row["kind"] != "Visit":
-            raise ValueError("Only a Visit can be marked done.")
+            raise TextError("care.err_only_visit")
         conn.execute(
             "UPDATE calendar_item SET visit_done = 1, visit_done_date = ?, care_note = ? WHERE id = ?",
             (day, text.clean_text(care_note), iid),
@@ -86,7 +88,7 @@ def care_log(conn, person_id=None):
     params = {}
     if person_id is not None:
         sql += " AND " + _FOR_PERSON.format(pid=":pid", day="ci.visit_done_date")
-        params["pid"] = text.to_id(person_id, "Person")
+        params["pid"] = text.to_id(person_id, "calendar.person")
     return conn.execute(sql + " ORDER BY ci.visit_done_date DESC, ci.id DESC", params).fetchall()
 
 
@@ -106,7 +108,7 @@ def needs_visit(conn, today=None):
     rule as their Care log).
     Each item: person_id, full_name, status_name, family_name, last_visit (date text or ``None``).
     """
-    day = _dt.date.today() if today is None else _dt.date.fromisoformat(text.check_date(today, "Today"))
+    day = _dt.date.today() if today is None else _dt.date.fromisoformat(text.check_date(today, "calendar.today"))
     cutoff = add_months(day, -reminder_months(conn)).isoformat()
     codes = ", ".join("?" * len(NOT_CARED_STATUS_CODES))
     rows = conn.execute(
