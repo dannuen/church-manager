@@ -9,20 +9,23 @@ Rules kept here:
 - A start date after today is refused (the data layer would count it as current at once).
 - Private notes show only on this Person page, inside ``.no-print``; never in the story list,
   never on another page. ``print.css`` hides ``.no-print``.
+- Words on screen come from the text table (``t``/``tn``; sections ``people``, ``families``,
+  ``chi_phai``). The shared helpers take a label as a TEXT key (or a plain word from an old caller)
+  and a refused change as the exception itself: :func:`field_errors` finds its field on the
+  English sentence and shows it in the language of the page.
 """
 
 import datetime as _dt
 
-from .. import care, lists, people, story, text, ui
+from .. import care, i18n, lists, people, story, text, ui
 from .. import search as person_search
+from ..i18n import TextError, t, tn
 from ..schema import FAMILY_ROLES, MINISTRY_ROLES
 from ..server import Response
 from ..ui import clamp2, h, vi
 from . import documents as document_pages  # card C3 (a module import: pages/documents.py imports this one)
 
-GENDERS = (("", "—"), ("M", "Male"), ("F", "Female"))
-GENDER_WORDS = {"M": "Male", "F": "Female"}
-PRIVATE_LABEL = "Private note — only you see this"
+GENDER_WORDS = {"M": "people.male", "F": "people.female"}  # code -> TEXT key
 SEARCH_LIMIT = 100_000  # the quick search on /people keeps every match
 
 
@@ -32,31 +35,48 @@ def today_text():
     return _dt.date.today().isoformat()
 
 
+def is_key(label):
+    """Is ``label`` a key of the text table (``"people.start_date"``)?"""
+    return isinstance(label, str) and label in i18n.TEXT["en"]
+
+
+def word(label):
+    """A label on screen: the text of a TEXT key, or a plain word as it is (old callers)."""
+    return t(label) if is_key(label) else label
+
+
 def past_or_today(value, what):
     """``value`` as ``YYYY-MM-DD`` when it is a real date on or before today.
 
-    Otherwise ``ValueError``. The message starts with ``what``, so :func:`field_errors`
-    puts it next to the field with that label.
+    Otherwise a ``TextError`` whose English sentence starts with ``what`` (a TEXT key such as
+    ``"people.start_date"``, or a plain word), so :func:`field_errors` puts it next to that field.
     """
     day = text.check_date(value or "", what)
     if day > today_text():
-        raise ValueError(f"{what} cannot be after today ({ui.fmt_date(today_text())}). "
-                         "Use today or an earlier date.")
+        raise TextError("people.err_after_today", label=what, today=ui.fmt_date(today_text()))
     return day
 
 
 def field_errors(error, form_key, labels):
     """Where to show a refused change.
 
-    ``error`` is ``(form_key, message)`` or ``None``. For the form ``form_key`` this returns
-    ``{field_name: message}``: the field whose label the message starts with, or ``""``
-    (the whole form) when no label fits. Other forms get ``{}``.
+    ``error`` is ``(form_key, exc)`` or ``None``: ``exc`` is the exception (best: a ``TextError`` shows
+    in the language of the page) or a sentence already made. ``labels`` is ``{field_name: label}``, each
+    label a TEXT key or a plain word; the first label the English sentence starts with wins (so put
+    "Ministry role" before "Ministry"). For the form ``form_key`` this returns ``{field_name: sentence}``,
+    or ``{"": sentence}`` (the whole form) when no label fits. Other forms get ``{}``.
     """
     if not error or error[0] != form_key:
         return {}
-    message = error[1]
+    exc = error[1]
+    made = not isinstance(exc, Exception)
+    message = exc if made else i18n.error_text(exc)
     for name, label in labels.items():
-        if message.startswith(label):
+        if made:
+            fits = message.startswith(label) or message.startswith(word(label))
+        else:
+            fits = str(exc).startswith(t(label, "en") if is_key(label) else label)
+        if fits:
             return {name: message}
     return {"": message}
 
@@ -95,7 +115,8 @@ def table(headers, rows, cls=""):
 def period(start, end):
     """``[From, To]`` cells of a history row. An open row says ``now``."""
     return [f'<span class="num">{h(ui.fmt_date(start))}</span>',
-            f'<span class="num">{h(ui.fmt_date(end))}</span>' if end else '<span class="faint">now</span>']
+            f'<span class="num">{h(ui.fmt_date(end))}</span>' if end
+            else f'<span class="faint">{h(t("people.now"))}</span>']
 
 
 def latest_change(rows):
@@ -135,8 +156,11 @@ def card_link(text_, href):
 
 
 def not_found(what, back_href, back_text):
-    body = f'<p class="lead">There is no {h(what)} with this number.</p><p><a href="{h(back_href)}">{h(back_text)}</a></p>'
-    return Response.html(ui.page(f"{what} not found", body), 404)
+    """The 404 page of one row. ``what`` and ``back_text``: TEXT keys (or plain words from old callers)."""
+    what = word(what)
+    body = (f'<p class="lead">{h(t("people.not_found_text", what=what))}</p>'
+            f'<p><a href="{h(back_href)}">{h(word(back_text))}</a></p>')
+    return Response.html(ui.page(t("people.not_found_title", what=what), body), 404)
 
 
 def person_link(pid, name, anchor=""):
@@ -163,22 +187,22 @@ def statement_href(year=None, **giver):
 
 def same_change(message):
     """The flash text when a form changes nothing (the same value as now)."""
-    return f"{message} Nothing changed."
+    return t("people.nothing_changed", message=message)
 
 
 def list_choice(conn, value, list_name, label):
-    """The item of ``list_name`` picked in a form's ``<select>``, or ``ValueError``.
+    """The item of ``list_name`` picked in a form's ``<select>``, or a ``TextError``.
 
-    The refusal starts with ``label``, a glossary word ("Status", "Ministry"), so
-    :func:`field_errors` puts it next to that field and the pastor never reads "Item".
-    A hidden item is still accepted (old rows keep it); the data layer decides the rest.
+    The English refusal starts with ``label``, a glossary word as a TEXT key (``"people.status"``,
+    ``"people.ministry"``), so :func:`field_errors` puts it next to that field and the pastor never
+    reads "Item". A hidden item is still accepted (old rows keep it); the data layer decides the rest.
     """
     try:
         item = lists.get_item(conn, value or "")
     except ValueError:  # not a whole number above 0
         item = None
     if item is None or item["list_name"] != list_name:
-        raise ValueError(f"{label} must be one of the choices in the list.")
+        raise TextError("people.err_list_choice", label=label)
     return item
 
 
@@ -192,16 +216,16 @@ def _status_counts(rows):
 
 
 def _chips(items, counts, total, selected, q):
-    chips = [("", "All", total)]
+    chips = [("", t("people.all"), total)]
     chips += [(str(i["id"]), i["name"], counts.get(i["id"], 0)) for i in items if i["active"] or counts.get(i["id"])]
     if counts.get(None):
-        chips.append(("none", "No Status", counts[None]))
+        chips.append(("none", t("people.no_status"), counts[None]))
     out = []
     for value, label, n in chips:
         href = ui.url("/people", status=value or None, q=q or None)
         current = ' aria-current="true"' if value == selected else ""
         out.append(f'<a class="chip" href="{h(href)}"{current}>{h(label)} <span class="num">{n}</span></a>')
-    return f'<div class="chips" role="group" aria-label="Filter by Status">{"".join(out)}</div>'
+    return f'<div class="chips" role="group" aria-label="{h(t("people.filter_status"))}">{"".join(out)}</div>'
 
 
 def list_page(req):
@@ -224,7 +248,8 @@ def list_page(req):
         fam = people.current_family(conn, r["id"])
         family_cell, chi_cell = ui.DASH, ui.DASH
         if fam is not None:
-            family_cell = f'{family_link(fam["family_id"], fam["name"])} <span class="faint">{h(fam["family_role"])}</span>'
+            family_cell = (f'{family_link(fam["family_id"], fam["name"])} '
+                           f'<span class="faint">{h(ui.family_role(fam["family_role"]))}</span>')
             if fam["family_id"] not in chi_phai_of:
                 chi_phai_of[fam["family_id"]] = people.current_chi_phai(conn, fam["family_id"])
             cp = chi_phai_of[fam["family_id"]]
@@ -240,53 +265,54 @@ def list_page(req):
 
     search = (
         '<form class="search-form toolbar" action="/people" method="get" role="search">'
-        '<label for="people-q">Find in this list</label>'
+        f'<label for="people-q">{h(t("people.find_in_list"))}</label>'
         f'<div class="search-line"><input class="input" id="people-q" name="q" type="search" value="{h(q)}" '
-        'autocomplete="off" placeholder="With or without accents">'
+        f'autocomplete="off" placeholder="{h(t("people.search_hint"))}">'
         + (ui.hidden("status", selected) if selected else "")
-        + '<button class="btn secondary" type="submit">Search</button>'
-        + (f'<a class="btn secondary" href="{h(ui.url("/people", status=selected or None))}">Clear</a>' if q else "")
+        + f'<button class="btn secondary" type="submit">{h(t("core.btn_search"))}</button>'
+        + (f'<a class="btn secondary" href="{h(ui.url("/people", status=selected or None))}">'
+           f'{h(t("people.clear"))}</a>' if q else "")
         + "</div></form>"
     )
     if lines:
-        body = table([("Person", False), ("Status", False), ("Family", False), ("Chi phái", False),
-                      ("Phone", False)], lines, "people")
+        body = table([(t("people.person"), False), (t("people.status"), False), (t("people.family"), False),
+                      (t("people.chi_phai"), False), (t("people.phone"), False)], lines, "people")
     elif not everyone:
-        body = empty("No Person yet. Add the first Person.")
+        body = empty(t("people.empty"))
     elif q:
-        body = empty(f"No Person matches “{q}” here.")
+        body = empty(t("people.empty_q", q=q))
     else:
-        body = empty("No Person has this Status now.")
+        body = empty(t("people.empty_status"))
 
     items = lists.get_list(conn, "status", include_hidden=True)
     toolbar = (f'<div class="list-toolbar">{_chips(items, _status_counts(everyone), len(everyone), selected, q)}'
                f"{search}</div>")
-    content = toolbar + list_panel("people", "People list", body)
-    shown = ui.plural(len(everyone), "Person", "People")
-    sub = h(shown) if len(rows) == len(everyone) else h(f"{len(rows)} of {shown}")
-    actions = ui.link_button("Add a Person", "/people/new", "primary")
-    return Response.html(ui.page("People", content, "people", sub=sub, actions=actions))
+    content = toolbar + list_panel("people", t("people.list"), body)
+    shown = tn("people.count", len(everyone))
+    sub = h(shown) if len(rows) == len(everyone) else h(t("people.count_of", n=len(rows), total=shown))
+    actions = ui.link_button(t("people.add"), "/people/new", "primary")
+    return Response.html(ui.page(t("people.title"), content, "people", sub=sub, actions=actions))
 
 
 # ---------------------------------------------------------------- /people/new and /people/<id>/edit
 
-_PERSON_LABELS = {"full_name": "Full name", "gender": "Gender", "birth_date": "Birth date",
-                  "start_date": "Start date", "status_id": "Status"}
+_PERSON_LABELS = {"full_name": "people.full_name", "gender": "people.gender", "birth_date": "people.birth_date",
+                  "start_date": "people.start_date", "status_id": "people.status"}
 
 
 def _plain_fields(values, errors):
     v = values.get
+    genders = [("", "—")] + [(code, t(key)) for code, key in GENDER_WORDS.items()]
     return (
-        ui.field("Full name", "full_name", v("full_name", ""), error=errors.get("full_name"), required=True,
-                 autocomplete="off", lang="vi")
-        + ui.select_field("Gender", "gender", GENDERS, selected=v("gender", ""), error=errors.get("gender"))
-        + ui.field("Birth date", "birth_date", v("birth_date", ""), type="date", max=today_text(),
-                   error=errors.get("birth_date"), hint="Leave empty if you do not know it.")
-        + ui.field("Phone", "phone", v("phone", ""), type="tel", autocomplete="off")
-        + ui.textarea_field("Own address", "address", v("address", ""), lang="vi",
-                            hint="Used when the Person is not in a Family.")
-        + ui.textarea_field("Note", "note", v("note", ""), lang="vi",
-                            hint="A normal note. A Private note is added on the Person page.")
+        ui.field(t("people.full_name"), "full_name", v("full_name", ""), error=errors.get("full_name"),
+                 required=True, autocomplete="off", lang="vi")
+        + ui.select_field(t("people.gender"), "gender", genders, selected=v("gender", ""), error=errors.get("gender"))
+        + ui.field(t("people.birth_date"), "birth_date", v("birth_date", ""), type="date", max=today_text(),
+                   error=errors.get("birth_date"), hint=t("people.birth_hint"))
+        + ui.field(t("people.phone"), "phone", v("phone", ""), type="tel", autocomplete="off")
+        + ui.textarea_field(t("people.own_address"), "address", v("address", ""), lang="vi",
+                            hint=t("people.address_hint"))
+        + ui.textarea_field(t("people.note"), "note", v("note", ""), lang="vi", hint=t("people.note_hint"))
     )
 
 
@@ -298,14 +324,14 @@ def _new_form(req, values=None, error=None, status=200):
     visitor = next((i["id"] for i in items if i["code"] == "visitor"), None)
     inner = (
         _plain_fields(values, errors)
-        + ui.select_field("First Status", "status_id", [(i["id"], i["name"]) for i in items],
+        + ui.select_field(t("people.first_status"), "status_id", [(i["id"], i["name"]) for i in items],
                           selected=values.get("status_id", visitor), error=errors.get("status_id"))
-        + date_field("Start date", "start_date", "f-start_date", values.get("start_date"), errors.get("start_date"),
-                     hint="The day this Status began. Not after today.")
-        + form_error(errors) + ui.button("Add Person")
+        + date_field(t("people.start_date"), "start_date", "f-start_date", values.get("start_date"),
+                     errors.get("start_date"), hint=t("people.start_hint"))
+        + form_error(errors) + ui.button(t("people.add_button"))
     )
     body = f'<section class="panel narrow">{ui.form("/people/new", inner)}</section>'
-    return Response.html(ui.page("Add a Person", body, "people"), status)
+    return Response.html(ui.page(t("people.add"), body, "people"), status)
 
 
 def new_page(req):
@@ -315,12 +341,12 @@ def new_page(req):
 def add_person_from_form(conn, form):
     """Add a Person from the Add a Person form: the one place of its rules, for this page and the
     Hermes door. ``form`` has ``.get`` (the server's form or a plain dict). Returns the Person id;
-    a refused value raises ``ValueError`` with the sentence the form shows."""
+    a refused value raises ``ValueError`` (a ``TextError``: ``str()`` is the English sentence)."""
     f = form
     if f.get("birth_date"):
-        past_or_today(f["birth_date"], "Birth date")
-    start = past_or_today(f.get("start_date"), "Start date")
-    status_id = list_choice(conn, f["status_id"], "status", "Status")["id"] if f.get("status_id") else None
+        past_or_today(f["birth_date"], "people.birth_date")
+    start = past_or_today(f.get("start_date"), "people.start_date")
+    status_id = list_choice(conn, f["status_id"], "status", "people.status")["id"] if f.get("status_id") else None
     return people.add_person(conn, f.get("full_name"), gender=f.get("gender"), birth_date=f.get("birth_date"),
                              phone=f.get("phone"), address=f.get("address"), note=f.get("note"),
                              status_id=status_id, start_date=start)
@@ -331,8 +357,8 @@ def new_post(req):
     try:
         pid = add_person_from_form(req.conn, f)
     except ValueError as exc:
-        return _new_form(req, f, ("new", str(exc)), 400)
-    return Response.redirect(ui.url(f"/people/{pid}", msg="Person added."))
+        return _new_form(req, f, ("new", exc), 400)
+    return Response.redirect(ui.url(f"/people/{pid}", msg=t("people.added")))
 
 
 def _edit_form(req, person, values=None, error=None, status=200):
@@ -341,121 +367,133 @@ def _edit_form(req, person, values=None, error=None, status=200):
     }
     errors = field_errors(error, "edit", _PERSON_LABELS)
     pid = person["id"]
-    inner = _plain_fields(values, errors) + form_error(errors) + ui.button("Save")
+    inner = _plain_fields(values, errors) + form_error(errors) + ui.button(t("core.btn_save"))
+    link = f'<a href="/people/{pid}">{h(t("people.person_page"))}</a>'
     body = (f'<section class="panel narrow">{ui.form(f"/people/{pid}/edit", inner)}'
-            f'<p class="hint">Status, Family and Ministry keep their history: change them on the '
-            f'<a href="/people/{pid}">Person page</a>.</p></section>')
-    return Response.html(ui.page(f"Edit {person['full_name']}", body, "people", lang="vi"), status)
+            f'<p class="hint">{ui.t_html("people.edit_hint", link=link)}</p></section>')
+    return Response.html(ui.page(t("people.edit_title", name=person["full_name"]), body, "people", lang="vi"),
+                         status)
 
 
 def edit_page(req):
     person = people.get_person(req.conn, req.params["id"])
     if person is None:
-        return not_found("Person", "/people", "Go to People")
+        return not_found("people.person", "/people", "people.go_people")
     return _edit_form(req, person)
 
 
 def edit_post(req):
     person = people.get_person(req.conn, req.params["id"])
     if person is None:
-        return not_found("Person", "/people", "Go to People")
+        return not_found("people.person", "/people", "people.go_people")
     f = req.form
     try:
         if f.get("birth_date"):
-            past_or_today(f["birth_date"], "Birth date")
+            past_or_today(f["birth_date"], "people.birth_date")
         people.update_person(req.conn, person["id"], full_name=f.get("full_name"), gender=f.get("gender"),
                              birth_date=f.get("birth_date"), phone=f.get("phone"), address=f.get("address"),
                              note=f.get("note"))
     except ValueError as exc:
-        return _edit_form(req, person, f, ("edit", str(exc)), 400)
-    return Response.redirect(ui.url(f"/people/{person['id']}", msg="Details saved."))
+        return _edit_form(req, person, f, ("edit", exc), 400)
+    return Response.redirect(ui.url(f"/people/{person['id']}", msg=t("people.details_saved")))
 
 
 # ---------------------------------------------------------------- /people/<id>
 
+def history_headers(*first):
+    """Table headers of a history list: ``first`` (TEXT keys), then From and To."""
+    return [(t(key), False) for key in first] + [(t("people.from"), True), (t("people.to"), True)]
+
+
 def _status_panel(conn, pid, error, vals):
     rows = people.status_history(conn, pid)
     current = next((r for r in rows if r["end_date"] is None), None)
-    errors = field_errors(error, "status", {"start_date": "Start date", "status_id": "Status"})
+    errors = field_errors(error, "status", {"start_date": "people.start_date", "status_id": "people.status"})
     items = lists.get_list(conn, "status")
     form = ui.form(f"/people/{pid}/status", (
-        ui.select_field("New Status", "status_id", [(i["id"], i["name"]) for i in items], id="status-id",
+        ui.select_field(t("people.new_status"), "status_id", [(i["id"], i["name"]) for i in items], id="status-id",
                         selected=vals.get("status_id") or (current["status_id"] if current else None),
                         error=errors.get("status_id"))
-        + date_field("Start date", "start_date", "status-date", vals.get("start_date"), errors.get("start_date"),
-                     min_date=latest_change(rows))
-        + form_error(errors) + ui.button("Change Status", "secondary")))
+        + date_field(t("people.start_date"), "start_date", "status-date", vals.get("start_date"),
+                     errors.get("start_date"), min_date=latest_change(rows))
+        + form_error(errors) + ui.button(t("people.change_status"), "secondary")))
     lines = [[h(r["name"]), *period(r["start_date"], r["end_date"])] for r in newest_first(rows)]
-    body = (table([("Status", False), ("From", True), ("To", True)], lines, "history")
-            if lines else empty("No Status yet."))
-    return panel("status", "Status", body + change_box("Change Status", form, bool(errors)))
+    body = (table(history_headers("people.status"), lines, "history")
+            if lines else empty(t("people.no_status_yet")))
+    return panel("status", t("people.status"), body + change_box(t("people.change_status"), form, bool(errors)))
 
 
 def _family_panel(conn, pid, error, vals):
     rows = people.family_history(conn, pid)
     current = next((r for r in rows if r["end_date"] is None), None)
-    errors = field_errors(error, "family", {"start_date": "Start date", "family_role": "Family role",
-                                            "family_id": "Family"})
-    first = ("", "— Leave the Family —") if current else ("", "— Not in a Family —")
+    # "Family role" before "Family": field_errors takes the first label a sentence starts with.
+    errors = field_errors(error, "family", {"start_date": "people.start_date", "family_role": "people.family_role",
+                                            "family_id": "people.family"})
+    first = ("", t("people.leave_family")) if current else ("", t("people.no_family_option"))
     options = [first] + [(f["id"], f["name"]) for f in people.list_families(conn)]
     role = vals.get("family_role") or (current["family_role"] if current else "Head")
     form = ui.form(f"/people/{pid}/family", (
-        ui.select_field("Family", "family_id", options, id="family-id", lang="vi",
+        ui.select_field(t("people.family"), "family_id", options, id="family-id", lang="vi",
                         selected=vals.get("family_id", current["family_id"] if current else ""),
                         error=errors.get("family_id"))
-        + ui.select_field("Family role", "family_role", [(r, r) for r in FAMILY_ROLES], id="family-role",
-                          selected=role, error=errors.get("family_role"))
-        + date_field("Start date", "start_date", "family-date", vals.get("start_date"), errors.get("start_date"),
-                     min_date=latest_change(rows), hint="The day of the move. The old Family link is kept.")
-        + form_error(errors) + ui.button("Save Family", "secondary")))
+        + ui.select_field(t("people.family_role"), "family_role", [(r, ui.family_role(r)) for r in FAMILY_ROLES],
+                          id="family-role", selected=role, error=errors.get("family_role"))
+        + date_field(t("people.start_date"), "start_date", "family-date", vals.get("start_date"),
+                     errors.get("start_date"), min_date=latest_change(rows), hint=t("people.move_hint"))
+        + form_error(errors) + ui.button(t("people.save_family"), "secondary")))
     now = ""
     if current is not None:
         cp = people.current_chi_phai(conn, current["family_id"])
         address = people.person_address(conn, pid)
+        chi_phai = chi_phai_link(cp["chi_phai_id"], cp["name"]) if cp else ui.DASH
         now = ('<dl class="kv">'
-               f'<div><dt>Family</dt><dd>{family_link(current["family_id"], current["name"])}</dd></div>'
-               f'<div><dt>Family role</dt><dd>{h(current["family_role"])}</dd></div>'
-               f'<div><dt>Chi phái</dt><dd>{chi_phai_link(cp["chi_phai_id"], cp["name"]) if cp else ui.DASH}</dd></div>'
-               f'<div><dt>Address</dt><dd>{vi(address)}</dd></div>'
+               f'<div><dt>{h(t("people.family"))}</dt><dd>{family_link(current["family_id"], current["name"])}</dd></div>'
+               f'<div><dt>{h(t("people.family_role"))}</dt><dd>{h(ui.family_role(current["family_role"]))}</dd></div>'
+               f'<div><dt>{h(t("people.chi_phai"))}</dt><dd>{chi_phai}</dd></div>'
+               f'<div><dt>{h(t("people.address"))}</dt><dd>{vi(address)}</dd></div>'
                "</dl>")
-    lines = [[family_link(r["family_id"], r["name"]), h(r["family_role"]), *period(r["start_date"], r["end_date"])]
-             for r in newest_first(rows)]
-    body = now + (table([("Family", False), ("Family role", False), ("From", True), ("To", True)], lines, "history")
-                  if lines else empty("Not in a Family. The Person's own address is used."))
-    foot = card_link("Add a Family", "/families/new")
-    return panel("family", "Family", body + change_box("Set or leave a Family", form, bool(errors)), foot=foot)
+    lines = [[family_link(r["family_id"], r["name"]), h(ui.family_role(r["family_role"])),
+              *period(r["start_date"], r["end_date"])] for r in newest_first(rows)]
+    body = now + (table(history_headers("people.family", "people.family_role"), lines, "history")
+                  if lines else empty(t("people.not_in_family")))
+    foot = card_link(t("families.add"), "/families/new")
+    return panel("family", t("people.family"), body + change_box(t("people.set_family"), form, bool(errors)),
+                 foot=foot)
 
 
 def _ministry_panel(conn, pid, error, vals):
     rows = people.ministry_history(conn, pid)
     current = [r for r in rows if r["end_date"] is None]
-    # "Ministry role" before "Ministry": field_errors takes the first label a message starts with.
-    errors = field_errors(error, "ministry", {"start_date": "Start date", "ministry_role": "Ministry role",
-                                              "ministry_id": "Ministry"})
+    # "Ministry role" before "Ministry": field_errors takes the first label a sentence starts with.
+    errors = field_errors(error, "ministry", {"start_date": "people.start_date",
+                                              "ministry_role": "people.ministry_role",
+                                              "ministry_id": "people.ministry"})
     items = lists.get_list(conn, "ministry")
+    roles = [(r, ui.ministry_role(r)) for r in MINISTRY_ROLES] + [("", t("people.stop_serving"))]
     form = ui.form(f"/people/{pid}/ministry", (
-        ui.select_field("Ministry", "ministry_id", [(i["id"], i["name"]) for i in items], id="ministry-id",
+        ui.select_field(t("people.ministry"), "ministry_id", [(i["id"], i["name"]) for i in items], id="ministry-id",
                         selected=vals.get("ministry_id"), error=errors.get("ministry_id"))
-        + ui.select_field("Ministry role", "ministry_role",
-                          [(r, r) for r in MINISTRY_ROLES] + [("", "Stop serving in this Ministry")],
-                          id="ministry-role", selected=vals.get("ministry_role", "Member"),
-                          error=errors.get("ministry_role"))
-        + date_field("Start date", "start_date", "ministry-date", vals.get("start_date"), errors.get("start_date"))
-        + form_error(errors) + ui.button("Save Ministry", "secondary")))
-    lines = [[h(r["name"]), h(r["ministry_role"]), *period(r["start_date"], r["end_date"])] for r in newest_first(rows)]
-    body = (table([("Ministry", False), ("Ministry role", False), ("From", True), ("To", True)], lines, "history")
-            if lines else empty("Not serving in a Ministry."))
-    meta = (h(" · ".join(f"{r['name']} ({r['ministry_role']})" for r in current)) if current
-            else "Not serving now")
-    return panel("ministries", "Ministries", body + change_box("Add, change or end a Ministry", form, bool(errors)),
-                 meta=meta)
+        + ui.select_field(t("people.ministry_role"), "ministry_role", roles, id="ministry-role",
+                          selected=vals.get("ministry_role", "Member"), error=errors.get("ministry_role"))
+        + date_field(t("people.start_date"), "start_date", "ministry-date", vals.get("start_date"),
+                     errors.get("start_date"))
+        + form_error(errors) + ui.button(t("people.save_ministry"), "secondary")))
+    lines = [[h(r["name"]), h(ui.ministry_role(r["ministry_role"])), *period(r["start_date"], r["end_date"])]
+             for r in newest_first(rows)]
+    body = (table(history_headers("people.ministry", "people.ministry_role"), lines, "history")
+            if lines else empty(t("people.not_serving")))
+    meta = h(" · ".join(f"{r['name']} ({ui.ministry_role(r['ministry_role'])})" for r in current) if current
+             else t("people.not_serving_now"))
+    return panel("ministries", t("people.ministries"),
+                 body + change_box(t("people.change_ministry"), form, bool(errors)), meta=meta)
 
 
 def _story_panel(events):
     lines = [[num(ui.fmt_date(e["date"])), h(e["text"])]
              for e in sorted(events, key=lambda e: e["date"], reverse=True)]
-    body = table([("Date", False), ("What happened", False)], lines, "story") if lines else empty("No story yet.")
-    return panel("story", "Story", body, meta=h(f"{ui.plural(len(events), 'line', 'lines')}, newest first"))
+    body = (table([(t("people.date"), False), (t("people.what_happened"), False)], lines, "story")
+            if lines else empty(t("people.no_story")))
+    return panel("story", t("people.story"), body, meta=h(tn("people.story_lines", len(events))))
 
 
 def _details_panel(conn, person):
@@ -463,17 +501,20 @@ def _details_panel(conn, person):
     address = people.person_address(conn, pid)
     family = people.current_family(conn, pid)
     from_family = family is not None and family["address"] and address == family["address"]
+    gender = GENDER_WORDS.get(person["gender"])
     rows = [
-        ("Gender", h(GENDER_WORDS.get(person["gender"], "")) or ui.DASH),
-        ("Birth date", num(ui.fmt_date(person["birth_date"])) if person["birth_date"] else ui.DASH),
-        ("Phone", num(person["phone"]) if person["phone"] else ui.DASH),
-        ("Address", vi(address) + (' <span class="faint">(Family address)</span>' if from_family else "")),
+        ("people.gender", h(t(gender)) if gender else ui.DASH),
+        ("people.birth_date", num(ui.fmt_date(person["birth_date"])) if person["birth_date"] else ui.DASH),
+        ("people.phone", num(person["phone"]) if person["phone"] else ui.DASH),
+        ("people.address", vi(address)
+         + (f' <span class="faint">{h(t("people.family_address"))}</span>' if from_family else "")),
     ]
     if from_family and person["address"]:
-        rows.append(("Own address", vi(person["address"])))
-    rows.append(("Note", vi(person["note"])))
-    body = '<dl class="kv">' + "".join(f"<div><dt>{h(k)}</dt><dd>{v}</dd></div>" for k, v in rows) + "</dl>"
-    return panel("details", "Details", body, foot=card_link("Edit details", f"/people/{pid}/edit"))
+        rows.append(("people.own_address", vi(person["address"])))
+    rows.append(("people.note", vi(person["note"])))
+    body = '<dl class="kv">' + "".join(f"<div><dt>{h(t(k))}</dt><dd>{v}</dd></div>" for k, v in rows) + "</dl>"
+    return panel("details", t("people.details"), body,
+                 foot=card_link(t("people.edit_details"), f"/people/{pid}/edit"))
 
 
 def _private_panel(conn, pid, error, vals, edit_id=None, edit_vals=None):
@@ -483,35 +524,38 @@ def _private_panel(conn, pid, error, vals, edit_id=None, edit_vals=None):
     notes = people.list_private_notes(conn, pid)
     editing = next((n for n in notes if n["id"] == edit_id), None)
     errors = field_errors(error, "private", {})
+    # matched on the English sentence of people.err_note_empty (never shown)
     edit_errors = field_errors(error, "private-edit", {"body": "A private note"})
     edit_vals = edit_vals or {}
     here = f"/people/{pid}"
 
     def item(n):
-        when = h(ui.fmt_datetime(n["created_at"]))
+        when_text = ui.fmt_datetime(n["created_at"])
+        when = h(when_text)
         if editing is not None and n["id"] == editing["id"]:
             form = ui.form(f"{here}/private-notes/{n['id']}", (
-                ui.textarea_field("Change this Private note", "body", edit_vals.get("body", n["body"]),
+                ui.textarea_field(t("people.change_note"), "body", edit_vals.get("body", n["body"]),
                                   id="private-edit-body", lang="vi", rows=4, required=True,
                                   error=edit_errors.get("body"))
                 + form_error(edit_errors)
-                + '<div class="form-actions">' + ui.button("Save Private note", "secondary")
-                + f'<a class="text-action" href="{here}#private-note">Cancel</a></div>'))
+                + '<div class="form-actions">' + ui.button(t("people.save_note"), "secondary")
+                + f'<a class="text-action" href="{here}#private-note">{h(t("core.btn_cancel"))}</a></div>'))
             return f'<li class="note editing" data-row><span class="when num">{when}</span>{form}</li>'
         edit = (f'<a class="note-edit" href="{h(ui.url(here, edit_note=n["id"]))}#private-note" '
-                f'aria-label="Edit the Private note of {when}">Edit</a>')
+                f'aria-label="{h(t("people.edit_note_aria", when=when_text))}">{h(t("core.btn_edit"))}</a>')
         return (f'<li class="note" data-row><div class="note-head"><span class="when num">{when}</span>{edit}</div>'
                 f'<p lang="vi">{h(n["body"])}</p></li>')
 
-    listing = f'<ul class="notes">{"".join(item(n) for n in notes)}</ul>' if notes else empty("No Private note yet.")
+    listing = (f'<ul class="notes">{"".join(item(n) for n in notes)}</ul>' if notes
+               else empty(t("people.no_note")))
     if editing is None:
         listing = form_error(edit_errors) + listing  # a refused change of a note that is not here
         listing += ui.form(f"{here}/private-notes", (
-            ui.textarea_field("New Private note", "body", vals.get("body", ""), id="private-body", lang="vi",
+            ui.textarea_field(t("people.new_note"), "body", vals.get("body", ""), id="private-body", lang="vi",
                               required=True)
-            + form_error(errors) + ui.button("Add Private note", "secondary")))
-    section_html = panel("private-note", PRIVATE_LABEL, listing, cls="private no-print",
-                         meta="Never printed. Removed at Handover.")
+            + form_error(errors) + ui.button(t("people.add_note"), "secondary")))
+    section_html = panel("private-note", t("people.private_label"), listing, cls="private no-print",
+                         meta=h(t("people.private_meta")))
     return f'<div id="private-note" class="no-print">{section_html}</div>'
 
 
@@ -525,9 +569,9 @@ def _care_panel(conn, pid):
         + f'</span><span class="figure num">{h(ui.fmt_date(r["done_date"]))}</span></li>'
         for r in log
     )
-    body = f'<ul class="rows">{rows}</ul>' if log else empty("No Visit done yet.")
-    foot = card_link("Plan a Visit", ui.url("/care", person_id=pid) + "#plan")
-    return panel("care-log", "Care log", body, meta="Done Visits, newest first", foot=foot)
+    body = f'<ul class="rows">{rows}</ul>' if log else empty(t("people.no_visit_done"))
+    foot = card_link(t("people.plan_visit"), ui.url("/care", person_id=pid) + "#plan")
+    return panel("care-log", t("care.care_log"), body, meta=h(t("people.care_meta")), foot=foot)
 
 
 def _person_view(req, person, error=None, status=200):
@@ -538,18 +582,18 @@ def _person_view(req, person, error=None, status=200):
     def vals(key):
         return req.form if form_key == key else {}
 
-    events = story.person_story(conn, pid)  # no Private note: the story is printed
+    events = story.person_story(conn, pid, lang=ui.current_lang())  # no Private note: the story is printed
     current_status = people.current_status(conn, pid)
     family = people.current_family(conn, pid)
-    finding = [f"{current_status['name']} since {ui.fmt_date(current_status['start_date'])}"
-               if current_status else "No Status"]
+    finding = [t("people.status_since", status=current_status["name"], date=ui.fmt_date(current_status["start_date"]))
+               if current_status else t("people.no_status")]
     if family is not None:
-        finding.append(f"{family['name']} ({family['family_role']})")
+        finding.append(f"{family['name']} ({ui.family_role(family['family_role'])})")
         cp = people.current_chi_phai(conn, family["family_id"])
         if cp is not None:
             finding.append(cp["name"])
     log = care.care_log(conn, pid)
-    finding.append(f"Last Visit {ui.fmt_date(log[0]['done_date'])}" if log else "No Visit yet")
+    finding.append(t("people.last_visit", date=ui.fmt_date(log[0]["done_date"])) if log else t("people.no_visit"))
 
     left = (_status_panel(conn, pid, error, vals("status")) + _family_panel(conn, pid, error, vals("family"))
             + _ministry_panel(conn, pid, error, vals("ministry")) + _story_panel(events))
@@ -558,9 +602,9 @@ def _person_view(req, person, error=None, status=200):
              + _care_panel(conn, pid) + document_pages.documents_panel(conn, person_id=pid))
     body = (f'<div class="grid person"><div class="span-8 stack">{left}</div>'
             f'<div class="side-4 stack">{right}</div></div>')
-    actions = (ui.link_button("Edit", f"/people/{pid}/edit")
-               + ui.link_button("Giving statement", statement_href(person_id=pid))
-               + ui.link_button("Plan a Visit", ui.url("/care", person_id=pid) + "#plan", "primary"))
+    actions = (ui.link_button(t("core.btn_edit"), f"/people/{pid}/edit")
+               + ui.link_button(t("money.giving_statement"), statement_href(person_id=pid))
+               + ui.link_button(t("people.plan_visit"), ui.url("/care", person_id=pid) + "#plan", "primary"))
     return Response.html(ui.page(person["full_name"], body, "people", sub=h(" · ".join(finding)), actions=actions,
                                  lang="vi"), status)
 
@@ -574,7 +618,7 @@ def _edit_note_id(req, form_key):
     ``?edit_note=<id>``. ``None`` when there is none or the value is not a whole number."""
     raw = req.params.get("note_id") if form_key == "private-edit" else req.query.get("edit_note")
     try:
-        return text.to_id(raw if raw is not None else "", "Private note")
+        return text.to_id(raw if raw is not None else "", "people.private_note")
     except ValueError:
         return None
 
@@ -582,76 +626,78 @@ def _edit_note_id(req, form_key):
 def person_page(req):
     person = _person_or_none(req)
     if person is None:
-        return not_found("Person", "/people", "Go to People")
+        return not_found("people.person", "/people", "people.go_people")
     return _person_view(req, person)
 
 
 def _history_post(req, key, change):
-    """Run one history change for the Person page. ``change(conn, pid)`` returns the flash text.
-    A refused change shows the Person page again with the sentence next to its field."""
+    """Run one history change for the Person page. ``change(conn, pid)`` returns the flash text
+    (made with ``t`` now, in the language of this request). A refused change shows the Person page
+    again with the sentence next to its field."""
     person = _person_or_none(req)
     if person is None:
-        return not_found("Person", "/people", "Go to People")
+        return not_found("people.person", "/people", "people.go_people")
     try:
         message = change(req.conn, person["id"])
     except ValueError as exc:
-        return _person_view(req, person, (key, str(exc)), 400)
+        return _person_view(req, person, (key, exc), 400)
     return Response.redirect(ui.url(f"/people/{person['id']}", msg=message))
 
 
 def status_post(req):
     def change(conn, pid):
-        day = past_or_today(req.form.get("start_date"), "Start date")
+        day = past_or_today(req.form.get("start_date"), "people.start_date")
         before = people.current_status(conn, pid)
-        new_id = list_choice(conn, req.form.get("status_id"), "status", "Status")["id"]
+        new_id = list_choice(conn, req.form.get("status_id"), "status", "people.status")["id"]
         if before is not None and before["status_id"] == new_id:
-            return same_change(f"Status is already {before['name']}.")
+            return same_change(t("people.status_same", name=before["name"]))
         people.set_status(conn, pid, new_id, day)
-        return f"Status changed to {people.current_status(conn, pid)['name']} from {ui.fmt_date(day)}."
+        return t("people.status_changed", name=people.current_status(conn, pid)["name"], date=ui.fmt_date(day))
     return _history_post(req, "status", change)
 
 
 def family_post(req):
     def change(conn, pid):
-        day = past_or_today(req.form.get("start_date"), "Start date")
+        day = past_or_today(req.form.get("start_date"), "people.start_date")
         family_id = req.form.get("family_id") or None
         role = req.form.get("family_role")
         before = people.current_family(conn, pid)
         if family_id is None:
             if before is None:
-                return same_change("The Person is not in a Family.")
+                return same_change(t("people.family_none"))
             people.set_family(conn, pid, None, None, day)
-            return f"Left {before['name']} on {ui.fmt_date(day)}. The old Family link is kept."
+            return t("people.family_left", name=before["name"], date=ui.fmt_date(day))
         if before is not None and str(before["family_id"]) == family_id and before["family_role"] == role:
-            return same_change(f"Already in {before['name']} as {role}.")
+            return same_change(t("people.family_same", name=before["name"], role=ui.family_role(role)))
         people.set_family(conn, pid, family_id, role, day)
         now = people.current_family(conn, pid)
-        return f"Now in {now['name']} as {now['family_role']} from {ui.fmt_date(day)}."
+        return t("people.family_now", name=now["name"], role=ui.family_role(now["family_role"]),
+                 date=ui.fmt_date(day))
     return _history_post(req, "family", change)
 
 
 def ministry_post(req):
     def change(conn, pid):
-        day = past_or_today(req.form.get("start_date"), "Start date")
-        item = list_choice(conn, req.form.get("ministry_id"), "ministry", "Ministry")
+        day = past_or_today(req.form.get("start_date"), "people.start_date")
+        item = list_choice(conn, req.form.get("ministry_id"), "ministry", "people.ministry")
         role = req.form.get("ministry_role") or None
         before = next((r for r in people.current_ministries(conn, pid) if r["ministry_id"] == item["id"]), None)
         if role is None:
             if before is None:
-                return same_change(f"The Person does not serve in {item['name']}.")
+                return same_change(t("people.ministry_none", name=item["name"]))
             people.set_ministry(conn, pid, item["id"], None, day)
-            return f"Stopped serving in {item['name']} on {ui.fmt_date(day)}."
+            return t("people.ministry_stopped", name=item["name"], date=ui.fmt_date(day))
         if before is not None and before["ministry_role"] == role:
-            return same_change(f"Already {role} in {item['name']}.")
+            return same_change(t("people.ministry_same", role=ui.ministry_role(role), name=item["name"]))
         people.set_ministry(conn, pid, item["id"], role, day)
-        return f"{role} in {item['name']} from {ui.fmt_date(day)}."
+        return t("people.ministry_now", role=ui.ministry_role(role), name=item["name"], date=ui.fmt_date(day))
     return _history_post(req, "ministry", change)
 
 
 def private_note_post(req):
     def change(conn, pid):
         people.add_private_note(conn, pid, req.form.get("body"))
-        return "Private note added."
+        return t("people.note_added")
     return _history_post(req, "private", change)
 
 
@@ -660,15 +706,15 @@ def private_note_edit_post(req):
     message and the URL never hold them. A note of another Person is not found here."""
     person = _person_or_none(req)
     if person is None:
-        return not_found("Person", "/people", "Go to People")
+        return not_found("people.person", "/people", "people.go_people")
     pid, note_id = person["id"], req.params["note_id"]
     if not any(n["id"] == note_id for n in people.list_private_notes(req.conn, pid)):
-        return not_found("Private note", f"/people/{pid}", "Go back to the Person")
+        return not_found("people.private_note", f"/people/{pid}", "people.go_person")
     try:
         people.update_private_note(req.conn, pid, note_id, req.form.get("body"))
     except ValueError as exc:
-        return _person_view(req, person, ("private-edit", str(exc)), 400)
-    return Response.redirect(ui.url(f"/people/{pid}", msg="Private note changed.") + "#private-note")
+        return _person_view(req, person, ("private-edit", exc), 400)
+    return Response.redirect(ui.url(f"/people/{pid}", msg=t("people.note_changed")) + "#private-note")
 
 
 ROUTES = [

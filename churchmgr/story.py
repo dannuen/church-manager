@@ -2,9 +2,13 @@
 
 Private notes are added only with ``include_private=True`` (only the Person
 page on screen asks for them; never a print, a Giving statement or a Handover).
+
+The words of each line come from the text table (``people.story_*``) in ``lang``. Names, titles,
+notes and list items are never translated.
 """
 
-from . import text
+from . import i18n, text
+from .i18n import TextError, t
 from .care import _FOR_PERSON
 from .money import format_vnd
 
@@ -17,6 +21,13 @@ _KIND_ORDER = {k: i for i, k in enumerate((
 
 def _event(day, kind, words, ref_id, **extra):
     return {"date": day, "kind": kind, "text": words, "ref_id": ref_id, **extra}
+
+
+def _word(prefix, code, lang):
+    """A code stored in English (a Family role, a Ministry role, a Calendar item kind) in ``lang``
+    (``core.*``). An unknown code is shown as it is."""
+    key = f"{prefix}{str(code).lower()}"
+    return t(key, lang) if key in i18n.TEXT["en"] else code
 
 
 def _ends(rows, key):
@@ -38,33 +49,38 @@ def _stays(family_rows):
     return out
 
 
-def person_story(conn, person_id, include_private=False):
+def person_story(conn, person_id, include_private=False, lang="en"):
     """A list of dated events, oldest first. Each event: date (``YYYY-MM-DD``),
     kind, text, ref_id (and end_date for history rows).
+
+    ``text`` is in ``lang``: English for the Hermes door (the default); the Person page asks for
+    the language of the page.
 
     Kinds: status, family, family_end, chi_phai, truong_chi_phai(_end),
     ministry(_end), calendar, visit, offering, document, private_note.
     """
-    pid = text.to_id(person_id, "Person")
+    pid = text.to_id(person_id, "people.person")
     if conn.execute("SELECT 1 FROM person WHERE id = ?", (pid,)).fetchone() is None:
-        raise ValueError(f"No Person with id {pid}.")
+        raise TextError("people.err_no_row", what="people.person", id=pid)
     events = []
 
     for r in conn.execute(
         "SELECT ps.id, li.name, ps.start_date, ps.end_date FROM person_status ps "
         "JOIN list_item li ON li.id = ps.status_id WHERE ps.person_id = ?", (pid,)
     ):
-        events.append(_event(r["start_date"], "status", f"Status: {r['name']}", r["id"], end_date=r["end_date"]))
+        events.append(_event(r["start_date"], "status", t("people.story_status", lang, name=r["name"]), r["id"],
+                             end_date=r["end_date"]))
 
     families = conn.execute(
         "SELECT fl.id, fl.family_id, f.name, fl.family_role, fl.start_date, fl.end_date "
         "FROM family_link fl JOIN family f ON f.id = fl.family_id WHERE fl.person_id = ?", (pid,)
     ).fetchall()
     for r in families:
-        events.append(_event(r["start_date"], "family", f"Family: {r['name']} ({r['family_role']})", r["id"],
-                             end_date=r["end_date"]))
+        role = _word("core.family_role_", r["family_role"], lang)
+        events.append(_event(r["start_date"], "family", t("people.story_family", lang, name=r["name"], role=role),
+                             r["id"], end_date=r["end_date"]))
     for r in _ends(families, lambda r: r["family_id"]):
-        events.append(_event(r["end_date"], "family_end", f"Left Family {r['name']}", r["id"]))
+        events.append(_event(r["end_date"], "family_end", t("people.story_family_end", lang, name=r["name"]), r["id"]))
 
     # Chi phái of each Family while the Person was in it.
     for family_id, family_name, stay_start, stay_end in _stays(families):
@@ -75,37 +91,39 @@ def person_story(conn, person_id, include_private=False):
             (family_id, stay_end, stay_end, stay_start),
         ):
             day = max(r["start_date"], stay_start)
-            events.append(_event(day, "chi_phai", f"Chi phái: {r['name']} (Family {family_name})", r["id"],
-                                 end_date=r["end_date"]))
+            words = t("people.story_chi_phai", lang, name=r["name"], family=family_name)
+            events.append(_event(day, "chi_phai", words, r["id"], end_date=r["end_date"]))
 
     terms = conn.execute(
         "SELECT t.id, t.chi_phai_id, c.name, t.start_date, t.end_date FROM truong_chi_phai t "
         "JOIN chi_phai c ON c.id = t.chi_phai_id WHERE t.person_id = ?", (pid,)
     ).fetchall()
     for r in terms:
-        events.append(_event(r["start_date"], "truong_chi_phai", f"Trưởng Chi phái of {r['name']}", r["id"],
-                             end_date=r["end_date"]))
+        events.append(_event(r["start_date"], "truong_chi_phai", t("people.story_truong", lang, name=r["name"]),
+                             r["id"], end_date=r["end_date"]))
         if r["end_date"] is not None:
             events.append(_event(r["end_date"], "truong_chi_phai_end",
-                                 f"No longer Trưởng Chi phái of {r['name']}", r["id"]))
+                                 t("people.story_truong_end", lang, name=r["name"]), r["id"]))
 
     ministries = conn.execute(
         "SELECT ml.id, ml.ministry_id, li.name, ml.ministry_role, ml.start_date, ml.end_date "
         "FROM ministry_link ml JOIN list_item li ON li.id = ml.ministry_id WHERE ml.person_id = ?", (pid,)
     ).fetchall()
     for r in ministries:
-        events.append(_event(r["start_date"], "ministry", f"Ministry: {r['name']} ({r['ministry_role']})",
+        role = _word("core.ministry_role_", r["ministry_role"], lang)
+        events.append(_event(r["start_date"], "ministry", t("people.story_ministry", lang, name=r["name"], role=role),
                              r["id"], end_date=r["end_date"]))
     for r in _ends(ministries, lambda r: r["ministry_id"]):
-        events.append(_event(r["end_date"], "ministry_end", f"Stopped serving in Ministry {r['name']}", r["id"]))
+        events.append(_event(r["end_date"], "ministry_end", t("people.story_ministry_end", lang, name=r["name"]),
+                             r["id"]))
 
     for r in conn.execute(
         "SELECT ci.id, ci.kind, ci.title, ci.starts_at, cp.part FROM calendar_person cp "
         "JOIN calendar_item ci ON ci.id = cp.calendar_item_id WHERE cp.person_id = ?", (pid,)
     ):
-        verb = "Serves at" if r["part"] == "serves" else "Joins"
-        events.append(_event(r["starts_at"][:10], "calendar", f"{verb} {r['kind']}: {r['title']}", r["id"],
-                             starts_at=r["starts_at"]))
+        key = "people.story_serves" if r["part"] == "serves" else "people.story_joins"
+        words = t(key, lang, kind=_word("core.kind_", r["kind"], lang), title=r["title"])
+        events.append(_event(r["starts_at"][:10], "calendar", words, r["id"], starts_at=r["starts_at"]))
 
     day_sql = "COALESCE(ci.visit_done_date, substr(ci.starts_at, 1, 10))"
     for r in conn.execute(
@@ -114,7 +132,7 @@ def person_story(conn, person_id, include_private=False):
         "LEFT JOIN family f ON f.id = ci.visit_family_id "
         "WHERE ci.kind = 'Visit' AND " + _FOR_PERSON.format(pid=":pid", day=day_sql), {"pid": pid}
     ):
-        words = f"Visit done: {r['who']}" if r["visit_done"] else f"Visit planned: {r['who']}"
+        words = t("people.story_visit_done" if r["visit_done"] else "people.story_visit_planned", lang, who=r["who"])
         if r["visit_done"] and r["care_note"]:
             words += f" - {r['care_note']}"
         events.append(_event(r["day"], "visit", words, r["id"], done=bool(r["visit_done"])))
@@ -123,17 +141,19 @@ def person_story(conn, person_id, include_private=False):
         "SELECT o.id, o.date, o.amount, li.name AS fund FROM offering o "
         "JOIN list_item li ON li.id = o.fund_id WHERE o.giver_person_id = ?", (pid,)
     ):
-        events.append(_event(r["date"], "offering", f"Offering {format_vnd(r['amount'])} to {r['fund']}",
-                             r["id"], amount=r["amount"]))
+        words = t("people.story_offering", lang, amount=format_vnd(r["amount"]), fund=r["fund"])
+        events.append(_event(r["date"], "offering", words, r["id"], amount=r["amount"]))
 
     for r in conn.execute(
         "SELECT id, original_name, added_at FROM document WHERE person_id = ?", (pid,)
     ):
-        events.append(_event(r["added_at"][:10], "document", f"Document: {r['original_name']}", r["id"]))
+        events.append(_event(r["added_at"][:10], "document", t("people.story_document", lang, name=r["original_name"]),
+                             r["id"]))
 
     if include_private is True:
         for r in conn.execute("SELECT id, body, created_at FROM private_note WHERE person_id = ?", (pid,)):
-            events.append(_event(r["created_at"][:10], "private_note", f"Private note: {r['body']}", r["id"]))
+            events.append(_event(r["created_at"][:10], "private_note",
+                                 t("people.story_private_note", lang, body=r["body"]), r["id"]))
 
     events.sort(key=lambda e: (e["date"], _KIND_ORDER[e["kind"]], e["ref_id"]))
     return events
