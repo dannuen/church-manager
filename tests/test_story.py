@@ -42,18 +42,18 @@ class PersonStoryTest(CopyTestCase):
         texts = [e["text"] for e in events]
         for want in (
             "Status: Visitor", "Status: Member", "Family: Gia đình Nguyễn (Child)", "Family: Gia đình Nguyễn (Other)",
-            "Left Family Gia đình Nguyễn", "Family: Gia đình Đăng (Head)",
-            "Chi phái: Chi phái Hòa Bình (Family Gia đình Nguyễn)", "Chi phái: Chi phái Đông Hải (Family Gia đình Đăng)",
-            "Trưởng Chi phái of Chi phái Đông Hải", "No longer Trưởng Chi phái of Chi phái Đông Hải",
+            "Left Gia đình Nguyễn", "Family: Gia đình Đăng (Head)",
+            "Chi phái: Chi phái Hòa Bình (Gia đình Nguyễn)", "Chi phái: Chi phái Đông Hải (Gia đình Đăng)",
+            "Trưởng Chi phái: Chi phái Đông Hải", "No longer Trưởng Chi phái: Chi phái Đông Hải",
             "Ministry: Worship (Member)", "Ministry: Worship (Leader)", "Serves at Service: Thờ phượng Chúa Nhật",
             "Visit done: Nguyễn Hải Đăng - Cầu nguyện chung", "Visit done: Gia đình Nguyễn",
             "Visit planned: Gia đình Đăng", "Offering 1.250.000 ₫ to General", "Document: Chứng nhận.txt",
         ):
             self.assertIn(want, texts)
         # A new role in the same Family is not "left the Family"; a role change in a Ministry is not "stopped".
-        self.assertEqual(texts.count("Left Family Gia đình Nguyễn"), 1)
-        self.assertNotIn("Stopped serving in Ministry Worship", texts)
-        left = next(e for e in events if e["text"] == "Left Family Gia đình Nguyễn")
+        self.assertEqual(texts.count("Left Gia đình Nguyễn"), 1)
+        self.assertNotIn("Stopped serving in Worship", texts)
+        left = next(e for e in events if e["text"] == "Left Gia đình Nguyễn")
         self.assertEqual(left["date"], "2025-06-01")
         cp = next(e for e in events if e["text"].startswith("Chi phái: Chi phái Hòa Bình"))
         self.assertEqual(cp["date"], "2019-01-06")  # from when he joined the Family, not 2018

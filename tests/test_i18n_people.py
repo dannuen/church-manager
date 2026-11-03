@@ -410,15 +410,15 @@ class StoryTest(_support.CopyTestCase):
         vi = [e["text"] for e in story.person_story(conn, pid, lang="vi")]
         self.assertEqual(vi, ["Trạng thái: Tín hữu", "Gia đình: Gia đình Lê Văn An (Chủ gia đình)",
                               "Chi phái: Chi phái Hòa Bình (của Gia đình Lê Văn An)",
-                              "Ban ngành: Ban Âm nhạc (Trưởng ban)", "Trưởng Chi phái của Chi phái Hòa Bình",
-                              "Thôi làm Trưởng Chi phái của Chi phái Hòa Bình",
-                              "Thôi phục vụ trong Ban ngành: Ban Âm nhạc", "Rời Gia đình: Gia đình Lê Văn An"])
+                              "Ban ngành: Ban Âm nhạc (Trưởng ban)", "Trưởng Chi phái: Chi phái Hòa Bình",
+                              "Thôi làm Trưởng Chi phái: Chi phái Hòa Bình",
+                              "Thôi phục vụ trong Ban Âm nhạc", "Rời Gia đình Lê Văn An"])
         en = [e["text"] for e in story.person_story(conn, pid)]  # the Hermes door: English, as before
         self.assertEqual(en, ["Status: Tín hữu", "Family: Gia đình Lê Văn An (Head)",
-                              "Chi phái: Chi phái Hòa Bình (Family Gia đình Lê Văn An)",
-                              "Ministry: Ban Âm nhạc (Leader)", "Trưởng Chi phái of Chi phái Hòa Bình",
-                              "No longer Trưởng Chi phái of Chi phái Hòa Bình", "Stopped serving in Ministry Ban Âm nhạc",
-                              "Left Family Gia đình Lê Văn An"])
+                              "Chi phái: Chi phái Hòa Bình (Gia đình Lê Văn An)",
+                              "Ministry: Ban Âm nhạc (Leader)", "Trưởng Chi phái: Chi phái Hòa Bình",
+                              "No longer Trưởng Chi phái: Chi phái Hòa Bình", "Stopped serving in Ban Âm nhạc",
+                              "Left Gia đình Lê Văn An"])
         private = story.person_story(conn, pid, include_private=True, lang="vi")
         self.assertEqual([e["text"] for e in private if e["kind"] == "private_note"],
                          ["Ghi chú cá nhân: Cầu nguyện riêng"])
