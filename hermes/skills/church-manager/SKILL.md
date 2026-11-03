@@ -12,7 +12,7 @@ prints one JSON object.
 ## When to use
 
 - The pastor asks about People, a Family, the calendar, Offerings, Expenses, or who needs a Visit.
-- The pastor asks you to add a Person, record an Offering or an Expense, add a Calendar item, plan
+- The pastor asks you to add a Person or a Family, put a Person in a Family, record an Offering or an Expense, add a Calendar item, plan
   a Visit or mark a Visit done.
 - Not for work on the app's code. For that, read `AGENTS.md` in the Church Manager folder.
 
@@ -61,6 +61,8 @@ The ids in the examples are only examples. Get the real ids from `search`, `pers
 | Command | What it saves | Example (a dry run) |
 |---|---|---|
 | `add-person` | A new Person. `--full-name` is needed. Also `--gender` (M or F), `--birth-date`, `--phone`, `--address`, `--note`, `--status-id` (from `lists`), `--start-date` | `python -m churchmgr.agent add-person --full-name "Lê Văn An" --status-id 3` |
+| `add-family` | A new Family. `--name` is needed. Also `--address` | `python -m churchmgr.agent add-family --name "Gia đình Lê Văn An"` |
+| `join-family` | Puts a Person in a Family: `--person-id`, `--family-id`, `--family-role` (Head, Spouse, Child or Other), `--start-date`. An old Family link is closed and kept | `python -m churchmgr.agent join-family --person-id 12 --family-id 3 --family-role Head` |
 | `add-offering` | An Offering: `--amount`, `--fund-id` (from `lists`), `--giver person-ID` or `--giver family-ID` (no `--giver` = a no-name offering), `--date`, `--note` | `python -m churchmgr.agent add-offering --amount 1.250.000 --fund-id 9 --giver person-5` |
 | `add-expense` | An Expense: `--amount`, `--spending-category-id` (from `lists`), `--date`, `--note` | `python -m churchmgr.agent add-expense --amount 350000 --spending-category-id 13 --note "Tiền điện tháng 10"` |
 | `add-calendar-item` | A Calendar item: `--kind` (Service, Meeting, Visit or Event), `--title`, `--starts-at`, `--ends-at`, `--place`, `--note`; `--repeat weekly` or `monthly` with `--repeat-until`; for a Visit `--person-id` or `--family-id` | `python -m churchmgr.agent add-calendar-item --kind Meeting --title "Họp Ban Chấp Sự" --starts-at "2026-11-10 19:00"` |
@@ -144,6 +146,7 @@ After each save with `--yes`:
 1. Check that the answer has `"saved": true`.
 2. Read it back with a read command:
    - `add-person`: `person` with the new `person_id`.
+   - `add-family` or `join-family`: `family` with the `family_id` lists the People in it now.
    - `add-offering` or `add-expense`: `money` with `--year` and `--month` of its date. Read it before
      the save too: the total is now higher by `amount`.
    - `add-calendar-item` or `plan-visit`: `calendar` with `--from` and `--to` around its day shows

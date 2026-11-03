@@ -34,6 +34,7 @@ import _support  # noqa: F401 - puts the repo root on sys.path
 from churchmgr import agent, care, db, fake, lists, money, paths, people, schema, settings, ui
 from churchmgr.pages import calendar as calendar_pages
 from churchmgr.pages import care as care_pages
+from churchmgr.pages import families as families_pages
 from churchmgr.pages import money as money_pages
 from churchmgr.pages import people as people_pages
 from test_pages_people import PagesTestBase
@@ -45,8 +46,9 @@ READ_COMMANDS = (["status"], ["search", "nguyen"], ["person", "1"], ["family", "
 DOOR_OFF_TEXT = ("The Hermes door is off for this church copy. The pastor can turn it on in Church Manager: "
                  "Settings > Hermes door > On.")
 DRY_RUN_TEXT = "Dry run: nothing was saved. Run again with --yes to save."
-WRITE_NAMES = ("add-person", "add-offering", "add-expense", "add-calendar-item", "plan-visit", "visit-done")
-FORM_FUNCTIONS = ((people_pages, "add_person_from_form"), (money_pages, "add_offering_from_form"),
+WRITE_NAMES = ("add-person", "add-family", "join-family", "add-offering", "add-expense", "add-calendar-item", "plan-visit", "visit-done")
+FORM_FUNCTIONS = ((people_pages, "add_person_from_form"), (families_pages, "add_family_from_form"),
+                  (people_pages, "set_family_from_form"), (money_pages, "add_offering_from_form"),
                   (money_pages, "add_expense_from_form"), (calendar_pages, "add_calendar_item_from_form"),
                   (care_pages, "plan_visit_from_form"), (care_pages, "mark_visit_done_from_form"))
 PLANTED = "PLANTED-PN-7731-ĐĂNG"
@@ -148,6 +150,9 @@ class FakeChurchBase(unittest.TestCase):
         """One valid argv (without --yes) for each write command, in the order of ``WRITE_NAMES``."""
         return [
             ["add-person", "--full-name", "Lý Thị Hermes", "--status-id", self.list_id("status", "visitor")],
+            ["add-family", "--name", "Gia đình Lý Thị Hermes"],
+            ["join-family", "--person-id", pid, "--family-id", str(self.sql("SELECT MIN(id) FROM family")[0][0]),
+             "--family-role", "Other"],
             ["add-offering", "--amount", "200.000", "--fund-id", self.list_id("fund"), "--giver", f"person-{pid}"],
             ["add-expense", "--amount", "50000", "--spending-category-id", self.list_id("spending_category")],
             ["add-calendar-item", "--kind", "Visit", "--starts-at", f"{day()} 10:00", "--person-id", pid],
@@ -621,6 +626,40 @@ class WriteCommandsTest(FakeChurchBase):
         self.assertEqual(self.ok("add-person", "--full-name", "Ngày Hôm Nay", "--status-id", visitor)
                          ["would_save"]["start_date"], day())
 
+    def test_add_family(self):
+        dry, saved = self.dry_then_yes(["add-family", "--name", "Gia đình Hermes Thử", "--address", "5 Lê Lợi"],
+                                       {"family": 1})
+        self.assertEqual(dry["would_save"], {"name": "Gia đình Hermes Thử", "address": "5 Lê Lợi"})
+        fid = saved["result"]["family_id"]
+        self.assertEqual(self.sql("SELECT name, address FROM family WHERE id = ?", (fid,)),
+                         [("Gia đình Hermes Thử", "5 Lê Lợi")])
+        self.refused("invalid", "add-family", "--name", "  ", "--yes")
+        self.refused("usage", "add-family")  # --name is required
+
+    def test_join_family_keeps_the_old_link(self):
+        conn = db.connect(self.db_path)
+        try:
+            pid = people.add_person(conn, "Hermes Gia Đình")
+            old, new = people.add_family(conn, "Gia đình Cũ"), people.add_family(conn, "Gia đình Mới")
+            people.set_family(conn, pid, old, "Child", day(-10))
+        finally:
+            conn.close()
+        argv = ["join-family", "--person-id", str(pid), "--family-id", str(new), "--family-role", "Head",
+                "--start-date", day(-2)]
+        dry, saved = self.dry_then_yes(argv, {"family_link": 1})
+        self.assertEqual(saved["result"], {"person_id": pid, "family_id": new, "start_date": day(-2)})
+        self.assertEqual(self.sql("SELECT family_id, family_role, start_date, end_date FROM family_link "
+                                  "WHERE person_id = ? ORDER BY id", (pid,)),
+                         [(old, "Child", day(-10), day(-2)), (new, "Head", day(-2), None)])
+        self.refused("invalid", "join-family", "--person-id", str(pid), "--family-id", str(old),
+                     "--family-role", "Boss", "--yes")
+        self.refused("invalid", "join-family", "--person-id", str(pid), "--family-id", str(old),
+                     "--family-role", "Other", "--start-date", day(1), "--yes")
+        self.refused("not_found", "join-family", "--person-id", "999999", "--family-id", str(old),
+                     "--family-role", "Other")
+        self.refused("not_found", "join-family", "--person-id", str(pid), "--family-id", "999999",
+                     "--family-role", "Other")
+
     def test_add_offering_in_whole_dong(self):
         fund = self.list_id("fund")
         argv = ["add-offering", "--date", day(-1), "--amount", "1.250.000", "--fund-id", fund, "--giver", "person-1",
@@ -883,6 +922,8 @@ class WriteRulesInOnePlaceTest(unittest.TestCase):
     def test_each_web_post_handler_calls_its_form_function(self):
         cases = (
             (people_pages.new_post, "add_person_from_form", ("past_or_today", "list_choice", "people.add_person")),
+            (families_pages.new_post, "add_family_from_form", ("people.add_family",)),
+            (people_pages.family_post, "set_family_from_form", ("people.set_family(conn, pid, family_id",)),
             (money_pages.offering_new_post, "add_offering_from_form", ("_offering_input", "money_data.add_offering(")),
             (money_pages.expense_new_post, "add_expense_from_form", ("_expense_input", "money_data.add_expense(")),
             (calendar_pages.new_post, "add_calendar_item_from_form", ("CALENDAR_KINDS", "form_datetime", "plan_visit",

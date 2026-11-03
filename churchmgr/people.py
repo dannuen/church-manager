@@ -9,6 +9,7 @@ A refused value raises ``TextError`` (``str()`` is the English sentence; a page 
 """
 
 import datetime as _dt
+import sqlite3
 
 from . import lists, text
 from .db import transaction
@@ -231,6 +232,18 @@ def get_family(conn, family_id):
     return conn.execute(
         "SELECT * FROM family WHERE id = ?", (text.to_id(family_id, "people.family"),)
     ).fetchone()
+
+
+def delete_family(conn, family_id):
+    """Delete a Family made by mistake. Refused (``families.err_in_use``) when any row points to it: a
+    Family link now or before, a Chi phái link, an Offering, a Visit or a Document. The foreign keys
+    check that, so no history is ever lost."""
+    with transaction(conn):
+        fid = _require_row(conn, "family", family_id, "people.family")["id"]
+        try:
+            conn.execute("DELETE FROM family WHERE id = ?", (fid,))
+        except sqlite3.IntegrityError:
+            raise TextError("families.err_in_use") from None
 
 
 def list_families(conn):

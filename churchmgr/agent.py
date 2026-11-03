@@ -3,8 +3,8 @@
     python -m churchmgr.agent COMMAND [options] [--copy FOLDER] [--copies-root FOLDER]
 
 Read commands: status, search, person, family, calendar, money, care-due, lists.
-Write commands: add-person, add-offering, add-expense, add-calendar-item, plan-visit, visit-done.
-No command deletes, edits, hides or hands over anything.
+Write commands: add-person, add-family, join-family, add-offering, add-expense, add-calendar-item, plan-visit,
+visit-done. No command deletes, edits, hides or hands over anything.
 
 - The door is off by default. The pastor turns it on in Church Manager: Settings > Hermes door.
   With the door off, every command prints the ``door_off`` answer, changes nothing and exits 3.
@@ -28,7 +28,8 @@ import sys
 from pathlib import Path
 
 from . import calendar, care, db, lists, money, paths, people, schema, search, settings, story, text
-from .pages import calendar as calendar_page, care as care_page, money as money_page, people as people_page
+from .pages import calendar as calendar_page, care as care_page, families as families_page, money as money_page
+from .pages import people as people_page
 
 EXIT = {"invalid": 1, "not_found": 1, "no_copy": 1, "usage": 2, "door_off": 3}
 DOOR_OFF = ("The Hermes door is off for this church copy. The pastor can turn it on in Church Manager: "
@@ -246,6 +247,20 @@ def cmd_add_person(conn, form, args):
     return {"person_id": people_page.add_person_from_form(conn, form)}
 
 
+def cmd_add_family(conn, form, args):
+    return {"family_id": families_page.add_family_from_form(conn, form)}
+
+
+def cmd_join_family(conn, form, args):
+    pid, fid = _id(args.person_id, "Person"), _id(args.family_id, "Family")
+    if people.get_person(conn, pid) is None:
+        raise AgentError("not_found", f"No Person with id {pid}.")
+    if people.get_family(conn, fid) is None:
+        raise AgentError("not_found", f"No Family with id {fid}.")
+    day = people_page.set_family_from_form(conn, pid, form)
+    return {"person_id": pid, "family_id": fid, "start_date": day}
+
+
 def cmd_add_offering(conn, form, args):
     oid = money_page.add_offering_from_form(conn, form)
     return {"offering_id": oid, **_amount(money.get_offering(conn, oid)["amount"])}
@@ -356,6 +371,16 @@ def build_parser():
         ("status_id", "ID", "the first Status: an id from the lists command"),
         ("start_date", "YYYY-MM-DD", "the day this Status began, not after today (default today)", today),
     ], required=("full_name",))
+    add_write("add-family", cmd_add_family, "Add a Family.", [
+        ("name", "NAME", "the Family name (required), for example \"Gia đình Nguyễn Hải Đăng\""),
+        ("address", "ADDRESS", "the Family address"),
+    ], required=("name",))
+    add_write("join-family", cmd_join_family, "Put a Person in a Family. An old Family link is closed and kept.", [
+        ("person_id", "ID", "the Person (required)"),
+        ("family_id", "ID", "the Family (required)"),
+        ("family_role", "ROLE", f"one of: {', '.join(schema.FAMILY_ROLES)} (required)"),
+        ("start_date", "YYYY-MM-DD", "the day the Person joined, not after today (default today)", today),
+    ], required=("person_id", "family_id", "family_role"))
     money_flags = [
         ("date", "YYYY-MM-DD", "the day, not after today (default today)", today),
         ("amount", "DONG", "whole dong, for example 1.250.000 or 1250000"),

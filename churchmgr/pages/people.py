@@ -656,6 +656,14 @@ def status_post(req):
     return _history_post(req, "status", change)
 
 
+def set_family_from_form(conn, pid, form):
+    """Put a Person in a Family from the Family form, for this page and the Hermes door.
+    Old links are closed and kept. Returns the start day."""
+    day = past_or_today(form.get("start_date"), "people.start_date")
+    people.set_family(conn, pid, form.get("family_id"), form.get("family_role"), day)
+    return day
+
+
 def family_post(req):
     def change(conn, pid):
         day = past_or_today(req.form.get("start_date"), "people.start_date")
@@ -669,7 +677,7 @@ def family_post(req):
             return t("people.family_left", name=before["name"], date=ui.fmt_date(day))
         if before is not None and str(before["family_id"]) == family_id and before["family_role"] == role:
             return same_change(t("people.family_same", name=before["name"], role=ui.family_role(role)))
-        people.set_family(conn, pid, family_id, role, day)
+        set_family_from_form(conn, pid, req.form)
         now = people.current_family(conn, pid)
         return t("people.family_now", name=now["name"], role=ui.family_role(now["family_role"]),
                  date=ui.fmt_date(day))

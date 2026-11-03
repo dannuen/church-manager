@@ -9,7 +9,7 @@ shared words); names and addresses are shown as stored.
 """
 
 from .. import people, ui
-from ..i18n import t, tn
+from ..i18n import error_text, t, tn
 from ..server import Response
 from ..ui import h, vi
 from . import documents as document_pages  # card C3: the shared Documents block
@@ -77,9 +77,14 @@ def new_page(req):
     return _new_form(req)
 
 
+def add_family_from_form(conn, form):
+    """Add a Family from the Add a Family form, for this page and the Hermes door. Returns the Family id."""
+    return people.add_family(conn, form.get("name"), form.get("address"))
+
+
 def new_post(req):
     try:
-        fid = people.add_family(req.conn, req.form.get("name"), req.form.get("address"))
+        fid = add_family_from_form(req.conn, req.form)
     except ValueError as exc:
         return _new_form(req, req.form, ("new", exc), 400)
     return Response.redirect(ui.url(f"/families/{fid}", msg=t("families.added")))
@@ -159,7 +164,15 @@ def family_page(req):
 
 # ---------------------------------------------------------------- /families/<id>/edit
 
-def _edit_form(req, family, values=None, error=None, status=200):
+def _delete_box(fid, error=None):
+    """The last block of the Edit page: Delete, in the negative colour. It asks once more first."""
+    body = (ui.form(f"/families/{fid}/delete", ui.button(t("families.delete"), "danger"))
+            + (f'<p class="error" role="alert">{h(error_text(error))}</p>' if error else "")
+            + f'<p class="hint">{h(t("families.delete_hint"))}</p>')
+    return panel("delete", t("core.btn_delete"), body, cls="narrow no-print")
+
+
+def _edit_form(req, family, values=None, error=None, status=200, delete_error=None):
     """Family name and Address. They are plain fields, not history (who is in the Family and its Chi phái are)."""
     values = values if values is not None else {"name": family["name"], "address": family["address"] or ""}
     errors = field_errors(error, "edit", {"name": "families.name"})
@@ -172,8 +185,9 @@ def _edit_form(req, family, values=None, error=None, status=200):
         + form_error(errors) + ui.button(t("core.btn_save"))
     )
     link = f'<a href="/families/{fid}">{h(t("families.family_page"))}</a>'
-    body = (f'<section class="panel narrow">{ui.form(f"/families/{fid}/edit", inner)}'
-            f'<p class="hint">{ui.t_html("families.edit_hint", link=link)}</p></section>')
+    body = (f'<div class="stack"><section class="panel narrow">{ui.form(f"/families/{fid}/edit", inner)}'
+            f'<p class="hint">{ui.t_html("families.edit_hint", link=link)}</p></section>'
+            f'{_delete_box(fid, delete_error)}</div>')
     return Response.html(ui.page(t("people.edit_title", name=family["name"]), body, "families", lang="vi",
                                  actions=ui.link_button(t("families.back"), f"/families/{fid}")), status)
 
@@ -194,6 +208,27 @@ def edit_post(req):
     except ValueError as exc:
         return _edit_form(req, family, req.form, ("edit", exc), 400)
     return Response.redirect(ui.url(f"/families/{family['id']}", msg=t("families.saved")))
+
+
+def delete_post(req):
+    family = _family_or_none(req)
+    if family is None:
+        return not_found("people.family", "/families", "families.go")
+    fid = family["id"]
+    if req.form.get("confirm") != "yes":
+        form = ui.form(f"/families/{fid}/delete", ui.hidden("confirm", "yes")
+                       + ui.button(t("families.yes_delete"), "danger"))
+        body = (f'<section class="panel narrow" data-panel="confirm">'
+                f'<p class="lead">{ui.t_html("families.confirm", name=vi(family["name"]))}</p>'
+                f'<p class="hint">{h(t("families.confirm_hint"))}</p>'
+                f'<div class="confirm-actions">{form}{ui.link_button(t("core.btn_cancel"), f"/families/{fid}/edit")}'
+                f'</div></section>')
+        return Response.html(ui.page(t("families.confirm_title"), body, "families"))
+    try:
+        people.delete_family(req.conn, fid)
+    except ValueError as exc:
+        return _edit_form(req, family, status=400, delete_error=exc)
+    return Response.redirect(ui.url("/families", msg=t("families.deleted", name=family["name"])))
 
 
 def chi_phai_post(req):
@@ -229,4 +264,5 @@ ROUTES = [
     ("GET", "/families/<int:id>/edit", edit_page),
     ("POST", "/families/<int:id>/edit", edit_post),
     ("POST", "/families/<int:id>/chi-phai", chi_phai_post),
+    ("POST", "/families/<int:id>/delete", delete_post),
 ]
