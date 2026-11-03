@@ -351,8 +351,8 @@ class NewChurchSetupTest(ScreensBase):
         headers, _ = self.post("vi", "/copies/new", {"church_name": "Grace Church U6", "language": "en"})
         folder = self.root / "grace-church-u6"
         self.assertEqual(self.items(folder), (self.defaults("en"), "en"))
-        # the flash is in the words of the page where the button was pressed (Tiếng Việt) ...
-        self.assertTrue(flash(self.get("vi", headers["location"])).startswith("Đã lập dữ liệu Hội Thánh mới:"))
+        # the flash is in the language of the next page: the new church copy's (English) ...
+        self.assertTrue(flash(self.get("vi", headers["location"])).startswith("New church setup is done:"))
         # ... and the new church copy shows its screens in English
         page = self.get("vi", "/copies")
         self.assert_screen("en", page, "GET /copies of the English copy")
@@ -367,10 +367,10 @@ class NewChurchSetupTest(ScreensBase):
         headers, _ = self.post("vi", "/copies/open", {"folder": "b"})
         self.assertEqual(self.httpd.copy_folder, (self.root / "b").resolve())
         page = self.get("vi", headers["location"])
-        self.assertEqual(flash(page), "Đã mở Hội Thánh Bình Minh U6.")
+        self.assertEqual(flash(page), "Opened Hội Thánh Bình Minh U6.")
         self.assertEqual(html_lang(page), "en")  # copy b is an English church copy
         headers, _ = self.post("vi", "/copies/open", {"folder": "a"})
-        self.assertEqual(flash(self.get("vi", headers["location"])), "Opened Hội Thánh An Bình U6.")
+        self.assertEqual(flash(self.get("vi", headers["location"])), "Đã mở Hội Thánh An Bình U6.")
         headers, _ = self.post("vi", "/copies/open", {"folder": "a"})
         self.assertEqual(flash(self.get("vi", headers["location"])), "Dữ liệu Hội Thánh này đang mở.")
         _h, page = self.post("vi", "/copies/open", {"folder": "../b"}, 400)

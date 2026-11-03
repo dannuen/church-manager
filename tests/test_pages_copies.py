@@ -307,7 +307,7 @@ class CopySwitchTest(LiveServer, unittest.TestCase):
 
         page = self.page(headers["location"])
         self.assertIn("Hội Thánh Mới C3", page)  # the server shows the new copy
-        self.assertIn("New church setup is done", page)
+        self.assertIn("Đã lập dữ liệu Hội Thánh mới: Hội Thánh Mới C3.", page)
         self.assertEqual(sha(self.a / db.DB_NAME), old_hash)  # the old copy is not touched
         listing = section(self.page("/copies"), "copies")
         self.assertIn("Hội Thánh An Bình C3", listing)

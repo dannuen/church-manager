@@ -253,7 +253,7 @@ class HistoryErrorTest(_support.CopyTestCase):
         with self.assertRaises(TextError) as ctx:
             people.set_status(self.conn, pid, self.status("attender"), "2026-01-01")
         e = ctx.exception
-        self.assertEqual(str(e), "Start date 2026-01-01 is before 2026-01-10, the date of the last change. "
+        self.assertEqual(str(e), "Start date 01/01/2026 is before 10/01/2026, the date of the last change. "
                                  "History is never rewritten; use a date on or after it.")
         self.assertEqual(error_text(e, "en"), str(e))
         vi = error_text(e, "vi")
@@ -269,7 +269,7 @@ class HistoryErrorTest(_support.CopyTestCase):
         with self.assertRaises(TextError) as ctx:
             people.set_truong_chi_phai(self.conn, cid, b, "2026-02-28")
         self.assertEqual(ctx.exception.key, "people.err_history")
-        self.assertIn("2026-02-28 is before 2026-03-01", str(ctx.exception))
+        self.assertIn("28/02/2026 is before 01/03/2026", str(ctx.exception))
         self.assertTrue(error_text(ctx.exception, "vi").startswith("Ngày bắt đầu 28/02/2026 sớm hơn 01/03/2026,"))
 
 

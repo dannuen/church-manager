@@ -1141,8 +1141,8 @@ TEXT = {
         "people.err_after_today": "{label} cannot be after today ({today}). Use today or an earlier date.",
         "people.err_list_choice": "{label} must be one of the choices in the list.",
         "people.err_no_row": "No {what} with id {id}.",
-        "people.err_history": "Start date {start} is before {latest}, the date of the last change. History is never "
-                              "rewritten; use a date on or after it.",
+        "people.err_history": "Start date {start:%d/%m/%Y} is before {latest:%d/%m/%Y}, the date of the last change. "
+                              "History is never rewritten; use a date on or after it.",
         "people.err_gender": "Gender must be M or F, or empty.",
         "people.err_family_role": "Family role must be one of: Head, Spouse, Child, Other.",
         "people.err_ministry_role": "Ministry role must be one of: Leader, Member.",
