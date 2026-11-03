@@ -155,7 +155,8 @@ def _new_form(req, values=None, error=None, status=200):
         + ui.field(t("sent.subject"), "subject", v("subject", ""), required=True, autocomplete="off", lang="vi",
                    error=errors.get("subject"), hint=t("sent.subject_hint"))
         + ui.field(t("sent.file"), "file", "", type="file", error=errors.get("file"),
-                   hint=t("sent.file_hint", mb=docs.MAX_SIZE // (1024 * 1024)))
+                   hint=t("sent.file_hint", mb=docs.MAX_SIZE // (1024 * 1024)), data_max_bytes=docs.MAX_SIZE,
+                   data_text_too_large=t("documents.err_too_large", mb=docs.MAX_SIZE // (1024 * 1024)))
         + f'<p class="hint">{ui.t_html("sent.number_hint", number=number, lists=lists_link)}</p>'
         + form_error(errors) + ui.button(t("sent.save"))
     )

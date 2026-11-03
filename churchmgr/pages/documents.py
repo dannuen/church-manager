@@ -79,7 +79,8 @@ def add_form(key, rid, error=None):
     inner = (
         ui.hidden(key, rid)
         + ui.field(t("documents.file"), "file", "", type="file", id=f"doc-file-{rid}", required=True, error=error,
-                   hint=t("documents.file_hint", mb=docs.MAX_SIZE // MB))
+                   hint=t("documents.file_hint", mb=docs.MAX_SIZE // MB), data_max_bytes=docs.MAX_SIZE,
+                   data_text_too_large=t("documents.err_too_large", mb=docs.MAX_SIZE // MB))
         + ui.button(t("documents.add"), "secondary")
     )
     return ui.form("/documents/new", inner, multipart=True)

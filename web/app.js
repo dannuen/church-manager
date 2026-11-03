@@ -1,6 +1,7 @@
-// Church Manager: the only script. Two jobs: live search (with a short wait) and the print button.
-// Pages work without it. Results are built with textContent, never innerHTML.
-// No words live here: the form gives them in the language of the page (data-text-none, data-text-failed).
+// Church Manager: the only script. Three jobs: live search (with a short wait), the print button and the
+// file size check. Pages work without it. Results are built with textContent, never innerHTML.
+// No words live here: the page gives them in its own language (data-text-none, data-text-failed,
+// data-text-too-large).
 (function () {
   "use strict";
 
@@ -65,5 +66,26 @@
   document.addEventListener("click", function (e) {
     var button = e.target.closest ? e.target.closest("[data-print]") : null;
     if (button) { e.preventDefault(); window.print(); }
+  });
+
+  // <input type="file" data-max-bytes="..." data-text-too-large="..."> stops a file over the limit before
+  // the form is sent: the browser's own form check refuses to send while the message is set. Checked on
+  // change and once at load (a browser may keep the chosen file after Back).
+  document.querySelectorAll("input[type=file][data-max-bytes]").forEach(function (input) {
+    var max = Number(input.getAttribute("data-max-bytes"));
+
+    function check() {
+      var total = 0;
+      Array.prototype.forEach.call(input.files || [], function (file) { total += file.size; });
+      if (total > max) {
+        input.setCustomValidity(input.getAttribute("data-text-too-large") || "");
+        input.reportValidity();
+      } else {
+        input.setCustomValidity("");
+      }
+    }
+
+    input.addEventListener("change", check);
+    check();
   });
 })();

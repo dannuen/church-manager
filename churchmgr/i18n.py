@@ -302,10 +302,10 @@ TEXT = {
         "families.delete_hint": "Chỉ xóa được Gia đình chưa từng có Người, Chi phái, Dâng hiến, Thăm viếng hay Tài liệu. "
                                 "Bạn sẽ được hỏi lại một lần trước khi xóa.",
         "families.confirm_title": "Xóa Gia đình này?",
-        "families.confirm": "Xóa Gia đình {name}?",
+        "families.confirm": "Xóa {name}?",
         "families.confirm_hint": "Không thể hoàn tác.",
         "families.yes_delete": "Có, xóa",
-        "families.deleted": "Đã xóa Gia đình {name}.",
+        "families.deleted": "Đã xóa {name}.",
         "families.err_in_use": "Không thể xóa Gia đình này: Gia đình đang có hoặc đã từng có Người, Chi phái, "
                                "Dâng hiến, Thăm viếng hay Tài liệu.",
         "families.chi_phai_left": "Đã rời {name} ngày {date}. Liên kết cũ vẫn được giữ.",
@@ -1277,10 +1277,10 @@ TEXT = {
         "families.delete_hint": "Only a Family that never had People, a Chi phái, Offerings, Visits or Documents "
                                 "can be deleted. You are asked once more before it goes.",
         "families.confirm_title": "Delete this Family?",
-        "families.confirm": "Delete the Family {name}?",
+        "families.confirm": "Delete {name}?",
         "families.confirm_hint": "It cannot be undone.",
         "families.yes_delete": "Yes, delete it",
-        "families.deleted": "Family {name} deleted.",
+        "families.deleted": "{name} deleted.",
         "families.err_in_use": "This Family cannot be deleted: it has or had People, a Chi phái, Offerings, "
                                "Visits or Documents.",
         "families.chi_phai_left": "Left {name} on {date}. The old link is kept.",
