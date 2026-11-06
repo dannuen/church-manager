@@ -4,8 +4,12 @@
 Rules kept here:
 - A row is checked with the rules of the Add a Person form, by calling them (``text.clean_name``,
   ``people._gender``, ``people_pages.past_or_today``, ``people_pages.add_person_from_form``), never a copy.
+- A Family is found by its name without diacritics (``family.name_folded``): no match = one new Family for
+  all the rows with that name, two or more = a row error. Save writes it with ``people.add_family`` and
+  ``people_pages.set_family_from_form``. A Family already in the church copy is never changed: a Person
+  only joins it (a new Family link). No Chi phái is set from a file.
 - Nothing is saved before Save. Save checks the rows again (the hidden field is input like any other)
-  and writes every row in one transaction: one bad row and nothing is saved.
+  and writes every row in one transaction: one bad row and nothing is saved, no Person and no Family.
 - The picked file is read once and never kept. A Private note is never read from a file: a column
   with that title is an ignored column like any unknown one.
 - Words on screen come from the text table (section ``people``); the pastor's own values are shown as
@@ -26,18 +30,14 @@ from . import people as people_pages
 # ``people.file_col_<key>`` in either language, or the key itself, without diacritics and in any case.
 COLUMNS = ("full_name", "gender", "birth_date", "phone", "address", "note", "status", "start_date", "family",
            "family_role")
-# Family and Family role are read by story 3 of spec 001 (tasks T031-T032). Until then a file that has them
-# shows them as ignored columns: never read in silence, never dropped in silence. The empty file has the READ
-# columns only, so a file made from it never shows an ignored column.
-NOT_READ_YET = ("family", "family_role")
-READ = tuple(key for key in COLUMNS if key not in NOT_READ_YET)
 ACCEPT = ".xlsx," + xlsx.MEDIA_TYPE
 USED_CODES = "people_file_used"  # setting: the codes of the newest Saves that worked, as a JSON list
 KEEP_CODES = 200
 CODE = re.compile(r"[0-9a-f]{32}")  # what new_code() gives
-# The example row of the Help sheet. Gender and Status are added from the screen words and the Status list.
+# The example row of the Help sheet. Gender, Status and Family role are added from the screen words and the
+# Status list.
 EXAMPLE = {"full_name": "Nguyễn Văn An", "birth_date": "31/12/1980", "phone": "0912345678", "address": "12 Lê Lợi",
-           "start_date": "01/01/2024"}
+           "start_date": "01/01/2024", "family": "Gia đình Nguyễn Văn An"}
 
 
 def map_titles(title_row):
@@ -66,9 +66,15 @@ def map_titles(title_row):
 
 # ---------------------------------------------------------------- the check
 
+def _role_words(lang):
+    """The screen words of the Family roles in ``lang``, in the order of ``schema.FAMILY_ROLES``."""
+    return [t(f"core.family_role_{code.lower()}", lang) for code in schema.FAMILY_ROLES]
+
+
 def _lookups(conn):
     """What a row is checked against, read once per file: gender words, Status items by folded word,
-    the Status names, and the folded names of the Persons already in the church copy."""
+    the Status names, the folded names of the Persons already in the church copy, the Family role codes by
+    folded word (the codes and the screen words of both languages), and the Families by folded name."""
     genders = {text.fold(t(key, lang)): code
                for code, key in people_pages.GENDER_WORDS.items() for lang in i18n.LANGS}
     items = lists.get_list(conn, "status")  # active items only
@@ -83,18 +89,26 @@ def _lookups(conn):
     for item in items:
         statuses[text.fold(item["name"])] = item
     names = {row[0] for row in conn.execute("SELECT name_folded FROM person")}
-    return genders, statuses, [item["name"] for item in items], names
+    roles = {text.fold(code): code for code in schema.FAMILY_ROLES}
+    for lang in i18n.LANGS:
+        roles.update(zip(map(text.fold, _role_words(lang)), schema.FAMILY_ROLES))
+    families = {}
+    for family in conn.execute("SELECT id, name, name_folded FROM family ORDER BY id"):
+        families.setdefault(family["name_folded"], []).append(family)
+    return genders, statuses, [item["name"] for item in items], names, roles, families
 
 
 def _check_rows(conn, numbered, date1904):
     """Row checks (see ``data-model.md``) for ``numbered``: ``[(row number, {key: cell})]``. A cell is
     what the file holds (text, number or ``None``) or text from the check page. The sentences are in the
     language of the page."""
-    genders, statuses, status_names, names = _lookups(conn)
+    genders, statuses, status_names, names, roles, families = _lookups(conn)
+    new_names = {}  # the folded name of each new Family -> its name as the first row with it writes it
     checks = []
     for row, raw in numbered:
         values, errors = {}, []
         status_id = status_name = None
+        family_id = family_name = new_family = None
 
         def refuse(key, problem):
             column = t(f"people.file_col_{key}")
@@ -143,7 +157,34 @@ def _check_rows(conn, numbered, date1904):
                 status_id, status_name = item["id"], item["name"]
 
         date("start_date", "people.start_date")
+
+        # Family: a name of the church copy (joined), or a new name (one new Family per name); never two.
+        values["family"] = xlsx.cell_text(raw.get("family"))
+        if values["family"]:
+            try:
+                values["family"] = text.clean_name(values["family"], "families.name")
+            except ValueError as exc:
+                refuse("family", i18n.error_text(exc))
+            else:
+                folded = text.fold(values["family"])
+                found = families.get(folded, [])
+                if len(found) > 1:
+                    refuse("family", t("people.file_err_family_two"))
+                elif found:
+                    family_id, family_name = found[0]["id"], found[0]["name"]
+                else:
+                    new_family = new_names.setdefault(folded, values["family"])
+        typed = xlsx.cell_text(raw.get("family_role"))
+        values["family_role"] = roles.get(text.fold(typed), typed)  # the code, or as typed when unknown
+        if typed and values["family_role"] not in schema.FAMILY_ROLES:
+            refuse("family_role", t("people.file_err_family_role", names=", ".join(_role_words(None))))
+        elif typed and not values["family"]:
+            refuse("family_role", t("people.file_err_family_needed"))
+        elif values["family"] and not typed:
+            refuse("family_role", t("people.file_err_family_role_needed"))
+
         checks.append({"row": row, "values": values, "status_id": status_id, "status_name": status_name,
+                       "family_id": family_id, "family_name": family_name, "new_family": new_family,
                        "errors": errors, "warnings": []})
 
     same = {}  # folded name -> the checks of the rows with that name
@@ -172,9 +213,6 @@ def check_people_file(conn, data):
         raise TextError("people.file_err_empty")
     title_row = filled[0][1]
     index, ignored = map_titles(title_row)
-    for key in NOT_READ_YET:
-        if key in index:
-            ignored.append(xlsx.cell_text(title_row[index.pop(key)]))
     numbered = []
     for n, row in filled[1:]:
         raw = {key: row[i] for key, i in index.items()}
@@ -200,8 +238,9 @@ def save_people_file(conn, rows_json_text, code):
     """Save the rows of a check page (``rows_json`` text, and the page's ``new_code()``). Every row is
     checked again first.
 
-    Returns ``(added, checks)``: ``(n, [])`` when all ``n`` rows were added in one transaction, or
-    ``(0, checks)`` when a row has an error now (nothing saved, the code can be used again). A hidden
+    Returns ``(added, families, checks)``: ``(n, m, [])`` when all ``n`` rows were added in one transaction,
+    with ``m`` new Families (one per new Family name, its address the first Address among its rows), or
+    ``(0, 0, checks)`` when a row has an error now (nothing saved, the code can be used again). A hidden
     field that is not rows and a code of a check page, or a code of a Save that already worked, raises
     ``TextError``.
     """
@@ -217,7 +256,7 @@ def save_people_file(conn, rows_json_text, code):
     for item in items:
         if not (isinstance(item, dict) and type(item.get("row")) is int and isinstance(item.get("values"), dict)):
             raise TextError("people.file_err_pick_again")
-        numbered.append((item["row"], {k: v for k, v in item["values"].items() if k in READ and isinstance(v, str)}))
+        numbered.append((item["row"], {k: v for k, v in item["values"].items() if k in COLUMNS and isinstance(v, str)}))
     today = people_pages.today_text()
     # The used codes are read and written in the transaction of the Persons (BEGIN IMMEDIATE): two Saves of
     # one page at the same moment cannot both pass, and the codes are still known after a restart.
@@ -227,24 +266,35 @@ def save_people_file(conn, rows_json_text, code):
             raise TextError("people.file_err_saved_already")
         checks = _check_rows(conn, numbered, date1904=False)
         if any(c["errors"] for c in checks):
-            return 0, checks
+            return 0, 0, checks
         settings.set_setting(conn, USED_CODES, json.dumps((used + [code])[-KEEP_CODES:]))
+        addresses = {}  # each new Family name -> the first Address among its rows
+        for c in checks:
+            if c["new_family"] and c["values"]["address"]:
+                addresses.setdefault(c["new_family"], c["values"]["address"])
+        made = {}  # each new Family name -> the id of the Family made for it, at its first row
         for c in checks:
             v = c["values"]
-            people_pages.add_person_from_form(conn, {
+            start = v["start_date"] or today  # of the Status link and of the Family link
+            pid = people_pages.add_person_from_form(conn, {
                 "full_name": v["full_name"], "gender": v["gender"], "birth_date": v["birth_date"],
                 "phone": v["phone"], "address": v["address"], "note": v["note"],
-                "status_id": str(c["status_id"]) if c["status_id"] else "",
-                "start_date": v["start_date"] or today,
+                "status_id": str(c["status_id"]) if c["status_id"] else "", "start_date": start,
             })
-    return len(checks), []
+            if c["new_family"] and c["new_family"] not in made:
+                made[c["new_family"]] = people.add_family(conn, c["new_family"], addresses.get(c["new_family"]))
+            family_id = c["family_id"] or made.get(c["new_family"])
+            if family_id:
+                people_pages.set_family_from_form(conn, pid, {"family_id": family_id, "family_role": v["family_role"],
+                                                              "start_date": start})
+    return len(checks), len(made), []
 
 
 # ---------------------------------------------------------------- the empty file
 
 def _titles(lang):
-    """The column titles of the empty file in ``lang``: the columns that are read, in the order of ``COLUMNS``."""
-    return [t(f"people.file_col_{key}", lang) for key in READ]
+    """The column titles of the empty file in ``lang``, in the order of ``COLUMNS``."""
+    return [t(f"people.file_col_{key}", lang) for key in COLUMNS]
 
 
 def help_rows(conn, lang):
@@ -256,16 +306,16 @@ def help_rows(conn, lang):
         "genders": ", ".join([t(key, other) for other in i18n.LANGS for key in people_pages.GENDER_WORDS.values()]
                              + list(people.GENDERS)),
         "statuses": ", ".join(statuses) or "—",
-        "roles": ", ".join(dict.fromkeys([t(f"core.family_role_{code.lower()}", other) for other in i18n.LANGS
-                                          for code in schema.FAMILY_ROLES] + list(schema.FAMILY_ROLES))),
+        "roles": ", ".join(dict.fromkeys([word for other in i18n.LANGS for word in _role_words(other)]
+                                         + list(schema.FAMILY_ROLES))),
     }
     example = {**EXAMPLE, "gender": t(people_pages.GENDER_WORDS["M"], lang),
-               "status": statuses[0] if statuses else None}
+               "status": statuses[0] if statuses else None, "family_role": _role_words(lang)[0]}
     titles = _titles(lang)
     return ([[t("people.file_help_sheet", lang, people=t("people.file_sheet_people", lang))], [],
              [t("people.file_help_column", lang), t("people.file_help_how", lang)]]
-            + [[title, t(f"people.file_help_{key}", lang, **words)] for key, title in zip(READ, titles)]
-            + [[], [t("people.file_help_example", lang)], titles, [example.get(key) for key in READ]])
+            + [[title, t(f"people.file_help_{key}", lang, **words)] for key, title in zip(COLUMNS, titles)]
+            + [[], [t("people.file_help_example", lang)], titles, [example.get(key) for key in COLUMNS]])
 
 
 def empty_file(conn, lang):
@@ -283,17 +333,19 @@ def _pick_form(error=None):
 
 
 def _help(conn):
-    """The format, in two sentences: the column titles, then the words Gender and Status accept (the
-    gender words of both languages, each marked with its language)."""
-    columns = ", ".join(t(f"people.file_col_{key}") for key in READ)
+    """The format, in two sentences: the column titles, then the words Gender, Status and Family role accept
+    (the screen words of both languages, each marked with its language)."""
+    columns = ", ".join(t(f"people.file_col_{key}") for key in COLUMNS)
     keys = people_pages.GENDER_WORDS.values()
     genders = ", ".join([f'<span lang="{lang}">{h(", ".join(t(key, lang) for key in keys))}</span>'
                          for lang in i18n.LANGS] + list(people.GENDERS))
+    roles = ", ".join(f'<span lang="{lang}">{h(", ".join(_role_words(lang)))}</span>' for lang in i18n.LANGS)
     statuses = ", ".join(item["name"] for item in lists.get_list(conn, "status"))
     lead = t("people.file_help", columns=columns, full_name=t("people.file_col_full_name"))
     words = ui.t_html("people.file_help_words", gender=h(t("people.file_col_gender")), genders=genders,
                       status=h(t("people.file_col_status")), statuses=h(statuses),
-                      start_date=h(t("people.file_col_start_date")))
+                      start_date=h(t("people.file_col_start_date")), family=h(t("people.file_col_family")),
+                      family_role=h(t("people.file_col_family_role")), roles=roles)
     return f'<p class="lead">{h(lead)}</p><p class="hint">{words}</p>'
 
 
@@ -323,6 +375,22 @@ def _date_cell(value):
         return vi(value)
 
 
+def _family_cells(check):
+    """The Family cell (the Family found, or the new name with "new Family", or the name as typed) and the
+    Family role cell (its screen word, or as typed)."""
+    v = check["values"]
+    if check["family_id"]:
+        family = vi(check["family_name"])
+    elif check["new_family"]:
+        family = f'{vi(check["new_family"])} <span class="faint">{h(t("people.file_new_family"))}</span>'
+    else:
+        family = vi(v["family"]) if v["family"] else ui.DASH
+    role = v["family_role"]
+    if role in schema.FAMILY_ROLES:
+        return [family, h(ui.family_role(role))]
+    return [family, vi(role) if role else ui.DASH]
+
+
 def _row_cells(check, today):
     v = check["values"]
     gender = people_pages.GENDER_WORDS.get(v["gender"])
@@ -334,7 +402,7 @@ def _row_cells(check, today):
     result = "".join(lines) or f'<span class="faint">{h(t("people.file_ok"))}</span>'
     return [people_pages.num(check["row"]), vi(v["full_name"]), h(t(gender)) if gender else vi(v["gender"]),
             _date_cell(v["birth_date"]), people_pages.num(v["phone"]) if v["phone"] else ui.DASH, status, start,
-            result]
+            *_family_cells(check), result]
 
 
 def _check_page(req, checks, ignored, status=200):
@@ -359,7 +427,8 @@ def _check_page(req, checks, ignored, status=200):
     headers = [(t("people.file_row"), True), (t("people.file_col_full_name"), False),
                (t("people.file_col_gender"), False), (t("people.file_col_birth_date"), True),
                (t("people.file_col_phone"), False), (t("people.file_col_status"), False),
-               (t("people.file_col_start_date"), True), (t("people.file_result"), False)]
+               (t("people.file_col_start_date"), True), (t("people.file_col_family"), False),
+               (t("people.file_col_family_role"), False), (t("people.file_result"), False)]
     table = people_pages.table(headers, [_row_cells(c, today) for c in checks], "people-file")
     body = (f'<div class="stack"><section class="panel narrow">{top}</section>'
             + people_pages.list_panel("people-file", t("people.file_title"), table) + "</div>")
@@ -379,14 +448,18 @@ def check_post(req):
 
 
 def save_post(req):
-    """POST /people/file/save: check the rows again, then add them all in one transaction."""
+    """POST /people/file/save: check the rows again, then add them all (and their new Families) in one
+    transaction."""
     try:
-        added, checks = save_people_file(req.conn, req.form.get("rows"), req.form.get("code"))
+        added, families, checks = save_people_file(req.conn, req.form.get("rows"), req.form.get("code"))
     except ValueError as exc:
         return _pick_page(req, i18n.error_text(exc), 400)
     if not added:
         return _check_page(req, checks, [], 400)
-    return Response.redirect(ui.url("/people", msg=tn("people.file_added", added)))
+    message = tn("people.file_added", added)
+    if families:
+        message += " " + tn("people.file_added_families", families)
+    return Response.redirect(ui.url("/people", msg=message))
 
 
 ROUTES = [

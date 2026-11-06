@@ -31,7 +31,7 @@ above shows today's words.
 | Kind | When |
 |---|---|
 | error | Not a `.xlsx` file, empty sheet, no "Full name" column, more than 5,000 rows, file too big |
-| row error | Empty full name; unknown gender; bad or future date; Status not in the list; Family set but no Family role; unknown Family role; Family name matches two or more Families |
+| row error | Empty full name; unknown gender; bad or future date; Status not in the list; Family set but no Family role; Family role set but no Family; unknown Family role; Family name matches two or more Families; Family name too long |
 | warning | Full name same as a Person in the church copy; full name same as another row |
 
 ## The empty file (`/people/file/empty.xlsx`)

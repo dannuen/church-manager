@@ -15,6 +15,9 @@ prints one JSON object.
 - The pastor asks you to add a Person or a Family, put a Person in a Family, record an Offering or an Expense, add a Calendar item, plan
   a Visit or mark a Visit done.
 - Not for work on the app's code. For that, read `AGENTS.md` in the Church Manager folder.
+- Not for adding many people at once from a `.xlsx` file (a People file). That is a page in Church
+  Manager, not a door command: tell the pastor to open People > Add from .xlsx file (Mọi người > Thêm từ
+  tệp .xlsx) and do it there.
 
 ## How to run a command
 

@@ -132,6 +132,15 @@ TEXT = {
         "dashboard.title": "Trang chủ",
         "dashboard.open_calendar": "Mở Lịch",
         # --- people
+        "people.file_new_family": "Gia đình mới",
+        "people.file_err_family_role_needed": "Cần điền Vai trò trong gia đình khi có Gia đình.",
+        "people.file_err_family_role": "không phải Vai trò trong gia đình ({names})",
+        "people.file_err_family_two": "Có từ hai Gia đình trở lên mang tên này. Hãy để trống ô này, rồi chọn Gia đình "
+                                      "trên trang của Người đó.",
+        "people.file_err_family_needed": "Vai trò trong gia đình cần có Gia đình. Hãy viết tên Gia đình, hoặc để trống "
+                                         "Vai trò trong gia đình.",
+        "people.file_added_families_one": "Đã tạo {n} Gia đình mới.",
+        "people.file_added_families_many": "Đã tạo {n} Gia đình mới.",
         "people.file_empty": "Lấy tệp mẫu trống",
         "people.file_sheet_people": "Mọi người",
         "people.file_sheet_help": "Hướng dẫn",
@@ -149,10 +158,10 @@ TEXT = {
         "people.file_help_note": "Không bắt buộc. Ghi chú thường: ai có Dữ liệu Hội Thánh cũng đọc được. Đừng viết Ghi "
                                  "chú cá nhân ở đây.",
         "people.file_help_status": "Không bắt buộc. Một tên trong danh sách Trạng thái: {statuses}.",
-        "people.file_help_start_date": "Không bắt buộc. Ngày bắt đầu Trạng thái, viết như 31/12/1980. Để trống là hôm "
-                                       "nay.",
+        "people.file_help_start_date": "Không bắt buộc. Ngày bắt đầu Trạng thái và Gia đình, viết như 31/12/1980. Để "
+                                       "trống là hôm nay.",
         "people.file_help_family": "Không bắt buộc. Tên một Gia đình đã có, hoặc một tên mới: một Gia đình mới được "
-                                   "tạo.",
+                                   "tạo cho mọi dòng có tên này.",
         "people.file_help_family_role": "Cần điền khi cột Gia đình có tên: {roles}.",
         "people.file_col_full_name": "Họ và tên",
         "people.file_col_gender": "Giới tính",
@@ -178,7 +187,7 @@ TEXT = {
                             "{full_name} bắt buộc phải điền. Ngày viết như 31/12/1980. Chỉ trang tính đầu tiên được "
                             "đọc, và chưa có gì được lưu cho đến khi bạn bấm Lưu.",
         "people.file_help_words": "{gender}: {genders}. {status}: một tên trong danh sách ({statuses}). Để trống "
-                                  "{start_date} là hôm nay.",
+                                  "{start_date} là hôm nay. Khi có {family}, cần điền {family_role}: {roles}.",
         "people.file_summary": "{rows} dòng: {ok} hợp lệ, {bad} có lỗi, {warn} cảnh báo",
         "people.file_ok": "Hợp lệ",
         "people.file_ready": "Không dòng nào có lỗi. Bấm Lưu để thêm tất cả cùng lúc.",
@@ -1175,6 +1184,15 @@ TEXT = {
         "dashboard.title": "Dashboard",
         "dashboard.open_calendar": "Open Calendar",
         # --- people
+        "people.file_new_family": "new Family",
+        "people.file_err_family_role_needed": "Family role is needed when Family is set.",
+        "people.file_err_family_role": "not a Family role ({names})",
+        "people.file_err_family_two": "Two or more Families have this name. Leave it empty here, then set the Family "
+                                      "on the Person page.",
+        "people.file_err_family_needed": "A Family role needs a Family. Write the Family name, or leave Family role "
+                                         "empty.",
+        "people.file_added_families_one": "{n} new Family made.",
+        "people.file_added_families_many": "{n} new Families made.",
         "people.file_empty": "Get the empty file",
         "people.file_sheet_people": "People",
         "people.file_sheet_help": "Help",
@@ -1192,9 +1210,10 @@ TEXT = {
         "people.file_help_note": "Optional. A normal note: anyone with the church copy can read it. Do not write a "
                                  "Private note here.",
         "people.file_help_status": "Optional. A name of the Status list: {statuses}.",
-        "people.file_help_start_date": "Optional. The day the Status starts, like 31/12/1980. Empty means today.",
+        "people.file_help_start_date": "Optional. The day the Status and the Family start, like 31/12/1980. Empty "
+                                       "means today.",
         "people.file_help_family": "Optional. The name of a Family already in the church, or a new name: one new "
-                                   "Family is made.",
+                                   "Family is made for all the rows with this name.",
         "people.file_help_family_role": "Needed when Family is set: {roles}.",
         "people.file_col_full_name": "Full name",
         "people.file_col_gender": "Gender",
@@ -1220,7 +1239,7 @@ TEXT = {
                             "the {full_name} column must be filled. Write dates like 31/12/1980. Only the first "
                             "sheet is read, and nothing is saved until you press Save.",
         "people.file_help_words": "{gender}: {genders}. {status}: a name of the list ({statuses}). An empty "
-                                  "{start_date} means today.",
+                                  "{start_date} means today. When {family} is set, {family_role} is needed: {roles}.",
         "people.file_summary": "{rows} rows: {ok} OK, {bad} with errors, {warn} warnings",
         "people.file_ok": "OK",
         "people.file_ready": "No row has an error. Press Save to add them all at once.",

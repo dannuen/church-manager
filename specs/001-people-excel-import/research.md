@@ -79,9 +79,9 @@ design choices.
   người": the title row only, columns formatted as Text so leading zeros of phones and typed dates
   stay as typed. Sheet 2 "Help" / "Hướng dẫn": one line per column (required or not, allowed
   words, date form) and one example row. Titles in the current screen language.
-  Sheet 1 has the columns that are read (`READ`): until story 3 reads Family and Family role, those two
-  are left out, so a file made from the empty file never shows "Ignored columns". When story 3 empties
-  `NOT_READ_YET`, the empty file has all 10 columns with their help lines, with no other change.
+  Sheet 1 has the columns that are read. Until story 3 read Family and Family role, those two were left
+  out, so a file made from the empty file never showed "Ignored columns". Story 3 (T031) reads them, so the
+  empty file now has all 10 columns with their help lines.
 - **Rationale**: The example row is on the help sheet, so it can never be added by mistake (spec
   FR-011 was updated to say so). Only sheet 1 is read.
 - **Alternatives**: ship a fixed file in `web/` (cannot list the church's own Status names, one

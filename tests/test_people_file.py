@@ -26,8 +26,10 @@ REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 TODAY = dt.date.today()
 TOMORROW = TODAY + dt.timedelta(days=1)
-TITLES_VI = ["Họ và tên", "Giới tính", "Ngày sinh", "Điện thoại", "Địa chỉ", "Ghi chú", "Trạng thái", "Ngày bắt đầu"]
-TITLES_EN = ["Full name", "Gender", "Birth date", "Phone", "Address", "Note", "Status", "Start date"]
+TITLES_VI = ["Họ và tên", "Giới tính", "Ngày sinh", "Điện thoại", "Địa chỉ", "Ghi chú", "Trạng thái", "Ngày bắt đầu",
+             "Gia đình", "Vai trò trong gia đình"]
+TITLES_EN = ["Full name", "Gender", "Birth date", "Phone", "Address", "Note", "Status", "Start date", "Family",
+             "Family role"]
 
 
 def people_xlsx(rows, titles=TITLES_VI):
@@ -239,13 +241,13 @@ class PeopleFileTest(_support.CopyTestCase):
 
     def test_check_reads_english_titles_and_ignores_unknown_ones(self):
         checks, ignored = self.check([["Nguyễn Văn An", "F", None, None, None, None, None, None, "PN-MARKER-7",
-                                       "Gia đình A"]],
-                                     TITLES_EN + ["Ghi chú cá nhân", "Family"])
+                                       "Gia đình A", "child"]],
+                                     TITLES_EN[:8] + ["Ghi chú cá nhân", "FAMILY", "family role"])
         self.assertEqual(checks[0]["errors"], [])
         self.assertEqual(checks[0]["values"]["gender"], "F")
         self.assertNotIn("PN-MARKER-7", json.dumps(checks))  # a Private note column is never read
-        # Family comes with story 3 of spec 001: until then it is named as ignored, never dropped without a word
-        self.assertEqual(ignored, ["Ghi chú cá nhân", "Family"])
+        self.assertEqual(ignored, ["Ghi chú cá nhân"])
+        self.assertEqual((checks[0]["new_family"], checks[0]["values"]["family_role"]), ("Gia đình A", "Child"))
 
     def test_check_refuses_a_file_with_no_people(self):
         for data in (people_xlsx([]), people_xlsx([[None] * 8, ["", " ", None, None, None, None, None, None]]),
@@ -307,8 +309,7 @@ class PeopleFileTest(_support.CopyTestCase):
     def test_save_adds_every_row_with_its_status(self):
         before = {t: count(self.conn, t) for t in ("person", "person_status", "private_note")}
         checks, _ = self.check(good_rows())
-        added, again = self.save(people_file.rows_json(checks))
-        self.assertEqual((added, again), (3, []))
+        self.assertEqual(self.save(people_file.rows_json(checks)), (3, 0, []))  # 3 Persons, no new Family
         self.assertEqual(count(self.conn, "person"), before["person"] + 3)
         self.assertEqual(count(self.conn, "person_status"), before["person_status"] + 3)
         self.assertEqual(count(self.conn, "private_note"), before["private_note"])
@@ -328,7 +329,7 @@ class PeopleFileTest(_support.CopyTestCase):
         checks, _ = self.check(good_rows())
         tampered = json.loads(people_file.rows_json(checks))
         tampered[2]["values"]["birth_date"] = "1990-02-31"  # changed between the check page and Save
-        added, again = self.save(json.dumps(tampered))
+        added, _families, again = self.save(json.dumps(tampered))
         self.assertEqual(added, 0)
         self.assertEqual([c["row"] for c in again if c["errors"]], [4])
         self.assertEqual({t: count(self.conn, t) for t in before}, before)
@@ -369,7 +370,7 @@ class PeopleFileTest(_support.CopyTestCase):
         before = count(self.conn, "person")
         checks, _ = self.check(good_rows())
         code = people_file.new_code()
-        self.assertEqual(self.save(people_file.rows_json(checks), code), (3, []))
+        self.assertEqual(self.save(people_file.rows_json(checks), code), (3, 0, []))
         with self.assertRaises(i18n.TextError) as cm:  # a double click, or Back and Save
             self.save(people_file.rows_json(checks), code)
         self.assertEqual(cm.exception.key, "people.file_err_saved_already")
@@ -396,7 +397,7 @@ class PeopleFileTest(_support.CopyTestCase):
         code = people_file.new_code()
         tampered = json.loads(people_file.rows_json(checks))
         tampered[0]["values"]["full_name"] = " "
-        added, again = self.save(json.dumps(tampered), code)
+        added, _families, again = self.save(json.dumps(tampered), code)
         self.assertEqual((added, [c["row"] for c in again if c["errors"]]), (0, [2]))
         self.assertEqual(count(self.conn, "person"), before)
         self.assertEqual(self.save(people_file.rows_json(checks), code)[0], 3)  # the code still works once
@@ -411,6 +412,131 @@ class PeopleFileTest(_support.CopyTestCase):
                 self.assertEqual(self.save(people_file.rows_json(checks), code)[0], 1)
         self.assertEqual(json.loads(settings.get_setting(self.conn, people_file.USED_CODES)), codes[1:])
 
+    # ---- US3: Families
+    def family_counts(self):
+        return {t: count(self.conn, t) for t in ("person", "person_status", "family", "family_link", "private_note")}
+
+    # T028
+    def test_one_new_family_for_many_rows_and_an_existing_family_joined(self):
+        old = people.add_family(self.conn, "Gia đình Lê Văn Bảy", "5 Hai Bà Trưng")
+        before = self.family_counts()
+        none7 = [None] * 7  # the 7 columns from Gender to Start date
+        checks, ignored = self.check([
+            ["Trần Văn Một", *none7[:6], "01/02/2020", "Gia đình Trần", "Chủ gia đình"],
+            ["Nguyễn Thị Hai", None, None, None, "7 Lý Thường Kiệt", None, None, None, "gia dinh TRAN", "vợ/chồng"],
+            ["Trần Văn Ba", None, None, None, "9 Phố Khác", None, None, None, "Gia đình Trần", "Con"],
+            ["Trần Thị Bốn", *none7, "Gia   đình  Trần", "Other"],
+            ["Lê Thị Năm", *none7, "gia dinh le van bay", "con"],
+            ["Lê Văn Sáu", *none7, "GIA ĐÌNH LÊ VĂN BẢY", "Spouse"],
+            ["Phạm Văn Bảy", *none7, None, None],  # no Family
+        ])
+        self.assertEqual((ignored, [c["errors"] for c in checks]), ([], [[]] * 7))
+        self.assertEqual([c["new_family"] for c in checks], ["Gia đình Trần"] * 4 + [None] * 3)  # one name, as row 2
+        self.assertEqual([c["family_id"] for c in checks], [None] * 4 + [old, old, None])
+        self.assertEqual([c["values"]["family_role"] for c in checks],
+                         ["Head", "Spouse", "Child", "Other", "Child", "Spouse", ""])
+        self.assertEqual(self.family_counts(), before)  # the check saves nothing
+
+        self.assertEqual(self.save(people_file.rows_json(checks)), (7, 1, []))
+        after = self.family_counts()
+        self.assertEqual({t: after[t] - before[t] for t in after},
+                         {"person": 7, "person_status": 0, "family": 1, "family_link": 6, "private_note": 0})
+        made = self.conn.execute("SELECT id, address FROM family WHERE name_folded = 'gia dinh tran'").fetchall()
+        self.assertEqual(len(made), 1)  # one Family, also when 4 rows name it
+        self.assertEqual(made[0]["address"], "7 Lý Thường Kiệt")  # the first Address among its rows
+        today = TODAY.isoformat()
+        self.assertEqual([(m["full_name"], m["family_role"], m["start_date"], m["end_date"])
+                          for m in people.family_members(self.conn, made[0]["id"])],
+                         [("Trần Văn Một", "Head", "2020-02-01", None), ("Nguyễn Thị Hai", "Spouse", today, None),
+                          ("Trần Văn Ba", "Child", today, None), ("Trần Thị Bốn", "Other", today, None)])
+        joined = [(m["full_name"], m["family_role"]) for m in people.family_members(self.conn, old)]
+        self.assertEqual(joined, [("Lê Văn Sáu", "Spouse"), ("Lê Thị Năm", "Child")])
+        self.assertEqual(people.get_family(self.conn, old)["address"], "5 Hai Bà Trưng")  # the Family is not changed
+
+    def test_family_role_words_of_both_languages(self):
+        words = {"Chủ gia đình": "Head", "chu gia dinh": "Head", "Vợ/Chồng": "Spouse", "Con": "Child",
+                 "Người thân khác": "Other", "nguoi than khac": "Other", "HEAD": "Head", "spouse": "Spouse",
+                 "Child": "Child", "other": "Other"}
+        checks, _ = self.check([[f"Người {i}", *[None] * 7, "Gia đình Một", word] for i, word in enumerate(words)])
+        self.assertEqual([c["errors"] for c in checks], [[]] * len(words))
+        self.assertEqual([c["values"]["family_role"] for c in checks], list(words.values()))
+
+    # T029
+    def test_family_row_errors(self):
+        people.add_family(self.conn, "Gia đình Đỗ")
+        people.add_family(self.conn, "Gia dinh Do")  # the same name without diacritics: two Families
+        none7 = [None] * 7
+        checks, _ = self.check([
+            ["Không vai trò", *none7, "Gia đình Mới", None],
+            ["Vai trò lạ", *none7, "Gia đình Mới", "Ông"],
+            ["Hai Gia đình", *none7, "gia dinh do", "Con"],
+            ["Không Gia đình", *none7, None, "Con"],
+            ["Tên quá dài", *none7, "x" * 300, "Con"],
+        ])
+        self.assertEqual([[key for key, _s in c["errors"]] for c in checks],
+                         [["family_role"], ["family_role"], ["family"], ["family_role"], ["family"]])
+        sentences = [c["errors"][0][1] for c in checks]
+        self.assertEqual(sentences[0], "Row 2, Family role: Family role is needed when Family is set.")
+        self.assertEqual(sentences[1], "Row 3, Family role: not a Family role (Head, Spouse, Child, Other)")
+        self.assertEqual(sentences[2], "Row 4, Family: Two or more Families have this name. Leave it empty here, "
+                                       "then set the Family on the Person page.")
+        self.assertEqual(sentences[3], "Row 5, Family role: A Family role needs a Family. Write the Family name, or "
+                                       "leave Family role empty.")
+        self.assertEqual(sentences[4], "Row 6, Family: Family name: use at most 120 characters.")
+        self.assertEqual([c["family_id"] or c["new_family"] for c in checks],
+                         ["Gia đình Mới", "Gia đình Mới", None, None, None])
+        i18n.set_lang_getter(lambda: "vi")
+        checks, _ = self.check([["Vai trò lạ", *none7, "Gia đình Mới", "Ông"]])
+        self.assertEqual(checks[0]["errors"], [
+            ("family_role", "Dòng 2, Vai trò trong gia đình: không phải Vai trò trong gia đình (Chủ gia đình, "
+                            "Vợ/Chồng, Con, Người thân khác)")])
+
+    def test_a_family_error_saves_no_person_and_no_family(self):
+        before = self.family_counts()
+        rows = [[f"Trần Văn {i}", *[None] * 7, "Gia đình Trần", "Con"] for i in range(1, 6)]
+        checks, _ = self.check(rows)
+        self.assertEqual([c["errors"] for c in checks], [[]] * 5)
+        tampered = json.loads(people_file.rows_json(checks))
+        tampered[3]["values"]["family_role"] = "Ông"  # row 5, changed between the check page and Save
+        added, families, again = self.save(json.dumps(tampered))
+        self.assertEqual((added, families, [c["row"] for c in again if c["errors"]]), (0, 0, [5]))
+        self.assertEqual(self.family_counts(), before)
+
+        # a write that fails on row 5: the new Family and rows 1-4 are rolled back too
+        real = people_file.people_pages.set_family_from_form
+        calls = []
+
+        def fifth_fails(conn, pid, form):
+            calls.append(pid)
+            if len(calls) == 5:
+                raise i18n.TextError("people.err_family_role")
+            return real(conn, pid, form)
+
+        with mock.patch.object(people_file.people_pages, "set_family_from_form", side_effect=fifth_fails):
+            with self.assertRaises(ValueError):
+                self.save(people_file.rows_json(checks))
+        self.assertEqual(len(calls), 5)
+        self.assertEqual(self.family_counts(), before)
+
+        # a second Family with this name, made between the check page and Save: the row is an error now
+        people.add_family(self.conn, "Gia đình Trần")
+        people.add_family(self.conn, "GIA DINH TRAN")
+        before = self.family_counts()
+        added, families, again = self.save(people_file.rows_json(checks))
+        self.assertEqual((added, families), (0, 0))
+        self.assertEqual([key for c in again for key, _s in c["errors"]], ["family"] * 5)
+        self.assertEqual(self.family_counts(), before)
+
+    def test_save_joins_a_family_made_after_the_check(self):
+        """The check said "new Family"; the Family was made in another tab before Save: Save joins it."""
+        checks, _ = self.check([["Trần Văn Một", *[None] * 7, "Gia đình Trần", "Head"]])
+        self.assertEqual(checks[0]["new_family"], "Gia đình Trần")
+        fid = people.add_family(self.conn, "Gia đình Trần")
+        before = self.family_counts()
+        self.assertEqual(self.save(people_file.rows_json(checks)), (1, 0, []))
+        self.assertEqual([m["full_name"] for m in people.family_members(self.conn, fid)], ["Trần Văn Một"])
+        self.assertEqual(count(self.conn, "family"), before["family"])
+
 
 def part(data, name):
     """One part of a .xlsx file (bytes) as text, such as ``xl/worksheets/sheet2.xml``."""
@@ -424,10 +550,9 @@ class EmptyFileTest(_support.CopyTestCase):
 
     @staticmethod
     def titles(lang):
-        return [i18n.t(f"people.file_col_{key}", lang) for key in people_file.READ]
+        return [i18n.t(f"people.file_col_{key}", lang) for key in people_file.COLUMNS]
 
     def test_sheet_1_has_the_title_row_only(self):
-        self.assertEqual(people_file.READ, people_file.COLUMNS[:len(people_file.READ)])  # in the order of COLUMNS
         for lang, words, names in (("vi", TITLES_VI, ("Mọi người", "Hướng dẫn")), ("en", TITLES_EN, ("People", "Help"))):
             data = people_file.empty_file(self.conn, lang)
             self.assertEqual(self.titles(lang), words)
@@ -452,20 +577,25 @@ class EmptyFileTest(_support.CopyTestCase):
         self.assertEqual(lines["Full name"], "Required. The name of one Person.")
         self.assertEqual(lines["Status"], "Optional. A name of the Status list: Member, Attender, Left, Passed away.")
         self.assertEqual(lines["Gender"], "Optional. One of these words: Nam, Nữ, Male, Female, M, F.")
-        self.assertEqual(len(lines), len(people_file.READ) + 1)  # one line per column, under "Column | How to fill it"
+        self.assertEqual(lines["Family role"], "Needed when Family is set: Chủ gia đình, Vợ/Chồng, Con, "
+                                               "Người thân khác, Head, Spouse, Child, Other.")
+        self.assertEqual(len(lines), len(people_file.COLUMNS) + 1)  # one line per column, under the 2 titles
 
     def test_the_example_row_passes_the_check(self):
         """The example is the last row of the Help sheet, under the column titles. Put on sheet 1 it is a
         good row: the help shows a row the check accepts."""
         before = count(self.conn, "person")
-        for lang, male in (("vi", "Nam"), ("en", "Male")):
+        for lang, male, head in (("vi", "Nam", "Chủ gia đình"), ("en", "Male", "Head")):
             rows = people_file.help_rows(self.conn, lang)
             titles, example = rows[-2], rows[-1]
             self.assertEqual(titles, self.titles(lang))
-            self.assertEqual(example[:3], ["Nguyễn Văn An", male, "31/12/1980"])
+            self.assertEqual(example[:3] + example[-2:], ["Nguyễn Văn An", male, "31/12/1980", "Gia đình Nguyễn Văn An",
+                                                          head])
             checks, ignored = people_file.check_people_file(self.conn, xlsx.write([("x", [titles, example])]))
             self.assertEqual((len(checks), checks[0]["errors"], ignored), (1, [], []))
             self.assertEqual(checks[0]["status_id"], self.status("member"))  # the first active Status item
+            self.assertEqual((checks[0]["new_family"], checks[0]["values"]["family_role"]),
+                             ("Gia đình Nguyễn Văn An", "Head"))
         self.assertEqual(count(self.conn, "person"), before)
 
     def test_round_trip_three_rows_are_ok(self):
@@ -476,17 +606,16 @@ class EmptyFileTest(_support.CopyTestCase):
             self.assertEqual([c["errors"] for c in checks], [[], [], []])
             self.assertEqual(ignored, [])
 
-    def test_story_3_columns_come_with_their_help_lines(self):
-        """When story 3 reads Family and Family role (READ is COLUMNS), the empty file has the 10 titles of
-        COLUMNS in order, each with its help line."""
-        with mock.patch.object(people_file, "READ", people_file.COLUMNS):
-            for lang in i18n.LANGS:
-                data = people_file.empty_file(self.conn, lang)
-                titles = [i18n.t(f"people.file_col_{key}", lang) for key in people_file.COLUMNS]
-                self.assertEqual(xlsx.read_first_sheet(data).rows, [titles])
-                help_xml = part(data, "xl/worksheets/sheet2.xml")
-                self.assertNotIn("[[", help_xml)
-                self.assertIn("Chủ gia đình, Vợ/Chồng, Con, Người thân khác, Head, Spouse, Child, Other", help_xml)
+    def test_family_columns_come_with_their_help_lines(self):
+        """Story 3 reads Family and Family role: the empty file has the 10 titles of COLUMNS in order, each with its
+        help line."""
+        self.assertEqual(len(people_file.COLUMNS), 10)
+        for lang in i18n.LANGS:
+            data = people_file.empty_file(self.conn, lang)
+            self.assertEqual(xlsx.read_first_sheet(data).rows, [self.titles(lang)])
+            help_xml = part(data, "xl/worksheets/sheet2.xml")
+            self.assertNotIn("[[", help_xml)
+            self.assertIn("Chủ gia đình, Vợ/Chồng, Con, Người thân khác, Head, Spouse, Child, Other", help_xml)
 
 
 class PagesBase(LiveServer):
@@ -543,6 +672,8 @@ class PeopleFilePagesTest(PagesBase, unittest.TestCase):
         self.assertIn("Full name", page)  # the help names the columns
         # the gender words of both languages, each marked with its language
         self.assertIn('Gender: <span lang="vi">Nam, Nữ</span>, <span lang="en">Male, Female</span>, M, F.', page)
+        self.assertIn('When Family is set, Family role is needed: <span lang="vi">Chủ gia đình, Vợ/Chồng, Con, '
+                      'Người thân khác</span>, <span lang="en">Head, Spouse, Child, Other</span>.', page)
         self.assertNotIn("[[", page)
 
     def test_check_then_save(self):
@@ -663,6 +794,42 @@ class PeopleFilePagesTest(PagesBase, unittest.TestCase):
         self.assertNotIn("Ignored columns", page)
         self.assertEqual(count(self.db(), "person"), before)
 
+    # T028-T029 through the pages
+    def test_families_on_the_check_page_and_in_the_save_message(self):
+        conn = self.db()
+        fid, name = conn.execute("SELECT MIN(id), MIN(name) FROM family GROUP BY name_folded HAVING COUNT(*) = 1 "
+                                 "ORDER BY 1 LIMIT 1").fetchone()
+        before = {t: count(conn, t) for t in ("person", "family", "family_link")}
+        members = len(people.family_members(conn, fid))
+        none7 = [None] * 7
+        rows = [["Hà Văn Một", *none7, "Gia đình Hà Mới", "Head"], ["Hà Thị Hai", *none7, "gia dinh ha moi", "vợ/chồng"],
+                ["Đinh Văn Ba", *none7, name.upper(), "child"]]
+        status, page = self.pick(people_xlsx(rows, TITLES_EN))
+        self.assertEqual(status, 200, page[:2000])
+        self.assertRegex(page, r"3 rows: 3 OK, 0 with errors, \d warnings")
+        for title in ("Family", "Family role"):
+            self.assertIn(f'<th scope="col">{title}</th>', page)
+        new_family = '<span lang="vi">Gia đình Hà Mới</span> <span class="faint">new Family</span>'
+        self.assertEqual(page.count(new_family), 2)
+        self.assertIn(f'<td><span lang="vi">{html.escape(name)}</span></td><td>Child</td>', page)
+        self.assertIn("<td>Spouse</td>", page)
+        status, headers, data = self.request("POST", "/people/file/save", self.save_form(page))
+        self.assertEqual(status, 303, data.decode("utf-8")[:2000])
+        msg = urllib.parse.parse_qs(urllib.parse.urlsplit(headers["location"]).query)["msg"]
+        self.assertEqual(msg, ["3 people added. 1 new Family made."])
+        conn = self.db()
+        after = {t: count(conn, t) for t in before}
+        self.assertEqual({t: after[t] - before[t] for t in after}, {"person": 3, "family": 1, "family_link": 3})
+        self.assertEqual(len(people.family_members(conn, fid)), members + 1)
+
+    def test_a_family_error_shows_no_save_button(self):
+        before = {t: count(self.db(), t) for t in ("person", "family")}
+        status, page = self.pick(people_xlsx([["Hà Văn Bốn", *[None] * 7, "Gia đình Hà Bốn", None]], TITLES_EN))
+        self.assertEqual(status, 200)
+        self.assertNotIn('action="/people/file/save"', page)
+        self.assertIn("Row 2, Family role: Family role is needed when Family is set.", page)
+        self.assertEqual({t: count(self.db(), t) for t in before}, before)
+
 
 class PeopleFileVietnamesePagesTest(PagesBase, unittest.TestCase):
     """The same pages over a Vietnamese fake church: Vietnamese words only, no ``[[key]]``."""
@@ -682,6 +849,22 @@ class PeopleFileVietnamesePagesTest(PagesBase, unittest.TestCase):
         self.assert_vietnamese(page)
         self.assertIn("Họ và tên", page)
         self.assertIn('Giới tính: <span lang="vi">Nam, Nữ</span>, <span lang="en">Male, Female</span>, M, F.', page)
+
+    def test_vi_families(self):
+        none7 = [None] * 7
+        status, page = self.pick(people_xlsx([["Hà Văn Một", *none7, "Gia đình Hà Mới", "Chủ gia đình"],
+                                              ["Hà Văn Hai", *none7, "Gia đình Hà Mới", None]]))
+        self.assertEqual(status, 200)
+        self.assertIn('<span class="faint">Gia đình mới</span>', page)
+        self.assertIn("Dòng 3, Vai trò trong gia đình: Cần điền Vai trò trong gia đình khi có Gia đình.", page)
+        self.assert_vietnamese(page)
+        status, page = self.pick(people_xlsx([["Hà Văn Một", *none7, "Gia đình Hà Mới", "Chủ gia đình"]]))
+        self.assertEqual(status, 200)
+        self.assertIn("<td>Chủ gia đình</td>", page)
+        self.assert_vietnamese(page)
+        _s, headers, _d = self.request("POST", "/people/file/save", self.save_form(page))
+        msg = urllib.parse.parse_qs(urllib.parse.urlsplit(headers["location"]).query)["msg"]
+        self.assertEqual(msg, ["Đã thêm 1 người. Đã tạo 1 Gia đình mới."])
 
     def test_vi_check_page(self):
         status, page = self.pick(people_xlsx(good_rows() + [["Lê Văn Cường", None, None, None, None, None, None,

@@ -109,7 +109,7 @@ with one example row (FR-011, research R6).
 
 ### Tests for User Story 2
 
-- [X] T024 [P] [US2] In `tests/test_people_file.py`: `empty_file(conn, "vi")` sheet 1 row 1 equals the 10 Vietnamese titles in `COLUMNS` order and has no other rows; with `"en"` the English titles; the second sheet exists (read it with `zipfile` + the sheet2 member) and names every active Status item. Round trip: append 3 good rows to sheet 1, write again, `check_people_file` → 3 rows, no errors.
+- [X] T024 [P] [US2] In `tests/test_people_file.py`: `empty_file(conn, "vi")` sheet 1 row 1 equals the 10 Vietnamese titles in `COLUMNS` order and has no other rows; with `"en"` the English titles; the second sheet exists (read it with `zipfile` + the sheet2 member) and names every active Status item. Round trip: append 3 good rows to sheet 1, write again, `check_people_file` → 3 rows, no errors. _(Note: until story 3 the file had the 8 columns that were read (research R6); since T031 it has all 10.)_
 - [X] T025 [P] [US2] Server test: GET `/people/file/empty.xlsx` returns 200, content type `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, a `Content-Disposition` download name, and bytes that `xlsx.read_first_sheet` reads.
 
 ### Implementation for User Story 2
@@ -132,14 +132,14 @@ the right Family roles (quickstart scenario 4).
 
 ### Tests for User Story 3
 
-- [ ] T028 [P] [US3] In `PeopleFileTest`: 4 rows with Family "Gia đình Trần" (new) → each row check says new Family, after save exactly 1 Family with that name and 4 open `family_link` rows; its address = first non-empty Address among those rows. 2 rows with an existing Family typed without diacritics → joined, roles "Con" and "Spouse" stored as `Child` and `Spouse`.
-- [ ] T029 [P] [US3] In `PeopleFileTest`: row errors — Family set but Family role empty ("Family role is needed when Family is set"); Family role "Ông" (unknown); a Family name that matches two Families made with `people.add_family` (error says to set it on the Person page). All-or-nothing: a Family error on row 5 → save writes 0 Persons and 0 Families.
+- [X] T028 [P] [US3] In `PeopleFileTest`: 4 rows with Family "Gia đình Trần" (new) → each row check says new Family, after save exactly 1 Family with that name and 4 open `family_link` rows; its address = first non-empty Address among those rows. 2 rows with an existing Family typed without diacritics → joined, roles "Con" and "Spouse" stored as `Child` and `Spouse`.
+- [X] T029 [P] [US3] In `PeopleFileTest`: row errors — Family set but Family role empty ("Family role is needed when Family is set"); Family role "Ông" (unknown); a Family name that matches two Families made with `people.add_family` (error says to set it on the Person page). All-or-nothing: a Family error on row 5 → save writes 0 Persons and 0 Families.
 
 ### Implementation for User Story 3
 
-- [ ] T030 [US3] In `churchmgr/i18n.py` section `people` (vi and en): `people.file_new_family` ("Gia đình mới" / "new Family"), `people.file_err_family_role_needed`, `people.file_err_family_role`, `people.file_err_family_two` ("Two Families have this name. Set the Family on the Person page.").
-- [ ] T031 [US3] In `check_people_file` (`churchmgr/pages/people_file.py`): load Families once (`SELECT id, name_folded FROM family`); per row with `family`: folded match count 0 → `new_family` = cleaned name (one per folded name in the file), 1 → `family_id`, 2+ → error; `family_role` must map (by `text.fold` of the codes `Head, Spouse, Child, Other` and the `core.family_role_*` words of both languages) to a code in `schema.FAMILY_ROLES`, else error; Family set + role empty → error. Show Family, "new Family" and role in the check table.
-- [ ] T032 [US3] In `save_people_file`, inside the same transaction: for each distinct `new_family` call `people.add_family(conn, name, address)` once (address = first non-empty Address of its rows), then for each row with a Family call `people_pages.set_family_from_form(conn, pid, {"family_id": fid, "family_role": code, "start_date": start})`. Add "{m} new Families" to the redirect message (`people.file_added_families`, vi and en). Make T028–T029 pass.
+- [X] T030 [US3] In `churchmgr/i18n.py` section `people` (vi and en): `people.file_new_family` ("Gia đình mới" / "new Family"), `people.file_err_family_role_needed`, `people.file_err_family_role`, `people.file_err_family_two` ("Two Families have this name. Set the Family on the Person page.").
+- [X] T031 [US3] In `check_people_file` (`churchmgr/pages/people_file.py`): load Families once (`SELECT id, name_folded FROM family`); per row with `family`: folded match count 0 → `new_family` = cleaned name (one per folded name in the file), 1 → `family_id`, 2+ → error; `family_role` must map (by `text.fold` of the codes `Head, Spouse, Child, Other` and the `core.family_role_*` words of both languages) to a code in `schema.FAMILY_ROLES`, else error; Family set + role empty → error. Show Family, "new Family" and role in the check table.
+- [X] T032 [US3] In `save_people_file`, inside the same transaction: for each distinct `new_family` call `people.add_family(conn, name, address)` once (address = first non-empty Address of its rows), then for each row with a Family call `people_pages.set_family_from_form(conn, pid, {"family_id": fid, "family_role": code, "start_date": start})`. Add "{m} new Families" to the redirect message (`people.file_added_families`, vi and en). Make T028–T029 pass.
 
 **Checkpoint**: all three stories work.
 
@@ -147,11 +147,11 @@ the right Family roles (quickstart scenario 4).
 
 ## Phase 6: Polish & cross-cutting
 
-- [ ] T033 [P] Update `hermes/skills/church-manager/SKILL.md` with one line: adding many people from a `.xlsx` file is a page in the app (People > Add from .xlsx file), not a Hermes door command (FR-015).
-- [ ] T034 [P] Add a short section to `README.md` (Vietnamese, like the rest): how to get the empty file, fill it, pick it, check and Save.
-- [ ] T035 Run `python -m unittest discover -s tests -p test_db.py` (Avoid words), `-p test_i18n.py` (both languages have the same keys) and `-p test_people_file.py`; fix any hit.
-- [ ] T036 Run the quickstart scenarios 1–9 by hand on a fake church (`specs/001-people-excel-import/quickstart.md`), including a file saved from a real spreadsheet program, and check SC-005 (2,000 rows → check page in under 10 s).
-- [ ] T037 Run `python verify.py`; it must exit 0 and print `ALL ... CHECKS PASS`.
+- [X] T033 [P] Update `hermes/skills/church-manager/SKILL.md` with one line: adding many people from a `.xlsx` file is a page in the app (People > Add from .xlsx file), not a Hermes door command (FR-015).
+- [X] T034 [P] Add a short section to `README.md` (Vietnamese, like the rest): how to get the empty file, fill it, pick it, check and Save.
+- [X] T035 Run `python -m unittest discover -s tests -p test_db.py` (Avoid words), `-p test_i18n.py` (both languages have the same keys) and `-p test_people_file.py`; fix any hit.
+- [X] T036 Run the quickstart scenarios 1–9 by hand on a fake church (`specs/001-people-excel-import/quickstart.md`), including a file saved from a real spreadsheet program, and check SC-005 (2,000 rows → check page in under 10 s).
+- [X] T037 Run `python verify.py`; it must exit 0 and print `ALL ... CHECKS PASS`.
 
 ---
 
