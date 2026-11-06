@@ -132,6 +132,28 @@ TEXT = {
         "dashboard.title": "Trang chủ",
         "dashboard.open_calendar": "Mở Lịch",
         # --- people
+        "people.file_empty": "Lấy tệp mẫu trống",
+        "people.file_sheet_people": "Mọi người",
+        "people.file_sheet_help": "Hướng dẫn",
+        "people.file_download_name": "Tep danh sach nguoi.xlsx",
+        "people.file_help_sheet": "Trang tính này chỉ để hướng dẫn và không được đọc. Hãy viết mỗi Người trên một dòng "
+                                  "của trang tính “{people}”, dưới dòng tiêu đề, và giữ nguyên tiêu đề các cột.",
+        "people.file_help_column": "Cột",
+        "people.file_help_how": "Cách điền",
+        "people.file_help_example": "Ví dụ một dòng (chỉ có ở trang này, không bao giờ được thêm):",
+        "people.file_help_full_name": "Bắt buộc. Họ và tên của một Người.",
+        "people.file_help_gender": "Không bắt buộc. Một trong các từ: {genders}.",
+        "people.file_help_birth_date": "Không bắt buộc. Viết ngày như 31/12/1980, không sau hôm nay.",
+        "people.file_help_phone": "Không bắt buộc. Viết như 0912345678: số 0 đầu được giữ.",
+        "people.file_help_address": "Không bắt buộc.",
+        "people.file_help_note": "Không bắt buộc. Ghi chú thường: ai có Dữ liệu Hội Thánh cũng đọc được. Đừng viết Ghi "
+                                 "chú cá nhân ở đây.",
+        "people.file_help_status": "Không bắt buộc. Một tên trong danh sách Trạng thái: {statuses}.",
+        "people.file_help_start_date": "Không bắt buộc. Ngày bắt đầu Trạng thái, viết như 31/12/1980. Để trống là hôm "
+                                       "nay.",
+        "people.file_help_family": "Không bắt buộc. Tên một Gia đình đã có, hoặc một tên mới: một Gia đình mới được "
+                                   "tạo.",
+        "people.file_help_family_role": "Cần điền khi cột Gia đình có tên: {roles}.",
         "people.file_col_full_name": "Họ và tên",
         "people.file_col_gender": "Giới tính",
         "people.file_col_birth_date": "Ngày sinh",
@@ -1153,6 +1175,27 @@ TEXT = {
         "dashboard.title": "Dashboard",
         "dashboard.open_calendar": "Open Calendar",
         # --- people
+        "people.file_empty": "Get the empty file",
+        "people.file_sheet_people": "People",
+        "people.file_sheet_help": "Help",
+        "people.file_download_name": "People file.xlsx",
+        "people.file_help_sheet": "This sheet is help only and is never read. Write each Person on one row of the "
+                                  "sheet “{people}”, under the title row, and keep the column titles as they are.",
+        "people.file_help_column": "Column",
+        "people.file_help_how": "How to fill it",
+        "people.file_help_example": "An example row (only on this sheet, never added):",
+        "people.file_help_full_name": "Required. The name of one Person.",
+        "people.file_help_gender": "Optional. One of these words: {genders}.",
+        "people.file_help_birth_date": "Optional. Write the date like 31/12/1980, not after today.",
+        "people.file_help_phone": "Optional. Write it like 0912345678: the first 0 is kept.",
+        "people.file_help_address": "Optional.",
+        "people.file_help_note": "Optional. A normal note: anyone with the church copy can read it. Do not write a "
+                                 "Private note here.",
+        "people.file_help_status": "Optional. A name of the Status list: {statuses}.",
+        "people.file_help_start_date": "Optional. The day the Status starts, like 31/12/1980. Empty means today.",
+        "people.file_help_family": "Optional. The name of a Family already in the church, or a new name: one new "
+                                   "Family is made.",
+        "people.file_help_family_role": "Needed when Family is set: {roles}.",
         "people.file_col_full_name": "Full name",
         "people.file_col_gender": "Gender",
         "people.file_col_birth_date": "Birth date",

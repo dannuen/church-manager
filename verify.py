@@ -525,7 +525,8 @@ def page_paths(db_path):
                ("/copies/handovers/handover-none-2001-01-01.zip", 404, "page"),
                ("/money?month=nope", 400, "page"), ("/documents/new", 400, "page"),  # a Document needs one link
                ("/language", 405, "page"),
-               ("/api/search?q=nguyen", 200, "answer"), (f"/documents/{document}/file", 200, "answer")]
+               ("/api/search?q=nguyen", 200, "answer"), (f"/documents/{document}/file", 200, "answer"),
+               ("/people/file/empty.xlsx", 200, "answer")]
     return listed
 
 

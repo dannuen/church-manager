@@ -1,4 +1,5 @@
-"""People file pages: ``/people/file`` (pick a .xlsx file, see the check page) and ``/people/file/save``.
+"""People file pages: ``/people/file`` (pick a .xlsx file, see the check page), ``/people/file/save`` and
+``/people/file/empty.xlsx`` (the empty file: the column titles, and a Help sheet with one example row).
 
 Rules kept here:
 - A row is checked with the rules of the Add a Person form, by calling them (``text.clean_name``,
@@ -17,7 +18,7 @@ import uuid
 
 from .. import db, i18n, lists, people, schema, settings, text, ui, xlsx
 from ..i18n import TextError, t, tn
-from ..server import Response
+from ..server import Response, content_disposition
 from ..ui import h, vi
 from . import people as people_pages
 
@@ -26,13 +27,17 @@ from . import people as people_pages
 COLUMNS = ("full_name", "gender", "birth_date", "phone", "address", "note", "status", "start_date", "family",
            "family_role")
 # Family and Family role are read by story 3 of spec 001 (tasks T031-T032). Until then a file that has them
-# shows them as ignored columns: never read in silence, never dropped in silence.
+# shows them as ignored columns: never read in silence, never dropped in silence. The empty file has the READ
+# columns only, so a file made from it never shows an ignored column.
 NOT_READ_YET = ("family", "family_role")
 READ = tuple(key for key in COLUMNS if key not in NOT_READ_YET)
-ACCEPT = ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+ACCEPT = ".xlsx," + xlsx.MEDIA_TYPE
 USED_CODES = "people_file_used"  # setting: the codes of the newest Saves that worked, as a JSON list
 KEEP_CODES = 200
 CODE = re.compile(r"[0-9a-f]{32}")  # what new_code() gives
+# The example row of the Help sheet. Gender and Status are added from the screen words and the Status list.
+EXAMPLE = {"full_name": "Nguyễn Văn An", "birth_date": "31/12/1980", "phone": "0912345678", "address": "12 Lê Lợi",
+           "start_date": "01/01/2024"}
 
 
 def map_titles(title_row):
@@ -235,6 +240,41 @@ def save_people_file(conn, rows_json_text, code):
     return len(checks), []
 
 
+# ---------------------------------------------------------------- the empty file
+
+def _titles(lang):
+    """The column titles of the empty file in ``lang``: the columns that are read, in the order of ``COLUMNS``."""
+    return [t(f"people.file_col_{key}", lang) for key in READ]
+
+
+def help_rows(conn, lang):
+    """The rows of the Help sheet in ``lang``: what the sheet is for; one line per column (its title, then how
+    to fill it, with the words it takes and the names of the active Status items); then one example row under
+    the column titles. The example is only here, never on the people sheet, so it is never added by mistake."""
+    statuses = [item["name"] for item in lists.get_list(conn, "status")]  # active items only
+    words = {  # the words a row may use, of both languages; each help line takes the ones it names
+        "genders": ", ".join([t(key, other) for other in i18n.LANGS for key in people_pages.GENDER_WORDS.values()]
+                             + list(people.GENDERS)),
+        "statuses": ", ".join(statuses) or "—",
+        "roles": ", ".join(dict.fromkeys([t(f"core.family_role_{code.lower()}", other) for other in i18n.LANGS
+                                          for code in schema.FAMILY_ROLES] + list(schema.FAMILY_ROLES))),
+    }
+    example = {**EXAMPLE, "gender": t(people_pages.GENDER_WORDS["M"], lang),
+               "status": statuses[0] if statuses else None}
+    titles = _titles(lang)
+    return ([[t("people.file_help_sheet", lang, people=t("people.file_sheet_people", lang))], [],
+             [t("people.file_help_column", lang), t("people.file_help_how", lang)]]
+            + [[title, t(f"people.file_help_{key}", lang, **words)] for key, title in zip(READ, titles)]
+            + [[], [t("people.file_help_example", lang)], titles, [example.get(key) for key in READ]])
+
+
+def empty_file(conn, lang):
+    """The empty People file (bytes) in ``lang``. Sheet 1: the row of column titles only; its columns are Text
+    cells, so a typed 0912345678 or 31/12/1980 stays as typed. Sheet 2: the Help sheet (``help_rows``)."""
+    return xlsx.write([(t("people.file_sheet_people", lang), [_titles(lang)]),
+                       (t("people.file_sheet_help", lang), help_rows(conn, lang))])
+
+
 # ---------------------------------------------------------------- pages
 
 def _pick_form(error=None):
@@ -259,11 +299,19 @@ def _help(conn):
 
 def _pick_page(req, error=None, status=200):
     body = f'<section class="panel narrow">{_help(req.conn)}{_pick_form(error)}</section>'
-    return Response.html(ui.page(t("people.file_title"), body, "people"), status)
+    empty = ui.link_button(t("people.file_empty"), "/people/file/empty.xlsx")
+    return Response.html(ui.page(t("people.file_title"), body, "people", actions=empty), status)
 
 
 def pick_page(req):
     return _pick_page(req)
+
+
+def empty_get(req):
+    """GET /people/file/empty.xlsx: the empty People file, in the language of the screens."""
+    lang = ui.current_lang()
+    return Response(200, empty_file(req.conn, lang), xlsx.MEDIA_TYPE,
+                    {"Content-Disposition": content_disposition(t("people.file_download_name", lang))})
 
 
 def _date_cell(value):
@@ -345,4 +393,5 @@ ROUTES = [
     ("GET", "/people/file", pick_page),
     ("POST", "/people/file", check_post),
     ("POST", "/people/file/save", save_post),
+    ("GET", "/people/file/empty.xlsx", empty_get),
 ]

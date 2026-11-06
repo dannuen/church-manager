@@ -26,6 +26,7 @@ MAX_FILE = 10 * 1024 * 1024  # bytes of the .xlsx file
 MAX_MEMBER = 50 * 1024 * 1024  # bytes of one XML part once unpacked
 MAX_ROWS = 5_001  # the title row and 5,000 rows
 MAX_COLUMNS = 1_000  # the People file has 10; a value further right is refused, so a row stays small
+MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"  # the file kind of a .xlsx file
 
 _CELL_REF = re.compile(r"([A-Za-z]{1,3})([0-9]+)")
 _DMY = re.compile(r"([0-9]{1,2})/([0-9]{1,2})/([0-9]{4})")
@@ -258,12 +259,12 @@ def _column_name(col):
 
 
 def _sheet_xml(rows, text_columns):
-    """One worksheet. With ``text_columns`` every used column has the Text format (``style="1"``), for
-    the cells of the title row and for every cell typed into those columns later."""
+    """One worksheet. Every used column is 24 characters wide. With ``text_columns`` they also have the Text
+    format (``style="1"``), for the cells of the title row and for every cell typed into those columns later."""
     width = max((len(r) for r in rows), default=0)
     style = ' s="1"' if text_columns else ""
-    cols = (f'<cols><col min="1" max="{width}" width="24" style="1" customWidth="1"/></cols>'
-            if text_columns and width else "")
+    col_style = ' style="1"' if text_columns else ""
+    cols = f'<cols><col min="1" max="{width}" width="24"{col_style} customWidth="1"/></cols>' if width else ""
     lines = []
     for r, row in enumerate(rows, start=1):
         cells = []
@@ -313,5 +314,6 @@ def write(sheets, text_columns=True):
     with zipfile.ZipFile(buf, "w") as zf:
         for name, content in parts.items():
             info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))  # fixed: the same bytes every time
-            zf.writestr(info, content.encode("utf-8"), compress_type=zipfile.ZIP_DEFLATED)
+            # stored, not packed: a few kB, and the XML stays readable in the file (a check can look for "[[")
+            zf.writestr(info, content.encode("utf-8"), compress_type=zipfile.ZIP_STORED)
     return buf.getvalue()

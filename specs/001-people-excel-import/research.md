@@ -42,7 +42,9 @@ design choices.
   check). Save reads the used codes (setting `people_file_used`, the newest 200)
   and adds its code inside the same `BEGIN IMMEDIATE` transaction as the Persons, so a double click,
   Back + Save or two Saves at once add the rows only once, also after a restart. A Save with row errors
-  does not use up the code.
+  does not use up the code. The server does not keep the codes it gives out: a Save with any new code of
+  the right form is taken. So the code guards against mistakes (double click, Back), not against a hostile
+  page; the same-origin check of the server does that.
 - **Alternatives**: a server-side dict by token (lost on restart, needs expiry code); a temp file
   (data outside the app, cleanup code).
 
@@ -77,6 +79,9 @@ design choices.
   người": the title row only, columns formatted as Text so leading zeros of phones and typed dates
   stay as typed. Sheet 2 "Help" / "Hướng dẫn": one line per column (required or not, allowed
   words, date form) and one example row. Titles in the current screen language.
+  Sheet 1 has the columns that are read (`READ`): until story 3 reads Family and Family role, those two
+  are left out, so a file made from the empty file never shows "Ignored columns". When story 3 empties
+  `NOT_READ_YET`, the empty file has all 10 columns with their help lines, with no other change.
 - **Rationale**: The example row is on the help sheet, so it can never be added by mistake (spec
   FR-011 was updated to say so). Only sheet 1 is read.
 - **Alternatives**: ship a fixed file in `web/` (cannot list the church's own Status names, one

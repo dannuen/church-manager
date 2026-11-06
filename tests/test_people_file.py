@@ -16,13 +16,14 @@ import zipfile
 from unittest import mock
 
 import _support
-from churchmgr import db, fake, i18n, people, settings, xlsx
+from churchmgr import db, fake, i18n, lists, people, server, settings, xlsx
 from churchmgr.i18n import english_left
 from churchmgr.pages import people_file
 from test_server import LiveServer, multipart_body
 
 MAIN_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 TODAY = dt.date.today()
 TOMORROW = TODAY + dt.timedelta(days=1)
 TITLES_VI = ["Họ và tên", "Giới tính", "Ngày sinh", "Điện thoại", "Địa chỉ", "Ghi chú", "Trạng thái", "Ngày bắt đầu"]
@@ -411,6 +412,83 @@ class PeopleFileTest(_support.CopyTestCase):
         self.assertEqual(json.loads(settings.get_setting(self.conn, people_file.USED_CODES)), codes[1:])
 
 
+def part(data, name):
+    """One part of a .xlsx file (bytes) as text, such as ``xl/worksheets/sheet2.xml``."""
+    with zipfile.ZipFile(io.BytesIO(data)) as zf:
+        return zf.read(name).decode("utf-8")
+
+
+class EmptyFileTest(_support.CopyTestCase):
+    """T024: the empty People file of story 2. Sheet 1: the row of column titles only, in the language asked.
+    Sheet 2: the Help sheet, with the one example row."""
+
+    @staticmethod
+    def titles(lang):
+        return [i18n.t(f"people.file_col_{key}", lang) for key in people_file.READ]
+
+    def test_sheet_1_has_the_title_row_only(self):
+        self.assertEqual(people_file.READ, people_file.COLUMNS[:len(people_file.READ)])  # in the order of COLUMNS
+        for lang, words, names in (("vi", TITLES_VI, ("Mọi người", "Hướng dẫn")), ("en", TITLES_EN, ("People", "Help"))):
+            data = people_file.empty_file(self.conn, lang)
+            self.assertEqual(self.titles(lang), words)
+            self.assertEqual(xlsx.read_first_sheet(data).rows, [words])  # no example row, no empty row
+            book = part(data, "xl/workbook.xml")
+            self.assertLess(book.index(f'<sheet name="{names[0]}"'), book.index(f'<sheet name="{names[1]}"'))
+            # the columns of sheet 1 are Text cells: a typed 0912345678 or 31/12/1980 stays as typed
+            self.assertRegex(part(data, "xl/worksheets/sheet1.xml"), rf'<col min="1" max="{len(words)}"[^>]* style="1"')
+
+    def test_help_sheet_names_every_column_and_the_active_status_items(self):
+        lists.set_active(self.conn, self.status("visitor"), False)  # a hidden Status item is not offered
+        names = [item["name"] for item in lists.get_list(self.conn, "status")]
+        self.assertEqual(names, ["Member", "Attender", "Left", "Passed away"])
+        for lang in i18n.LANGS:
+            help_xml = part(people_file.empty_file(self.conn, lang), "xl/worksheets/sheet2.xml")
+            self.assertNotIn("[[", help_xml)
+            for words in self.titles(lang) + names:
+                self.assertIn(words, help_xml)
+            self.assertNotIn("Visitor", help_xml)
+            self.assertIn("Nam, Nữ, Male, Female, M, F", help_xml)
+        lines = {row[0]: row[1] for row in people_file.help_rows(self.conn, "en") if len(row) == 2}
+        self.assertEqual(lines["Full name"], "Required. The name of one Person.")
+        self.assertEqual(lines["Status"], "Optional. A name of the Status list: Member, Attender, Left, Passed away.")
+        self.assertEqual(lines["Gender"], "Optional. One of these words: Nam, Nữ, Male, Female, M, F.")
+        self.assertEqual(len(lines), len(people_file.READ) + 1)  # one line per column, under "Column | How to fill it"
+
+    def test_the_example_row_passes_the_check(self):
+        """The example is the last row of the Help sheet, under the column titles. Put on sheet 1 it is a
+        good row: the help shows a row the check accepts."""
+        before = count(self.conn, "person")
+        for lang, male in (("vi", "Nam"), ("en", "Male")):
+            rows = people_file.help_rows(self.conn, lang)
+            titles, example = rows[-2], rows[-1]
+            self.assertEqual(titles, self.titles(lang))
+            self.assertEqual(example[:3], ["Nguyễn Văn An", male, "31/12/1980"])
+            checks, ignored = people_file.check_people_file(self.conn, xlsx.write([("x", [titles, example])]))
+            self.assertEqual((len(checks), checks[0]["errors"], ignored), (1, [], []))
+            self.assertEqual(checks[0]["status_id"], self.status("member"))  # the first active Status item
+        self.assertEqual(count(self.conn, "person"), before)
+
+    def test_round_trip_three_rows_are_ok(self):
+        """Get the empty file, add 3 rows under the titles, pick it: 3 rows, no error, no ignored column."""
+        for lang in i18n.LANGS:
+            rows = xlsx.read_first_sheet(people_file.empty_file(self.conn, lang)).rows
+            checks, ignored = people_file.check_people_file(self.conn, xlsx.write([("x", rows + good_rows())]))
+            self.assertEqual([c["errors"] for c in checks], [[], [], []])
+            self.assertEqual(ignored, [])
+
+    def test_story_3_columns_come_with_their_help_lines(self):
+        """When story 3 reads Family and Family role (READ is COLUMNS), the empty file has the 10 titles of
+        COLUMNS in order, each with its help line."""
+        with mock.patch.object(people_file, "READ", people_file.COLUMNS):
+            for lang in i18n.LANGS:
+                data = people_file.empty_file(self.conn, lang)
+                titles = [i18n.t(f"people.file_col_{key}", lang) for key in people_file.COLUMNS]
+                self.assertEqual(xlsx.read_first_sheet(data).rows, [titles])
+                help_xml = part(data, "xl/worksheets/sheet2.xml")
+                self.assertNotIn("[[", help_xml)
+                self.assertIn("Chủ gia đình, Vợ/Chồng, Con, Người thân khác, Head, Spouse, Child, Other", help_xml)
+
+
 class PagesBase(LiveServer):
     """One fake church in ``LANG`` and one live server per test class. The pages tests share the church:
     a test that saves adds people, so the others never count warnings exactly."""
@@ -560,6 +638,31 @@ class PeopleFilePagesTest(PagesBase, unittest.TestCase):
         self.assertNotIn('action="/people/file/save"', page)
         self.assertEqual(count(self.db(), "person"), before)
 
+    # T025: the empty file
+    def test_empty_file(self):
+        status, headers, data = self.request("GET", "/people/file/empty.xlsx")
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["content-type"], XLSX_TYPE)
+        self.assertEqual(headers["content-disposition"], server.content_disposition("People file.xlsx"))
+        self.assertIn('filename="People file.xlsx"', headers["content-disposition"])
+        self.assertEqual(xlsx.read_first_sheet(data).rows, [TITLES_EN])
+        link = '<a class="btn secondary" href="/people/file/empty.xlsx">Get the empty file</a>'
+        self.assertIn(link, self.get_text("/people/file")[2])
+        status, page = self.pick(b"not a zip")  # the not-.xlsx page offers it too
+        self.assertEqual(status, 400)
+        self.assertIn(link, page)
+
+    def test_empty_file_filled_in_then_picked(self):
+        """Quickstart 1-2: get the empty file, add 3 rows under the titles, pick it: 3 OK rows and Save."""
+        before = count(self.db(), "person")
+        _s, _h, data = self.request("GET", "/people/file/empty.xlsx")
+        status, page = self.pick(xlsx.write([("People", xlsx.read_first_sheet(data).rows + good_rows())]))
+        self.assertEqual(status, 200, page[:2000])
+        self.assertRegex(page, r"3 rows: 3 OK, 0 with errors, \d warnings")
+        self.assertIn('action="/people/file/save"', page)
+        self.assertNotIn("Ignored columns", page)
+        self.assertEqual(count(self.db(), "person"), before)
+
 
 class PeopleFileVietnamesePagesTest(PagesBase, unittest.TestCase):
     """The same pages over a Vietnamese fake church: Vietnamese words only, no ``[[key]]``."""
@@ -611,6 +714,17 @@ class PeopleFileVietnamesePagesTest(PagesBase, unittest.TestCase):
         self.assert_vietnamese(page)
         status, _h, data = self.request("POST", "/people/file/save", {"rows": "[]", "code": form["code"]})
         self.assertIn("Không đọc được danh sách trên trang này. Hãy chọn lại tệp.", data.decode("utf-8"))
+
+    def test_vi_empty_file(self):
+        status, headers, data = self.request("GET", "/people/file/empty.xlsx")
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["content-type"], XLSX_TYPE)
+        self.assertEqual(headers["content-disposition"], server.content_disposition("Tep danh sach nguoi.xlsx"))
+        self.assertEqual(xlsx.read_first_sheet(data).rows, [TITLES_VI])
+        self.assertIn('<sheet name="Hướng dẫn"', part(data, "xl/workbook.xml"))
+        _s, _h, page = self.get_text("/people/file")
+        self.assertIn('<a class="btn secondary" href="/people/file/empty.xlsx">Lấy tệp mẫu trống</a>', page)
+        self.assert_vietnamese(page)
 
 
 if __name__ == "__main__":
