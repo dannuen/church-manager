@@ -12,8 +12,10 @@ Rules kept here:
 """
 
 import json
+import re
+import uuid
 
-from .. import db, i18n, lists, people, schema, text, ui, xlsx
+from .. import db, i18n, lists, people, schema, settings, text, ui, xlsx
 from ..i18n import TextError, t, tn
 from ..server import Response
 from ..ui import h, vi
@@ -28,6 +30,9 @@ COLUMNS = ("full_name", "gender", "birth_date", "phone", "address", "note", "sta
 NOT_READ_YET = ("family", "family_role")
 READ = tuple(key for key in COLUMNS if key not in NOT_READ_YET)
 ACCEPT = ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+USED_CODES = "people_file_used"  # setting: the codes of the newest Saves that worked, as a JSON list
+KEEP_CODES = 200
+CODE = re.compile(r"[0-9a-f]{32}")  # what new_code() gives
 
 
 def map_titles(title_row):
@@ -180,31 +185,45 @@ def rows_json(checks):
     return json.dumps([{"row": c["row"], "values": c["values"]} for c in checks], ensure_ascii=False)
 
 
-def save_people_file(conn, rows_json_text):
-    """Save the rows of a check page (``rows_json`` text). Every row is checked again first.
+def new_code():
+    """The one-use code of one check page: its Save works once (a double click, or Back and Save, adds nothing).
+    ``uuid4`` is 122 random bits from the system's random source."""
+    return uuid.uuid4().hex
+
+
+def save_people_file(conn, rows_json_text, code):
+    """Save the rows of a check page (``rows_json`` text, and the page's ``new_code()``). Every row is
+    checked again first.
 
     Returns ``(added, checks)``: ``(n, [])`` when all ``n`` rows were added in one transaction, or
-    ``(0, checks)`` when a row has an error now (nothing saved). A hidden field that is not rows of a
-    check page raises ``TextError``.
+    ``(0, checks)`` when a row has an error now (nothing saved, the code can be used again). A hidden
+    field that is not rows and a code of a check page, or a code of a Save that already worked, raises
+    ``TextError``.
     """
     try:
         items = json.loads(rows_json_text)
     except (TypeError, ValueError) as exc:
-        raise TextError("people.file_err_not_xlsx") from exc
-    if not isinstance(items, list):
-        raise TextError("people.file_err_not_xlsx")
+        raise TextError("people.file_err_pick_again") from exc
+    if not isinstance(items, list) or not items or not isinstance(code, str) or not CODE.fullmatch(code):
+        raise TextError("people.file_err_pick_again")
+    if len(items) > xlsx.MAX_ROWS - 1:  # the same limit as the file: the title row and 5,000 rows
+        raise TextError("people.file_err_too_many_rows")
     numbered = []
     for item in items:
         if not (isinstance(item, dict) and type(item.get("row")) is int and isinstance(item.get("values"), dict)):
-            raise TextError("people.file_err_not_xlsx")
+            raise TextError("people.file_err_pick_again")
         numbered.append((item["row"], {k: v for k, v in item["values"].items() if k in READ and isinstance(v, str)}))
-    if not numbered:
-        raise TextError("people.file_err_empty")
-    checks = _check_rows(conn, numbered, date1904=False)
-    if any(c["errors"] for c in checks):
-        return 0, checks
     today = people_pages.today_text()
+    # The used codes are read and written in the transaction of the Persons (BEGIN IMMEDIATE): two Saves of
+    # one page at the same moment cannot both pass, and the codes are still known after a restart.
     with db.transaction(conn):
+        used = json.loads(settings.get_setting(conn, USED_CODES) or "[]")
+        if code in used:
+            raise TextError("people.file_err_saved_already")
+        checks = _check_rows(conn, numbered, date1904=False)
+        if any(c["errors"] for c in checks):
+            return 0, checks
+        settings.set_setting(conn, USED_CODES, json.dumps((used + [code])[-KEEP_CODES:]))
         for c in checks:
             v = c["values"]
             people_pages.add_person_from_form(conn, {
@@ -224,14 +243,18 @@ def _pick_form(error=None):
 
 
 def _help(conn):
-    """The format, in two sentences: the column titles, then the words Gender and Status accept."""
+    """The format, in two sentences: the column titles, then the words Gender and Status accept (the
+    gender words of both languages, each marked with its language)."""
     columns = ", ".join(t(f"people.file_col_{key}") for key in READ)
-    genders = ", ".join([t(key) for key in people_pages.GENDER_WORDS.values()] + list(people.GENDERS))
+    keys = people_pages.GENDER_WORDS.values()
+    genders = ", ".join([f'<span lang="{lang}">{h(", ".join(t(key, lang) for key in keys))}</span>'
+                         for lang in i18n.LANGS] + list(people.GENDERS))
     statuses = ", ".join(item["name"] for item in lists.get_list(conn, "status"))
     lead = t("people.file_help", columns=columns, full_name=t("people.file_col_full_name"))
-    words = t("people.file_help_words", gender=t("people.file_col_gender"), genders=genders,
-              status=t("people.file_col_status"), statuses=statuses, start_date=t("people.file_col_start_date"))
-    return f'<p class="lead">{h(lead)}</p><p class="hint">{h(words)}</p>'
+    words = ui.t_html("people.file_help_words", gender=h(t("people.file_col_gender")), genders=genders,
+                      status=h(t("people.file_col_status")), statuses=h(statuses),
+                      start_date=h(t("people.file_col_start_date")))
+    return f'<p class="lead">{h(lead)}</p><p class="hint">{words}</p>'
 
 
 def _pick_page(req, error=None, status=200):
@@ -282,7 +305,8 @@ def _check_page(req, checks, ignored, status=200):
         actions = (f'<div class="form-actions">{ui.button(t("core.btn_save"))}'
                    f'<a class="text-action" href="/people/file">{h(t("core.btn_cancel"))}</a></div>')
         top = (f'<p class="lead">{h(t("people.file_ready"))}</p>' + ignored_html
-               + ui.form("/people/file/save", ui.hidden("rows", rows_json(checks)) + actions))
+               + ui.form("/people/file/save", ui.hidden("rows", rows_json(checks)) + ui.hidden("code", new_code())
+                         + actions, data_once=True))
     today = people_pages.today_text()
     headers = [(t("people.file_row"), True), (t("people.file_col_full_name"), False),
                (t("people.file_col_gender"), False), (t("people.file_col_birth_date"), True),
@@ -309,7 +333,7 @@ def check_post(req):
 def save_post(req):
     """POST /people/file/save: check the rows again, then add them all in one transaction."""
     try:
-        added, checks = save_people_file(req.conn, req.form.get("rows"))
+        added, checks = save_people_file(req.conn, req.form.get("rows"), req.form.get("code"))
     except ValueError as exc:
         return _pick_page(req, i18n.error_text(exc), 400)
     if not added:

@@ -8,6 +8,7 @@ import json
 import pathlib
 import re
 import tempfile
+import threading
 import unicodedata
 import unittest
 import urllib.parse
@@ -15,7 +16,7 @@ import zipfile
 from unittest import mock
 
 import _support
-from churchmgr import db, fake, i18n, people, xlsx
+from churchmgr import db, fake, i18n, people, settings, xlsx
 from churchmgr.i18n import english_left
 from churchmgr.pages import people_file
 from test_server import LiveServer, multipart_body
@@ -299,10 +300,13 @@ class PeopleFileTest(_support.CopyTestCase):
             ["Same name as row 5."], [], ["Same name as row 3."]])
 
     # T017
+    def save(self, rows_json_text, code=None):
+        return people_file.save_people_file(self.conn, rows_json_text, code or people_file.new_code())
+
     def test_save_adds_every_row_with_its_status(self):
         before = {t: count(self.conn, t) for t in ("person", "person_status", "private_note")}
         checks, _ = self.check(good_rows())
-        added, again = people_file.save_people_file(self.conn, people_file.rows_json(checks))
+        added, again = self.save(people_file.rows_json(checks))
         self.assertEqual((added, again), (3, []))
         self.assertEqual(count(self.conn, "person"), before["person"] + 3)
         self.assertEqual(count(self.conn, "person_status"), before["person_status"] + 3)
@@ -323,7 +327,7 @@ class PeopleFileTest(_support.CopyTestCase):
         checks, _ = self.check(good_rows())
         tampered = json.loads(people_file.rows_json(checks))
         tampered[2]["values"]["birth_date"] = "1990-02-31"  # changed between the check page and Save
-        added, again = people_file.save_people_file(self.conn, json.dumps(tampered))
+        added, again = self.save(json.dumps(tampered))
         self.assertEqual(added, 0)
         self.assertEqual([c["row"] for c in again if c["errors"]], [4])
         self.assertEqual({t: count(self.conn, t) for t in before}, before)
@@ -337,17 +341,74 @@ class PeopleFileTest(_support.CopyTestCase):
                 raise i18n.TextError("errors.required", label="people.full_name")
             return real(conn, form)
 
+        code = people_file.new_code()
         with mock.patch.object(people_file.people_pages, "add_person_from_form", side_effect=third_fails):
             with self.assertRaises(ValueError):
-                people_file.save_people_file(self.conn, people_file.rows_json(checks))
+                self.save(people_file.rows_json(checks), code)
         self.assertEqual(len(calls), 3)
         self.assertEqual({t: count(self.conn, t) for t in before}, before)  # rows 1 and 2 were rolled back
+        self.assertEqual(self.save(people_file.rows_json(checks), code)[0], 3)  # the code was rolled back too
 
     def test_save_refuses_a_bad_hidden_field(self):
+        before = count(self.conn, "person")
         for bad in ("", "not json", "{}", "[]", '[{"row": "2", "values": {}}]', '[{"row": 2, "values": []}]', None):
             with self.assertRaises(i18n.TextError, msg=bad) as cm:
-                people_file.save_people_file(self.conn, bad)
-            self.assertIn(cm.exception.key, ("people.file_err_not_xlsx", "people.file_err_empty"), bad)
+                self.save(bad)
+            self.assertEqual(cm.exception.key, "people.file_err_pick_again")
+        items = [{"row": n, "values": {"full_name": f"Người {n}"}} for n in range(2, 6)]
+        with mock.patch.object(xlsx, "MAX_ROWS", 4):  # the title row and 3 rows (in the app: 5,001 and 5,000)
+            with self.assertRaises(i18n.TextError) as cm:
+                self.save(json.dumps(items))
+            self.assertEqual(cm.exception.key, "people.file_err_too_many_rows")
+            self.assertEqual(count(self.conn, "person"), before)
+            self.assertEqual(self.save(json.dumps(items[:3]))[0], 3)
+
+    # One check page = one Save
+    def test_the_same_save_twice_adds_the_rows_once(self):
+        before = count(self.conn, "person")
+        checks, _ = self.check(good_rows())
+        code = people_file.new_code()
+        self.assertEqual(self.save(people_file.rows_json(checks), code), (3, []))
+        with self.assertRaises(i18n.TextError) as cm:  # a double click, or Back and Save
+            self.save(people_file.rows_json(checks), code)
+        self.assertEqual(cm.exception.key, "people.file_err_saved_already")
+        self.assertEqual(str(cm.exception), "This list was already saved. Open People to see them.")
+        # after a restart: another connection to the church copy still knows the code
+        other = db.connect(self.folder / db.DB_NAME)
+        self.addCleanup(other.close)
+        with self.assertRaises(i18n.TextError):
+            people_file.save_people_file(other, people_file.rows_json(checks), code)
+        self.assertEqual(count(self.conn, "person"), before + 3)
+
+    def test_a_missing_code_saves_nothing(self):
+        before = count(self.conn, "person")
+        checks, _ = self.check(good_rows())
+        for bad in (None, "", "short", "x" * 22 + "y", "<script>alert(1)</script>xx", 22):
+            with self.assertRaises(i18n.TextError, msg=bad) as cm:
+                people_file.save_people_file(self.conn, people_file.rows_json(checks), bad)
+            self.assertEqual(cm.exception.key, "people.file_err_pick_again")
+        self.assertEqual(count(self.conn, "person"), before)
+
+    def test_a_save_with_row_errors_keeps_its_code(self):
+        before = count(self.conn, "person")
+        checks, _ = self.check(good_rows())
+        code = people_file.new_code()
+        tampered = json.loads(people_file.rows_json(checks))
+        tampered[0]["values"]["full_name"] = " "
+        added, again = self.save(json.dumps(tampered), code)
+        self.assertEqual((added, [c["row"] for c in again if c["errors"]]), (0, [2]))
+        self.assertEqual(count(self.conn, "person"), before)
+        self.assertEqual(self.save(people_file.rows_json(checks), code)[0], 3)  # the code still works once
+        self.assertEqual(count(self.conn, "person"), before + 3)
+
+    def test_only_the_newest_codes_are_kept(self):
+        checks, _ = self.check(good_rows()[:1])
+        codes = [people_file.new_code() for _ in range(4)]
+        self.assertEqual(len(set(codes)), 4)
+        with mock.patch.object(people_file, "KEEP_CODES", 3):
+            for code in codes:
+                self.assertEqual(self.save(people_file.rows_json(checks), code)[0], 1)
+        self.assertEqual(json.loads(settings.get_setting(self.conn, people_file.USED_CODES)), codes[1:])
 
 
 class PagesBase(LiveServer):
@@ -382,8 +443,10 @@ class PagesBase(LiveServer):
         return status, page.decode("utf-8")
 
     @staticmethod
-    def hidden_rows(page):
-        return html.unescape(re.search(r'name="rows" value="([^"]*)"', page).group(1))
+    def save_form(page):
+        """The hidden fields of the Save form of a check page: ``rows`` and ``code``."""
+        return {name: html.unescape(re.search(rf'name="{name}" value="([^"]*)"', page).group(1))
+                for name in ("rows", "code")}
 
 
 class PeopleFilePagesTest(PagesBase, unittest.TestCase):
@@ -400,6 +463,8 @@ class PeopleFilePagesTest(PagesBase, unittest.TestCase):
         self.assertIn('<form class="form" action="/people/file" method="post" enctype="multipart/form-data">', page)
         self.assertRegex(page, r'<input class="input" id="f-file" name="file"[^>]* type="file"[^>]* accept="\.xlsx')
         self.assertIn("Full name", page)  # the help names the columns
+        # the gender words of both languages, each marked with its language
+        self.assertIn('Gender: <span lang="vi">Nam, Nữ</span>, <span lang="en">Male, Female</span>, M, F.', page)
         self.assertNotIn("[[", page)
 
     def test_check_then_save(self):
@@ -411,7 +476,8 @@ class PeopleFilePagesTest(PagesBase, unittest.TestCase):
         self.assertIn('<span lang="vi">Nguyễn Văn An</span>', page)
         self.assertIn('href="/people/file"', page)  # Cancel
         self.assertEqual(count(self.db(), "person"), before)  # nothing saved by the check
-        status, headers, data = self.request("POST", "/people/file/save", {"rows": self.hidden_rows(page)})
+        self.assertIn('<form class="form" action="/people/file/save" method="post" data-once>', page)
+        status, headers, data = self.request("POST", "/people/file/save", self.save_form(page))
         self.assertEqual(status, 303, data.decode("utf-8")[:2000])
         location = headers["location"]
         self.assertTrue(location.startswith("/people?msg="), location)
@@ -442,16 +508,52 @@ class PeopleFilePagesTest(PagesBase, unittest.TestCase):
         status, page = self.pick(people_xlsx([], ["Giới tính"]))
         self.assertEqual(status, 400)
         self.assertIn("No column has the title “Full name”.", page)
-        status, _h, _data = self.request("POST", "/people/file/save", {"rows": "not json"})
+        status, _h, data = self.request("POST", "/people/file/save", {"rows": "not json"})
         self.assertEqual(status, 400)
+        page = data.decode("utf-8")
+        self.assertIn("The list on this page cannot be read. Pick the file again.", page)
+        self.assertNotIn("not a .xlsx file", page)
         self.assertEqual(count(self.db(), "person"), before)
+
+    def test_the_same_save_twice_adds_the_rows_once(self):
+        """A double click, or Back and Save: the second Save adds nothing and says so."""
+        before = count(self.db(), "person")
+        _status, page = self.pick(people_xlsx(good_rows()))
+        form = self.save_form(page)
+        self.assertEqual(self.request("POST", "/people/file/save", form)[0], 303)
+        status, _h, data = self.request("POST", "/people/file/save", form)
+        self.assertEqual(status, 400)
+        self.assertIn("This list was already saved. Open People to see them.", data.decode("utf-8"))
+        self.assertEqual(count(self.db(), "person"), before + 3)
+        _status, page2 = self.pick(people_xlsx(good_rows()))
+        self.assertNotEqual(self.save_form(page2)["code"], form["code"])  # each check page has its own code
+
+    def test_two_saves_at_the_same_moment_add_the_rows_once(self):
+        before = count(self.db(), "person")
+        _status, page = self.pick(people_xlsx(good_rows()))
+        form = self.save_form(page)
+        go = threading.Barrier(2)
+        statuses = []
+
+        def send():
+            go.wait()
+            statuses.append(self.request("POST", "/people/file/save", form)[0])
+
+        threads = [threading.Thread(target=send) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(sorted(statuses), [303, 400])
+        self.assertEqual(count(self.db(), "person"), before + 3)
 
     def test_save_rechecks_the_rows(self):
         before = count(self.db(), "person")
         _status, page = self.pick(people_xlsx(good_rows()))
-        rows = json.loads(self.hidden_rows(page))
+        form = self.save_form(page)
+        rows = json.loads(form["rows"])
         rows[0]["values"]["full_name"] = " "  # changed between the check page and Save
-        status, _h, data = self.request("POST", "/people/file/save", {"rows": json.dumps(rows)})
+        status, _h, data = self.request("POST", "/people/file/save", {**form, "rows": json.dumps(rows)})
         page = data.decode("utf-8")
         self.assertEqual(status, 400)
         self.assertIn("Row 2, Full name: Full name is required.", page)
@@ -476,6 +578,7 @@ class PeopleFileVietnamesePagesTest(PagesBase, unittest.TestCase):
         self.assertEqual(status, 200)
         self.assert_vietnamese(page)
         self.assertIn("Họ và tên", page)
+        self.assertIn('Giới tính: <span lang="vi">Nam, Nữ</span>, <span lang="en">Male, Female</span>, M, F.', page)
 
     def test_vi_check_page(self):
         status, page = self.pick(people_xlsx(good_rows() + [["Lê Văn Cường", None, None, None, None, None, None,
@@ -497,9 +600,17 @@ class PeopleFileVietnamesePagesTest(PagesBase, unittest.TestCase):
 
     def test_vi_save_message(self):
         _status, page = self.pick(people_xlsx(good_rows()[:1]))
-        _s, headers, _d = self.request("POST", "/people/file/save", {"rows": self.hidden_rows(page)})
+        form = self.save_form(page)
+        _s, headers, _d = self.request("POST", "/people/file/save", form)
         msg = urllib.parse.parse_qs(urllib.parse.urlsplit(headers["location"]).query)["msg"]
         self.assertEqual(msg, ["Đã thêm 1 người."])
+        status, _h, data = self.request("POST", "/people/file/save", form)
+        page = data.decode("utf-8")
+        self.assertEqual(status, 400)
+        self.assertIn("Danh sách này đã được lưu rồi. Hãy mở Mọi người để xem.", page)
+        self.assert_vietnamese(page)
+        status, _h, data = self.request("POST", "/people/file/save", {"rows": "[]", "code": form["code"]})
+        self.assertIn("Không đọc được danh sách trên trang này. Hãy chọn lại tệp.", data.decode("utf-8"))
 
 
 if __name__ == "__main__":

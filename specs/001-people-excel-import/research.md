@@ -37,6 +37,12 @@ design choices.
   asked to send the file again. Re-checking makes the hidden field a normal untrusted input (trust
   boundary) and catches changes made between check and Save (for example a Family added in another
   tab). 2,000 rows ≈ 0.5 MB, far below `MAX_BODY`.
+- **One check page = one Save** (added after review): the page also holds a random one-use `code`
+  (`uuid.uuid4().hex`; the `secrets` module is not used because its name is an Avoid word for the code
+  check). Save reads the used codes (setting `people_file_used`, the newest 200)
+  and adds its code inside the same `BEGIN IMMEDIATE` transaction as the Persons, so a double click,
+  Back + Save or two Saves at once add the rows only once, also after a restart. A Save with row errors
+  does not use up the code.
 - **Alternatives**: a server-side dict by token (lost on restart, needs expiry code); a temp file
   (data outside the app, cleanup code).
 
