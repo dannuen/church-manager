@@ -74,6 +74,7 @@ VI_ASCII_OK = frozenset({
     "thu",       # Vietnamese: "thu hẹp" (to narrow a search)
     "tin",       # Vietnamese: thông tin, Tin Lành
     "yyyy",      # the date form the pastor types: YYYY-MM-DD
+    "xlsx",      # the file kind of a People file: tệp .xlsx
     "zip",       # the file kind of a Handover: tệp ZIP
 })
 
@@ -502,7 +503,8 @@ def page_paths(db_path):
                              "GROUP BY 1 ORDER BY COUNT(*) DESC, 1")
     found_none = "zzzzqqq"  # a search that finds no one
     out = ["/", "/search", "/search?q=nguyen", f"/search?q={found_none}",
-           "/people", "/people?q=nguyen", "/people/new", f"/people/{person}/edit", f"/people/{person}?edit_note={note}"]
+           "/people", "/people?q=nguyen", "/people/new", "/people/file", f"/people/{person}/edit",
+           f"/people/{person}?edit_note={note}"]
     out += [f"/people/{pid}" for pid in persons]
     out += ["/families", "/families/new", f"/families/{family}", f"/families/{family}/edit",
             "/chi-phai", "/chi-phai/new", f"/chi-phai/{chi_phai}", f"/chi-phai/{chi_phai}/edit",

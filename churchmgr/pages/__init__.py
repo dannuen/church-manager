@@ -3,10 +3,10 @@
 Cards C1-C3 add their modules here: import them and append them to ``PAGES``.
 """
 
-from . import care, chi_phai, dashboard, families, people, search, setup
+from . import care, chi_phai, dashboard, families, people, people_file, search, setup
 
 PAGES = [dashboard, search, setup]
-PAGES += [people, families, chi_phai, care]  # card C1
+PAGES += [people, people_file, families, chi_phai, care]  # card C1 (people_file: the People file, spec 001)
 
 from . import calendar, money  # noqa: E402 - card C2
 

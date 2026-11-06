@@ -290,7 +290,8 @@ def list_page(req):
     content = toolbar + list_panel("people", t("people.list"), body)
     shown = tn("people.count", len(everyone))
     sub = h(shown) if len(rows) == len(everyone) else h(t("people.count_of", n=len(rows), total=shown))
-    actions = ui.link_button(t("people.add"), "/people/new", "primary")
+    actions = (ui.link_button(t("people.add"), "/people/new", "primary")
+               + ui.link_button(t("people.file_add"), "/people/file"))  # the People file (spec 001)
     return Response.html(ui.page(t("people.title"), content, "people", sub=sub, actions=actions))
 
 
