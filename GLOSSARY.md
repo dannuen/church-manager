@@ -53,6 +53,12 @@ _Tiếng Việt_: Ghi chú cá nhân
 _Tránh (tiếng Việt)_: ghi chú mật, ghi chú bí mật
 _Avoid_: Secret note
 
+**People file**:
+A .xlsx file with one row per new Person, used to add many people at once. Read once, never kept.
+_Tiếng Việt_: Tệp danh sách người
+_Tránh (tiếng Việt)_: tải lên, tệp đính kèm
+_Avoid_: Upload, import file
+
 ## Calendar
 
 **Calendar item**:
@@ -229,3 +235,4 @@ The words the app shows on screen, in Vietnamese. Bold rows name the group.
 | **Other words** | **Từ khác** |
 | no-name offering | Ẩn danh |
 | care reminder time | Nhắc thăm viếng |
+| People file | Tệp danh sách người |

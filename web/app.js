@@ -1,5 +1,5 @@
-// Church Manager: the only script. Three jobs: live search (with a short wait), the print button and the
-// file size check. Pages work without it. Results are built with textContent, never innerHTML.
+// Church Manager: the only script. Four jobs: live search (with a short wait), the print button, the
+// file size check and the one-send forms. Pages work without it. Results are built with textContent, never innerHTML.
 // No words live here: the page gives them in its own language (data-text-none, data-text-failed,
 // data-text-too-large).
 (function () {
@@ -87,5 +87,17 @@
 
     input.addEventListener("change", check);
     check();
+  });
+
+  // <form data-once>: its submit buttons are turned off once the form is sent, so a double click sends it
+  // once. The server refuses a second Save anyway; a page shown again by Back gets its buttons back.
+  function once(form, off) {
+    form.querySelectorAll("button[type=submit]").forEach(function (b) { b.disabled = off; });
+  }
+  document.addEventListener("submit", function (e) {
+    if (e.target.hasAttribute("data-once")) { once(e.target, true); }
+  });
+  window.addEventListener("pageshow", function () {
+    document.querySelectorAll("form[data-once]").forEach(function (form) { once(form, false); });
   });
 })();

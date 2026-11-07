@@ -74,6 +74,7 @@ VI_ASCII_OK = frozenset({
     "thu",       # Vietnamese: "thu hẹp" (to narrow a search)
     "tin",       # Vietnamese: thông tin, Tin Lành
     "yyyy",      # the date form the pastor types: YYYY-MM-DD
+    "xlsx",      # the file kind of a People file: tệp .xlsx
     "zip",       # the file kind of a Handover: tệp ZIP
 })
 
@@ -502,7 +503,8 @@ def page_paths(db_path):
                              "GROUP BY 1 ORDER BY COUNT(*) DESC, 1")
     found_none = "zzzzqqq"  # a search that finds no one
     out = ["/", "/search", "/search?q=nguyen", f"/search?q={found_none}",
-           "/people", "/people?q=nguyen", "/people/new", f"/people/{person}/edit", f"/people/{person}?edit_note={note}"]
+           "/people", "/people?q=nguyen", "/people/new", "/people/file", f"/people/{person}/edit",
+           f"/people/{person}?edit_note={note}"]
     out += [f"/people/{pid}" for pid in persons]
     out += ["/families", "/families/new", f"/families/{family}", f"/families/{family}/edit",
             "/chi-phai", "/chi-phai/new", f"/chi-phai/{chi_phai}", f"/chi-phai/{chi_phai}/edit",
@@ -523,7 +525,8 @@ def page_paths(db_path):
                ("/copies/handovers/handover-none-2001-01-01.zip", 404, "page"),
                ("/money?month=nope", 400, "page"), ("/documents/new", 400, "page"),  # a Document needs one link
                ("/language", 405, "page"),
-               ("/api/search?q=nguyen", 200, "answer"), (f"/documents/{document}/file", 200, "answer")]
+               ("/api/search?q=nguyen", 200, "answer"), (f"/documents/{document}/file", 200, "answer"),
+               ("/people/file/empty.xlsx", 200, "answer")]
     return listed
 
 

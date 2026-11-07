@@ -80,6 +80,44 @@ Hai nút này có ở mọi trang. Bạn cũng có thể đổi ngôn ngữ tron
 
 ---
 
+## Thêm nhiều người cùng lúc từ tệp .xlsx
+
+Bạn có danh sách người trong một bảng tính? Bạn có thể thêm tất cả cùng lúc, không cần điền từng người.
+
+1. Bấm **Mọi người** ở thanh menu, rồi bấm **Thêm từ tệp .xlsx**.
+2. Bấm **Lấy tệp mẫu trống**. Trình duyệt lưu tệp `Tep danh sach nguoi.xlsx`.
+3. Mở tệp đó bằng chương trình bảng tính. Trang tính **Mọi người** có dòng tiêu đề các cột. Trang tính
+   **Hướng dẫn** nói cách điền từng cột và có một dòng ví dụ (dòng ví dụ không bao giờ được thêm).
+4. Trên trang tính **Mọi người**, viết mỗi Người trên một dòng, dưới dòng tiêu đề. Chỉ cột **Họ và tên**
+   là bắt buộc. Ngày viết như `31/12/1980`. Đừng đổi tiêu đề các cột. Lưu tệp dưới dạng `.xlsx`.
+5. Trở lại Church Manager. Ở ô **Tệp danh sách người (.xlsx)**, chọn tệp vừa lưu, rồi bấm **Kiểm tra tệp**.
+6. Trang kiểm tra hiện từng dòng: **Hợp lệ**, hoặc một câu nói rõ dòng nào, cột nào cần sửa.
+   **Chưa có gì được lưu.**
+   - Có dòng lỗi: không có nút **Lưu**. Sửa các dòng đó trong tệp, lưu tệp, rồi chọn lại tệp.
+   - Không có lỗi: bấm **Lưu**. Mọi người trong tệp được thêm cùng lúc. Bấm **Hủy** nếu không muốn lưu.
+   - Một dòng trùng tên với một Người đã có chỉ là **cảnh báo**: vẫn lưu được, vì hai người có thể cùng tên.
+
+**Gia đình.** Hai cột **Gia đình** và **Vai trò trong gia đình** không bắt buộc.
+
+- Tên một Gia đình đã có (viết có dấu hay không dấu đều được): Người đó vào Gia đình này.
+- Một tên mới: phần mềm tạo **một** Gia đình mới cho mọi dòng có tên đó. Địa chỉ của Gia đình mới là
+  **Địa chỉ** đầu tiên trong các dòng đó.
+- Có Gia đình thì phải điền Vai trò trong gia đình: **Chủ gia đình**, **Vợ/Chồng**, **Con** hoặc
+  **Người thân khác**.
+- Nếu hai Gia đình trong phần mềm có cùng tên, dòng đó báo lỗi. Hãy để trống ô Gia đình, rồi chọn Gia đình
+  trên trang của Người đó sau khi lưu.
+- Gia đình và Trạng thái bắt đầu từ **Ngày bắt đầu** của dòng (để trống là hôm nay).
+
+**Lưu ý**
+
+- Lưu là "tất cả hoặc không gì": hoặc mọi dòng được thêm, hoặc không dòng nào.
+- Tệp chỉ thêm Người mới (và Gia đình mới). Tệp không sửa và không xoá ai, không đổi Gia đình nào đã có.
+- Phần mềm đọc tệp một lần và không giữ tệp. Chỉ trang tính đầu tiên được đọc. Ghi chú cá nhân không bao
+  giờ được đọc từ tệp.
+- Tối đa 5.000 người mỗi tệp. Chi phái, Ban ngành và Ghi chú cá nhân thì đặt trên trang của từng Người.
+
+---
+
 ## Dữ liệu được lưu ở đâu
 
 Toàn bộ dữ liệu của một Hội Thánh nằm trong **một thư mục** (gọi là **dữ liệu Hội Thánh**):
