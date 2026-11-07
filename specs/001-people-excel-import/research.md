@@ -45,6 +45,9 @@ design choices.
   does not use up the code. The server does not keep the codes it gives out: a Save with any new code of
   the right form is taken. So the code guards against mistakes (double click, Back), not against a hostile
   page; the same-origin check of the server does that.
+- **A file saved before** (added after review): Back after Save makes the browser send the file again, and
+  that new check page has a new code. When a file has 2 or more rows and every name is already in the church,
+  Save needs the box `again` ("Add them again anyway"); Save checks this again in the same transaction.
 - **Alternatives**: a server-side dict by token (lost on restart, needs expiry code); a temp file
   (data outside the app, cleanup code).
 

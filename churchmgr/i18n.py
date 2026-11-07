@@ -132,6 +132,9 @@ TEXT = {
         "dashboard.title": "Trang chủ",
         "dashboard.open_calendar": "Mở Lịch",
         # --- people
+        "people.file_saved_before": "Tất cả các tên trong tệp này đều đã có trong Hội Thánh. Có thể bạn đã lưu tệp "
+                                    "này rồi.",
+        "people.file_again": "Vẫn thêm họ một lần nữa",
         "people.file_new_family": "Gia đình mới",
         "people.file_err_family_role_needed": "Cần điền Vai trò trong gia đình khi có Gia đình.",
         "people.file_err_family_role": "không phải Vai trò trong gia đình ({names})",
@@ -1184,6 +1187,9 @@ TEXT = {
         "dashboard.title": "Dashboard",
         "dashboard.open_calendar": "Open Calendar",
         # --- people
+        "people.file_saved_before": "Every name in this file is already in the church. You may have saved this "
+                                    "file before.",
+        "people.file_again": "Add them again anyway",
         "people.file_new_family": "new Family",
         "people.file_err_family_role_needed": "Family role is needed when Family is set.",
         "people.file_err_family_role": "not a Family role ({names})",

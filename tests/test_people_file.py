@@ -30,6 +30,7 @@ TITLES_VI = ["Họ và tên", "Giới tính", "Ngày sinh", "Điện thoại", "
              "Gia đình", "Vai trò trong gia đình"]
 TITLES_EN = ["Full name", "Gender", "Birth date", "Phone", "Address", "Note", "Status", "Start date", "Family",
              "Family role"]
+SAVED_BEFORE_EN = "Every name in this file is already in the church. You may have saved this file before."
 
 
 def people_xlsx(rows, titles=TITLES_VI):
@@ -412,6 +413,36 @@ class PeopleFileTest(_support.CopyTestCase):
                 self.assertEqual(self.save(people_file.rows_json(checks), code)[0], 1)
         self.assertEqual(json.loads(settings.get_setting(self.conn, people_file.USED_CODES)), codes[1:])
 
+    # A file saved before: Back after Save sends the file again and makes a new check page with a new code
+    def test_a_file_saved_before_needs_a_second_yes(self):
+        checks, _ = self.check(good_rows())
+        self.assertFalse(people_file.all_in_church(checks))
+        self.assertEqual(self.save(people_file.rows_json(checks))[0], 3)
+        before = count(self.conn, "person")
+        checks, _ = self.check(good_rows())  # the same file again
+        self.assertTrue(people_file.all_in_church(checks))
+        code = people_file.new_code()
+        added, families, again = self.save(people_file.rows_json(checks), code)  # no second Yes
+        self.assertEqual((added, families, [c["errors"] for c in again]), (0, 0, [[]] * 3))
+        self.assertTrue(people_file.all_in_church(again))
+        self.assertEqual(count(self.conn, "person"), before)
+        rows = people_file.rows_json(checks)
+        self.assertEqual(people_file.save_people_file(self.conn, rows, code, again=True), (3, 0, []))  # code not used up
+        with self.assertRaises(i18n.TextError):  # still one Save per check page
+            people_file.save_people_file(self.conn, rows, code, again=True)
+        self.assertEqual(count(self.conn, "person"), before + 3)
+
+    def test_some_names_in_the_church_keep_the_plain_save(self):
+        people.add_person(self.conn, "Nguyễn Văn An")  # 1 row of 3
+        checks, _ = self.check(good_rows())
+        self.assertEqual([bool(c["warnings"]) for c in checks], [True, False, False])
+        self.assertFalse(people_file.all_in_church(checks))
+        self.assertEqual(self.save(people_file.rows_json(checks))[0], 3)
+        checks, _ = self.check(good_rows()[1:2])  # one row only: a namesake, not a file saved before
+        self.assertTrue(checks[0]["warnings"])
+        self.assertFalse(people_file.all_in_church(checks))
+        self.assertEqual(self.save(people_file.rows_json(checks))[0], 1)
+
     # ---- US3: Families
     def family_counts(self):
         return {t: count(self.conn, t) for t in ("person", "person_status", "family", "family_link", "private_note")}
@@ -726,20 +757,21 @@ class PeopleFilePagesTest(PagesBase, unittest.TestCase):
 
     def test_the_same_save_twice_adds_the_rows_once(self):
         """A double click, or Back and Save: the second Save adds nothing and says so."""
+        rows = [[f"Khúc Văn Đôi {n}", *[None] * 7] for n in ("Một", "Hai", "Ba")]  # names of its own: a shared church
         before = count(self.db(), "person")
-        _status, page = self.pick(people_xlsx(good_rows()))
+        _status, page = self.pick(people_xlsx(rows))
         form = self.save_form(page)
         self.assertEqual(self.request("POST", "/people/file/save", form)[0], 303)
         status, _h, data = self.request("POST", "/people/file/save", form)
         self.assertEqual(status, 400)
         self.assertIn("This list was already saved. Open People to see them.", data.decode("utf-8"))
         self.assertEqual(count(self.db(), "person"), before + 3)
-        _status, page2 = self.pick(people_xlsx(good_rows()))
+        _status, page2 = self.pick(people_xlsx(rows))
         self.assertNotEqual(self.save_form(page2)["code"], form["code"])  # each check page has its own code
 
     def test_two_saves_at_the_same_moment_add_the_rows_once(self):
         before = count(self.db(), "person")
-        _status, page = self.pick(people_xlsx(good_rows()))
+        _status, page = self.pick(people_xlsx([[f"Khúc Văn Cùng {n}", *[None] * 7] for n in ("Một", "Hai", "Ba")]))
         form = self.save_form(page)
         go = threading.Barrier(2)
         statuses = []
@@ -754,6 +786,45 @@ class PeopleFilePagesTest(PagesBase, unittest.TestCase):
         for thread in threads:
             thread.join()
         self.assertEqual(sorted(statuses), [303, 400])
+        self.assertEqual(count(self.db(), "person"), before + 3)
+
+    def test_a_file_saved_before_asks_a_second_yes(self):
+        """Save, Back, the browser sends the file again: a new check page with a new code. Every name is in the
+        church now, so Save needs the box "Add them again anyway"."""
+        rows = [[f"Khúc Văn Lặp {n}", *[None] * 7] for n in ("Một", "Hai", "Ba", "Bốn", "Năm")]
+        before = count(self.db(), "person")
+        _status, page = self.pick(people_xlsx(rows))
+        self.assertIn("No row has an error.", page)
+        self.assertNotIn('name="again"', page)
+        self.assertEqual(self.request("POST", "/people/file/save", self.save_form(page))[0], 303)
+        status, page = self.pick(people_xlsx(rows))
+        self.assertEqual(status, 200)
+        self.assertIn(SAVED_BEFORE_EN, page)
+        self.assertNotIn("No row has an error.", page)
+        save = re.search(r'<form class="form" action="/people/file/save".*?</form>', page, re.S).group(0)
+        self.assertIn('<label for="f-again">Add them again anyway</label>', save)
+        self.assertRegex(save, r'<input id="f-again" name="again" type="checkbox" value="1" required[^>]*>')
+        self.assertEqual(save.count("<button"), 1)  # one Save, under the box
+        self.assertLess(save.index('name="again"'), save.index("<button"))
+        form = self.save_form(page)
+        status, _h, data = self.request("POST", "/people/file/save", form)  # the box not ticked
+        self.assertEqual(status, 400)
+        self.assertIn(SAVED_BEFORE_EN, data.decode("utf-8"))
+        self.assertEqual(count(self.db(), "person"), before + 5)
+        self.assertEqual(self.request("POST", "/people/file/save", {**form, "again": "1"})[0], 303)
+        self.assertEqual(self.request("POST", "/people/file/save", {**form, "again": "1"})[0], 400)  # once
+        self.assertEqual(count(self.db(), "person"), before + 10)
+
+    def test_one_name_of_three_in_the_church_keeps_the_plain_save(self):
+        rows = [[f"Khúc Thị Một {n}", *[None] * 7] for n in ("A", "B", "C")]
+        _s, page = self.pick(people_xlsx(rows[:1]))
+        self.assertEqual(self.request("POST", "/people/file/save", self.save_form(page))[0], 303)
+        before = count(self.db(), "person")
+        _s, page = self.pick(people_xlsx(rows))
+        self.assertIn("A Person with this name is already in the church.", page)
+        self.assertIn("No row has an error.", page)
+        self.assertNotIn('name="again"', page)
+        self.assertEqual(self.request("POST", "/people/file/save", self.save_form(page))[0], 303)
         self.assertEqual(count(self.db(), "person"), before + 3)
 
     def test_save_rechecks_the_rows(self):
@@ -897,6 +968,16 @@ class PeopleFileVietnamesePagesTest(PagesBase, unittest.TestCase):
         self.assert_vietnamese(page)
         status, _h, data = self.request("POST", "/people/file/save", {"rows": "[]", "code": form["code"]})
         self.assertIn("Không đọc được danh sách trên trang này. Hãy chọn lại tệp.", data.decode("utf-8"))
+
+    def test_vi_file_saved_before(self):
+        rows = [[f"Khúc Văn Lặp {n}", *[None] * 7] for n in ("Sáu", "Bảy")]
+        _s, page = self.pick(people_xlsx(rows))
+        self.assertEqual(self.request("POST", "/people/file/save", self.save_form(page))[0], 303)
+        status, page = self.pick(people_xlsx(rows))
+        self.assertEqual(status, 200)
+        self.assertIn("Tất cả các tên trong tệp này đều đã có trong Hội Thánh. Có thể bạn đã lưu tệp này rồi.", page)
+        self.assertIn('<label for="f-again">Vẫn thêm họ một lần nữa</label>', page)
+        self.assert_vietnamese(page)
 
     def test_vi_empty_file(self):
         status, headers, data = self.request("GET", "/people/file/empty.xlsx")
