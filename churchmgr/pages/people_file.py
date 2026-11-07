@@ -10,6 +10,8 @@ Rules kept here:
   only joins it (a new Family link). No Chi phái is set from a file.
 - Nothing is saved before Save. Save checks the rows again (the hidden field is input like any other)
   and writes every row in one transaction: one bad row and nothing is saved, no Person and no Family.
+- A file of 2 or more rows where every name is already in the church was maybe saved before: Save needs the
+  box "Add them again anyway" (``all_in_church``), and Save checks that again too.
 - The picked file is read once and never kept. A Private note is never read from a file: a column
   with that title is an ignored column like any unknown one.
 - Words on screen come from the text table (section ``people``); the pastor's own values are shown as
@@ -185,7 +187,7 @@ def _check_rows(conn, numbered, date1904):
 
         checks.append({"row": row, "values": values, "status_id": status_id, "status_name": status_name,
                        "family_id": family_id, "family_name": family_name, "new_family": new_family,
-                       "errors": errors, "warnings": []})
+                       "errors": errors, "warnings": [], "in_church": False})
 
     same = {}  # folded name -> the checks of the rows with that name
     for check in checks:
@@ -194,6 +196,7 @@ def _check_rows(conn, numbered, date1904):
     for folded, group in same.items():
         for check in group:
             if folded in names:
+                check["in_church"] = True
                 check["warnings"].append(t("people.file_warn_same_church"))
             other = next((o for o in group if o is not check), None)
             if other is not None:
@@ -228,21 +231,28 @@ def rows_json(checks):
     return json.dumps([{"row": c["row"], "values": c["values"]} for c in checks], ensure_ascii=False)
 
 
+def all_in_church(checks):
+    """True for a file of 2 or more rows where every name is a Person already in the church: it was maybe saved
+    before (Back after Save sends the file again, and the new check page has a new code). Save then needs a second
+    Yes, the box ``again``. One row only is a namesake, not a file saved before."""
+    return len(checks) > 1 and all(c["in_church"] for c in checks)
+
+
 def new_code():
     """The one-use code of one check page: its Save works once (a double click, or Back and Save, adds nothing).
     ``uuid4`` is 122 random bits from the system's random source."""
     return uuid.uuid4().hex
 
 
-def save_people_file(conn, rows_json_text, code):
+def save_people_file(conn, rows_json_text, code, again=False):
     """Save the rows of a check page (``rows_json`` text, and the page's ``new_code()``). Every row is
-    checked again first.
+    checked again first. ``again``: the pastor ticked "Add them again anyway" (see ``all_in_church``).
 
     Returns ``(added, families, checks)``: ``(n, m, [])`` when all ``n`` rows were added in one transaction,
     with ``m`` new Families (one per new Family name, its address the first Address among its rows), or
-    ``(0, 0, checks)`` when a row has an error now (nothing saved, the code can be used again). A hidden
-    field that is not rows and a code of a check page, or a code of a Save that already worked, raises
-    ``TextError``.
+    ``(0, 0, checks)`` when a row has an error now, or every name is in the church now and ``again`` is not set
+    (nothing saved, the code can be used again). A hidden field that is not rows and a code of a check page,
+    or a code of a Save that already worked, raises ``TextError``.
     """
     try:
         items = json.loads(rows_json_text)
@@ -265,7 +275,7 @@ def save_people_file(conn, rows_json_text, code):
         if code in used:
             raise TextError("people.file_err_saved_already")
         checks = _check_rows(conn, numbered, date1904=False)
-        if any(c["errors"] for c in checks):
+        if any(c["errors"] for c in checks) or (all_in_church(checks) and not again):
             return 0, 0, checks
         settings.set_setting(conn, USED_CODES, json.dumps((used + [code])[-KEEP_CODES:]))
         addresses = {}  # each new Family name -> the first Address among its rows
@@ -418,11 +428,16 @@ def _check_page(req, checks, ignored, status=200):
                f'{h(t("people.file_bad_rows", rows=", ".join(str(n) for n in bad)))}</p>'
                + ignored_html + _pick_form())
     else:
+        again = all_in_church(checks)  # maybe saved before: the box is a second Yes, checked again on Save
+        # the inner div keeps the box at its own size, at the left (a .field is a grid and would stretch it)
+        box = (f'<div class="field"><label for="f-again">{h(t("people.file_again"))}</label>'
+               '<div><input id="f-again" name="again" type="checkbox" value="1" required></div></div>' if again else "")
         actions = (f'<div class="form-actions">{ui.button(t("core.btn_save"))}'
                    f'<a class="text-action" href="/people/file">{h(t("core.btn_cancel"))}</a></div>')
-        top = (f'<p class="lead">{h(t("people.file_ready"))}</p>' + ignored_html
+        lead = t("people.file_saved_before") if again else t("people.file_ready")
+        top = (f'<p class="lead">{h(lead)}</p>' + ignored_html
                + ui.form("/people/file/save", ui.hidden("rows", rows_json(checks)) + ui.hidden("code", new_code())
-                         + actions, data_once=True))
+                         + box + actions, data_once=True))
     today = people_pages.today_text()
     headers = [(t("people.file_row"), True), (t("people.file_col_full_name"), False),
                (t("people.file_col_gender"), False), (t("people.file_col_birth_date"), True),
@@ -451,7 +466,8 @@ def save_post(req):
     """POST /people/file/save: check the rows again, then add them all (and their new Families) in one
     transaction."""
     try:
-        added, families, checks = save_people_file(req.conn, req.form.get("rows"), req.form.get("code"))
+        added, families, checks = save_people_file(req.conn, req.form.get("rows"), req.form.get("code"),
+                                                   again=req.form.get("again") == "1")
     except ValueError as exc:
         return _pick_page(req, i18n.error_text(exc), 400)
     if not added:

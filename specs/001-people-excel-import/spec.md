@@ -112,6 +112,9 @@ existing Family has 2 more members with the right Family roles.
   the church copy (compared without diacritics): the row shows a warning ("A Person with this name
   is already in the church" / "Same name as row 9"), but Save is still possible, because two
   people can have the same name.
+- Every row of a file with 2 or more rows has the name of a Person already in the church (for example
+  Back after Save sends the file again): the check page says the file may have been saved before, and
+  Save adds the rows only when the pastor ticks "Add them again anyway" (Save checks this again).
 - A very large file (for example 2,000 rows): it is read; the check page stays usable.
 - The file has a column called "Private note" or similar: it is ignored. Private notes are never
   added from a file.
