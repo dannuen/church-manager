@@ -243,9 +243,101 @@ class ThemeMathTest(unittest.TestCase):
         self.assertIn("--accent-light: color-mix(in srgb, var(--accent-base), #ffffff 15%);", root)
         self.assertIn("--accent-dark: color-mix(in srgb, var(--accent-base), #000000 30%);", root)
         self.assertIn("--gradient: linear-gradient(135deg, var(--accent-light), var(--accent-dark));", root)
-        for token in ("--accent-base", "--on-accent", "--accent-text", "--accent-light", "--accent-dark",
-                      "--gradient"):  # no rule uses them yet: no look change in this card
-            self.assertNotIn(f"var({token})", plain.replace(root, ""), token)
+
+
+def css_rules(name):
+    """``[(selector, {property: value})]`` of ``web/<name>``, comments removed (a rule in ``@media`` too)."""
+    css = re.sub(r"/\*.*?\*/", "", (pathlib.Path(_support.ROOT) / "web" / name).read_text(encoding="utf-8"),
+                 flags=re.S)
+    out = []
+    for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css):
+        decls = (d.split(":", 1) for d in body.split(";") if d.strip())
+        out.append((selector.strip(), {p.strip(): v.strip() for p, v in decls}))
+    return out
+
+
+def props(selector, name="style.css"):
+    """``{property: value}`` of the rules whose selector list holds exactly ``selector`` (a later rule wins)."""
+    found = [d for sel, d in css_rules(name) if selector in (s.strip() for s in sel.split(","))]
+    assert found, f"no CSS rule for {selector!r} in {name}"
+    return {p: v for d in found for p, v in d.items()}
+
+
+class SurfacesTest(unittest.TestCase):
+    """COLOR-2: the gradient of the app color on the header band (``.title-row``), the active menu item, the
+    active filter and the primary buttons, with ``--on-accent`` text; the plain accent on the chart line and
+    the focus ring; the color as text on the light surfaces in ``--accent-text``. Paper never gets the
+    gradient."""
+
+    GRADIENT = (".title-row", '.nav-item[aria-current="page"]', '.chip[aria-current="true"]', ".btn.primary")
+
+    def test_the_band_the_active_menu_item_the_active_filter_and_primary_buttons_use_the_gradient(self):
+        for selector in self.GRADIENT:
+            rule = props(selector)
+            self.assertEqual(rule["background"], "var(--gradient)", selector)
+            self.assertEqual(rule["color"], "var(--on-accent)", selector)
+        band = props(".title-row")
+        self.assertEqual((band["padding"], band["border-radius"]), ("16px 20px", "var(--radius)"))
+        for selector in ('.chip[aria-current="true"]', ".btn.primary"):  # the border goes with the gradient
+            self.assertEqual(props(selector)["border-color"], "var(--accent-dark)", selector)
+        self.assertEqual(props(".btn.primary:hover"), {"background": "var(--accent-dark)"})
+        self.assertEqual(props(".title-row .btn.primary"), {"border-color": "var(--on-accent)"})  # the 1px ring
+
+    def test_every_text_in_the_band_is_on_accent_at_full_strength(self):
+        self.assertEqual(props(".title-row .sub")["color"], "var(--on-accent)")
+        band_rules = [(sel, d) for sel, d in css_rules("style.css") if ".title-row" in sel]
+        self.assertGreater(len(band_rules), 5)
+        for sel, decls in band_rules:
+            self.assertNotIn("opacity", decls, sel)
+            for value in decls.values():
+                self.assertNotIn("var(--muted)", value, sel)
+                self.assertNotIn("var(--faint)", value, sel)
+        # a control with its own white surface keeps its ink: secondary .btn, the search field, the results
+        self.assertEqual((props(".btn")["background"], props(".btn")["color"]), ("var(--surface)", "var(--text)"))
+        self.assertEqual(props(".input")["background"], "var(--surface)")
+        for selector in (".title-row .input", ".title-row .results"):
+            self.assertEqual(props(selector)["color"], "var(--text)", selector)
+
+    def test_the_plain_accent_stays_on_the_chart_line_and_the_focus_ring(self):
+        self.assertEqual(props(".chart .line")["stroke"], "var(--accent)")
+        self.assertEqual(props(":focus-visible")["outline"], "2px solid var(--accent)")
+        self.assertEqual(props(".title-row :focus-visible"), {"outline-color": "var(--on-accent)"})  # on the band
+        self.assertEqual(props(".title-row .results :focus-visible"), {"outline-color": "var(--accent)"})
+
+    def test_the_color_as_text_on_light_surfaces_is_accent_text(self):
+        self.assertEqual(props(".today-tag")["color"], "var(--accent-text)")
+        self.assertEqual(props(".kind.k-service")["color"], "var(--accent-text)")
+        self.assertEqual(props(".chart .end")["fill"], "var(--accent-text)")
+        for sel, decls in css_rules("style.css"):  # no text in the raw saved color (it may be very light)
+            for prop in ("color", "fill"):
+                self.assertNotEqual(decls.get(prop), "var(--accent)", sel)
+
+    def test_no_rule_outside_root_has_a_raw_color_for_the_accent(self):
+        css = (pathlib.Path(_support.ROOT) / "web" / "style.css").read_text(encoding="utf-8")
+        plain = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+        root = re.search(r":root \{(.*?)\}", plain, re.S).group(1)
+        rest = plain.replace(root, "")
+        accent = {v for k, v in app_color.theme(settings.DEFAULT_APP_COLOR).items() if k != "--on-accent"}
+        for raw in accent | {"#1d1f20", "#3a3d3f"}:
+            self.assertNotIn(raw, rest.lower(), raw)  # the default color, the old primary and its hover
+        self.assertNotIn("--primary", plain)  # no rule used --primary / --primary-ink after COLOR-2
+        for selector in self.GRADIENT + (".btn.primary:hover", ".title-row .btn.primary", ".title-row .sub"):
+            for value in props(selector).values():
+                self.assertNotIn("#", value, selector)  # their colors come from the tokens only
+        defined = set(re.findall(r"(--[\w-]+):", root))
+        self.assertLessEqual(set(re.findall(r"var\((--[\w-]+)\)", plain)), defined)  # no unknown token
+
+    def test_paper_never_gets_the_gradient(self):
+        css = (pathlib.Path(_support.ROOT) / "web" / "print.css").read_text(encoding="utf-8")
+        plain = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+        self.assertNotIn("gradient", plain)
+        self.assertNotIn("var(--", plain)
+        media = plain.index("@media print {")
+        self.assertLess(media, plain.index(".title-row {"))  # the rules below are for paper only
+        band = props(".title-row", "print.css")
+        self.assertEqual((band["background"], band["color"], band["padding"]), ("none", "#000", "0"))
+        self.assertEqual(props(".title-row .sub", "print.css"), {"color": "#333"})
+        self.assertEqual(props('.chip[aria-current="true"]', "print.css")["background"], "none")
 
 
 if __name__ == "__main__":

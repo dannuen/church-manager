@@ -1,7 +1,9 @@
 /* Church Manager: one light app screen style. Plain CSS, no build, works offline.
-   Rules (design-taste-frontend, app screens): colour on data only (one accent, on the Services line);
-   flat surfaces with a 1px border, no shadows at rest; one system face; sizes 12/14/16/24;
-   tabular figures on every number; a near-black primary button.
+   Rules (design-taste-frontend, app screens): one color, picked in Settings (the app color). Its gradient
+   is on the header band (.title-row), the active menu item, the active filter and the primary buttons,
+   with text in --on-accent; the plain accent is on the chart lines and the focus ring; the color as text
+   on the light surfaces is --accent-text. Flat surfaces with a 1px border, no shadows at rest; one system
+   face; sizes 12/14/16/24; tabular figures on every number.
    Grid sum at 1440px: sidebar 232 + canvas (24 + 1160 + 24); 12 columns, 16px gutter. */
 
 :root {
@@ -15,7 +17,7 @@
   --text: #151515;
   --muted: #5c6066;
   --faint: #6b6b6b;
-  --accent: #1f5c99;          /* the one hue: the Services line and focus */
+  --accent: #1f5c99;          /* the app color as picked: the chart lines and the focus ring */
   /* The app color (Settings). The page head sets these 4 for the color the pastor picked
      (churchmgr/app_color.py theme); these are the values of the default color. */
   --accent-base: #1f5c99;     /* the color the gradient is made from */
@@ -24,8 +26,6 @@
   --accent-light: color-mix(in srgb, var(--accent-base), #ffffff 15%);
   --accent-dark: color-mix(in srgb, var(--accent-base), #000000 30%);
   --gradient: linear-gradient(135deg, var(--accent-light), var(--accent-dark));
-  --primary: #1d1f20;
-  --primary-ink: #ffffff;
   --positive: #247b50;
   --negative: #c4242a;
   --font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
@@ -57,14 +57,21 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .nav { display: flex; flex-direction: column; gap: 2px; }
 .nav-item { display: flex; align-items: center; min-height: 36px; padding: 0 10px; border-radius: var(--radius); color: var(--muted); font-size: var(--fs-meta); }
 .nav-item:hover { background: var(--raised); color: var(--text); text-decoration: none; }
-.nav-item[aria-current="page"] { background: var(--active); color: var(--text); font-weight: 600; }
+.nav-item[aria-current="page"] { background: var(--gradient); color: var(--on-accent); font-weight: 600; }
 .canvas { min-width: 0; padding: var(--pad); }
 
-/* ---------- title row: one h1, one finding line, the actions ---------- */
-.title-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+/* ---------- title row: the header band (the gradient), one h1, one finding line, the actions ---------- */
+.title-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; padding: 16px 20px; border-radius: var(--radius); background: var(--gradient); color: var(--on-accent); }
 .title-row h1 { font-size: var(--fs-title); line-height: 32px; font-weight: 600; }
-.title-row .sub { margin-top: 2px; color: var(--muted); }
+.title-row .sub { margin-top: 2px; color: var(--on-accent); }
 .title-row .actions { display: flex; align-items: flex-end; gap: 12px; flex: none; }
+/* In the band every text is --on-accent at full strength. A control with its own white surface keeps its
+   ink (a secondary .btn, the search field, the live results); a primary button gets a 1px ring. The focus
+   ring is --on-accent (an accent ring cannot be seen on the band), but not on the white results. */
+.title-row .input, .title-row .results { color: var(--text); }
+.title-row .btn.primary { border-color: var(--on-accent); }
+.title-row :focus-visible { outline-color: var(--on-accent); }
+.title-row .results :focus-visible { outline-color: var(--accent); }
 .flash { margin-bottom: 16px; padding: 10px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
 /* the language switch at the top of every page: two quiet buttons, the current one marked */
 .lang-switch { display: flex; justify-content: flex-end; gap: 4px; margin: -8px 0 8px; }
@@ -113,16 +120,17 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .kpi-value.strong { font-weight: 700; }
 .neg { color: var(--negative); }
 
-/* Services: one series, faint grid, the line in the one accent. One height at every width (B17: the
-   height attribute, CHART_HEIGHT in dashboard.py): x places are percentages of the plot, the y ticks and
-   the last value sit in the side padding, the line's stroke does not scale. */
+/* Services: one series, faint grid, the line in the plain accent, its last value in --accent-text. One
+   height at every width (B17: the height attribute, CHART_HEIGHT in dashboard.py): x places are
+   percentages of the plot, the y ticks and the last value sit in the side padding, the line's stroke does
+   not scale. */
 .chart { display: block; width: 100%; margin: 4px 0 8px; padding: 0 32px 0 40px; overflow: visible; }
 .chart .plot { overflow: visible; }
 .chart .gridline { stroke: #ececec; stroke-width: 1; }
 .chart .gridline.base { stroke: #cfcfcf; }
 .chart .tick { fill: var(--muted); font-size: 12px; font-family: var(--font); }
 .chart .line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-.chart .end { fill: var(--accent); font-size: 12px; font-weight: 600; font-family: var(--font); }
+.chart .end { fill: var(--accent-text); font-size: 12px; font-weight: 600; font-family: var(--font); }
 .trend { font-size: var(--fs-meta); line-height: 20px; color: var(--muted); }
 .trend strong { color: var(--text); }
 .trend .trend-up { color: var(--positive); }
@@ -154,8 +162,8 @@ textarea.input { height: auto; padding: 8px 12px; resize: vertical; }
 .input[aria-invalid="true"] { border-color: var(--negative); }
 .btn { display: inline-flex; align-items: center; justify-content: center; height: var(--control-height); padding: 0 16px; border-radius: var(--radius-control); border: 1px solid var(--control); background: var(--surface); color: var(--text); font: inherit; font-size: var(--fs-meta); font-weight: 600; cursor: pointer; white-space: nowrap; justify-self: start; }
 .btn:hover { background: var(--raised); text-decoration: none; }
-.btn.primary { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
-.btn.primary:hover { background: #3a3d3f; }
+.btn.primary { background: var(--gradient); color: var(--on-accent); border-color: var(--accent-dark); }
+.btn.primary:hover { background: var(--accent-dark); }
 .btn.danger { color: var(--negative); border-color: currentColor; background: var(--surface); }
 
 /* ---------- tables (for the pages of cards C1-C3) ---------- */
@@ -231,7 +239,7 @@ details.change .form { max-width: none; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); color: var(--muted); font-size: var(--fs-meta); }
 .chip:hover { background: var(--raised); color: var(--text); text-decoration: none; }
-.chip[aria-current="true"] { background: var(--active); border-color: var(--active); color: var(--text); font-weight: 600; }
+.chip[aria-current="true"] { background: var(--gradient); border-color: var(--accent-dark); color: var(--on-accent); font-weight: 600; }
 .toolbar { flex: 0 1 440px; }
 .toolbar .input { flex: 1; }
 
@@ -294,13 +302,13 @@ details.change .form { max-width: none; }
 .cal-day { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px; padding: 4px 0; }
 .cal-day + .cal-day { border-top: 1px solid var(--rule); }
 .cal-date { padding-top: 10px; font-size: var(--fs-meta); line-height: 24px; font-weight: 600; }
-.today-tag { display: block; color: var(--accent); font-size: var(--fs-small); line-height: 16px; font-weight: 600; }
+.today-tag { display: block; color: var(--accent-text); font-size: var(--fs-small); line-height: 16px; font-weight: 600; }
 .cal-none { padding: 10px 0; color: var(--faint); font-size: var(--fs-meta); line-height: 24px; }
 .cal-day .cal-none { margin-top: 0; }      /* not the panel's p + p gap: it sits level with the date */
 .cal-row { align-items: flex-start; }
 .cal-row .time { width: 104px; padding-top: 2px; }
 .kind { color: var(--muted); }
-.kind.k-service { color: var(--accent); font-weight: 600; }   /* the one hue stays on Services */
+.kind.k-service { color: var(--accent-text); font-weight: 600; }   /* the app color stays on Services */
 
 /* forms of the Calendar */
 .inline-fields.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
