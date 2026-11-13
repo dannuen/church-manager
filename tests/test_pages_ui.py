@@ -422,6 +422,7 @@ RAW_FUNCTION = re.compile(r"\b(?:rgba?|hsla?)\([^)]*\)", re.IGNORECASE)
 CSS_MIX = re.compile(r"color-mix\(in srgb, (#[0-9a-f]{6})(?: (\d+)%)?, (#[0-9a-f]{6})(?: (\d+)%)?\)")
 SAMPLE_COLORS = ("#1f5c99", "#2c6e70", "#ffffcc", "#ffff00", "#00ff00", "#ff0000", "#808080", "#7f7fff",
                  "#000000", "#ffffff")
+HIGHLIGHT_STOPS = ("--highlight", "--highlight-mid", "--highlight-end")  # the dark card, top left to bottom right
 TEXT_PAIRS = (  # (text, what it sits on): at least 4.5:1
     *(("--text", s) for s in ("--surface", "--ground", "--raised", "--active")),
     *(("--muted", s) for s in ("--surface", "--ground", "--raised", "--active")),
@@ -431,12 +432,16 @@ TEXT_PAIRS = (  # (text, what it sits on): at least 4.5:1
     # the wash, the current menu item; the white pill of the title row is --accent-dark on --on-accent
     *(("--on-accent", s) for s in ("--accent-dark", "--accent-base", "--accent-light")),
     ("--accent-deep", "--active"),  # STYLE-4: the bold text of the current chip on its tint
+    # STYLE-5: the one dark card (Money this month): each text on each of its 3 stops
+    *((fg, s) for fg in ("--highlight-ink", "--highlight-muted", "--positive-on-dark", "--negative-on-dark")
+      for s in HIGHLIGHT_STOPS),
 )
 PART_PAIRS = (  # a field border or the focus ring: at least 3:1
     ("--control", "--surface"), ("--control", "--ground"), ("--control", "--raised"),
     ("--accent-text", "--surface"), ("--accent-text", "--ground"),
     # STYLE-4: the ring on the Private note panel and beside a tint; the edge of the current chip
     ("--accent-text", "--raised"), ("--accent-text", "--active"),
+    *(("--highlight-focus", s) for s in HIGHLIGHT_STOPS),  # STYLE-5: the ring on the dark card
 )
 
 
@@ -657,6 +662,113 @@ class FormControlsTest(PagesTestBase):
         self.assertIn('<p class="error" id="f-full_name-error">', page)
         self.assertIn("border-color: var(--negative)", declarations('.input[aria-invalid="true"]'))
         self.assertIn("color: var(--negative)", declarations(".error"))
+
+
+# ---------------------------------------------------------------- STYLE-5 helpers
+
+def rule_props(selector, name="style.css"):
+    """``{property: value}`` of every rule of ``web/<name>`` whose selector list holds exactly ``selector``
+    (a later rule wins), comments removed."""
+    css = re.sub(r"/\*.*?\*/", "", (ROOT / "web" / name).read_text(encoding="utf-8"), flags=re.S)
+    found = {}
+    for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css):
+        if selector in (s.strip() for s in sel.split(",")):
+            found.update((p.strip(), v.strip()) for p, v in (d.split(":", 1) for d in body.split(";") if d.strip()))
+    assert found, f"no CSS rule for {selector!r} in {name}"
+    return found
+
+
+CARD = '.dashboard > [data-panel="money-month"]'
+
+
+class CardsAndChartsTest(PagesTestBase):
+    """STYLE-5 (spec 4.3, 4.4, 4.8-4.12, D2, D5, D6): white cards with round corners and a soft shadow;
+    ONE dark card (Dashboard, Money this month) made from the app color, whose every text reads on it
+    (its own tokens; StyleTokensTest checks them for 220 app colors); green and red on money amounts only
+    (the Services trend word is not money); the Private note panel unlike the other cards; on paper the
+    dark card is ink on white and nothing is green or red."""
+
+    def test_cards_are_white_with_round_corners_and_a_soft_shadow(self):
+        tokens = root_tokens()
+        self.assertEqual((tokens["--radius-card"], tokens["--radius"]), ("18px", "12px"))
+        for selector in (".panel", ".kpi-strip"):  # the Money totals strip is a light card too
+            rule = rule_props(selector)
+            self.assertEqual((rule["background"], rule["border"], rule["border-radius"], rule["box-shadow"]),
+                             ("var(--surface)", "1px solid var(--border)", "var(--radius-card)", "var(--shadow)"),
+                             selector)
+        self.assertEqual(rule_props(".panel h2")["font-weight"], "700")
+        self.assertEqual(rule_props(".card-link")["color"], "var(--text)")
+        self.assertEqual(rule_props(".panel .meta")["color"], "var(--muted)")
+        # the Private note panel: a tint, a dashed edge, no shadow (it stays .no-print)
+        private = rule_props(".panel.private")
+        self.assertEqual((private["background"], private["border"], private["box-shadow"]),
+                         ("var(--raised)", "1px dashed var(--control)", "none"))
+        # a small box (Handover result and refusal, the empty box, search results) has the 12px corners
+        for selector in (".result", ".refusal", ".empty", ".results"):
+            self.assertEqual(rule_props(selector)["border-radius"], "var(--radius)", selector)
+
+    def test_one_dark_card_made_from_the_app_color(self):
+        card = rule_props(CARD)
+        self.assertEqual((card["background"], card["box-shadow"], card["color"], card["border-color"]),
+                         ("var(--highlight-fill)", "var(--shadow-raised)", "var(--text)", "transparent"))
+        # every color token a rule inside the card uses points to a token checked on the 3 stops
+        self.assertEqual({p: v for p, v in card.items() if p.startswith("--")}, {
+            "--text": "var(--highlight-ink)", "--muted": "var(--highlight-muted)", "--faint": "var(--highlight-muted)",
+            "--rule": "var(--highlight-rule)", "--border": "var(--highlight-rule)", "--control": "var(--highlight-rule)",
+            "--positive": "var(--positive-on-dark)", "--negative": "var(--negative-on-dark)",
+            "--accent-text": "var(--highlight-focus)"})  # the focus ring is --accent-text: white on the card
+        self.assertIn("align-self: start", declarations(CARD))  # B11 stays
+        # no other dark card: the fill is used by this one rule only
+        fill_rules = [sel for sel, body in css_rules() if "var(--highlight-fill)" in body]
+        self.assertEqual(fill_rules, [CARD])
+        # the fill: 3 stops, each the app color as text (--accent-text) taken darker
+        tokens = root_tokens()
+        self.assertEqual(re.findall(r"var\((--[\w-]+)\)", tokens["--highlight-fill"]), list(HIGHLIGHT_STOPS))
+        for stop in HIGHLIGHT_STOPS:
+            self.assertRegex(tokens[stop], r"^color-mix\(in srgb, var\(--accent-text\), #000000 \d+%\)$", stop)
+        page = self.page("/")
+        self.assertEqual(page.count('data-panel="money-month"'), 1)
+        # every class inside it is one these rules reach (a new class with its own color would show here)
+        classes = set(" ".join(re.findall(r'class="([^"]*)"', section(page, "money-month"))).split())
+        self.assertLessEqual(classes, {"kpis", "kpi", "kpi-label", "kpi-value", "num", "strong", "neg", "meta",
+                                       "card-link", "empty", "no-print"})
+
+    def test_green_and_red_only_on_money_amounts(self):
+        # Balance: green when 0 or more, red below 0; a Services trend word is never green or red (D5)
+        self.assertEqual(rule_props(".kpi-value.strong:not(.neg)")["color"], "var(--positive)")
+        self.assertEqual(rule_props(".neg")["color"], "var(--negative)")
+        self.assertEqual(rule_props(".trend .trend-up")["color"], "var(--accent-text)")
+        self.assertEqual(rule_props(".trend .trend-down")["color"], "var(--muted)")
+        green = {sel for sel, body in css_rules() if "var(--positive)" in body}
+        red = {sel for sel, body in css_rules() if "var(--negative)" in body}
+        self.assertEqual(green, {".kpi-value.strong:not(.neg)"})
+        # red is also a state (D4): an error, a field with an error, the Delete button
+        self.assertEqual(red, {".neg", ".error", '.input[aria-invalid="true"]', ".btn.danger"})
+
+    def test_services_chart_today_and_service(self):
+        line = rule_props(".chart .line")
+        self.assertEqual((line["stroke"], line["stroke-width"], line["stroke-linejoin"]),
+                         ("var(--accent)", "2.5", "round"))
+        self.assertEqual((rule_props(".chart .end")["fill"], rule_props(".chart .end")["font-weight"]),
+                         ("var(--accent-text)", "700"))
+        self.assertEqual(rule_props(".chart .gridline")["stroke"], "var(--grid)")
+        self.assertEqual(rule_props(".chart .gridline.base")["stroke"], "var(--grid-base)")
+        self.assertEqual(rule_props(".chart .tick")["fill"], "var(--muted)")
+        self.assertIn("padding: 0 32px 0 40px", declarations(".chart"))  # the ticks sit in this padding
+        today = rule_props(".today-tag")  # a small outlined pill: --accent-text on white reads for any color
+        self.assertEqual((today["color"], today["border"], today["border-radius"]),
+                         ("var(--accent-text)", "1px solid currentColor", "var(--radius-pill)"))
+        self.assertEqual(rule_props(".kind.k-service")["color"], "var(--accent-text)")
+
+    def test_on_paper_the_dark_card_is_ink_on_white(self):
+        card = rule_props(CARD, "print.css")
+        self.assertEqual((card["background"], card["box-shadow"], card["--highlight-ink"], card["--highlight-muted"],
+                          card["--positive-on-dark"], card["--negative-on-dark"]),
+                         ("none", "none", "#000", "#333", "#000", "#000"))
+        self.assertEqual(rule_props(".panel", "print.css")["box-shadow"], "none")
+        self.assertEqual(rule_props(".kpi-strip", "print.css")["box-shadow"], "none")
+        for selector in (".kpi-value.strong", ".kpi-value.strong:not(.neg)"):  # no green or red Balance
+            self.assertEqual(rule_props(selector, "print.css")["color"], "#000", selector)
 
 
 if __name__ == "__main__":

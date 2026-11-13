@@ -21,6 +21,12 @@
   .title-row { margin-bottom: 6mm; padding: 0; background: none; color: #000; }
   .title-row .sub { color: #333; }
   .chip[aria-current="true"] { background: none; border-color: #000; color: #000; }
+  /* cards print flat: no shadow; the one dark card (Dashboard, Money this month) prints as ink on white
+     like the others, and a Balance prints in ink, not in green or red (spec D6) */
+  .panel, .kpi-strip { box-shadow: none; }
+  .dashboard > [data-panel="money-month"] { background: none; box-shadow: none; --highlight-ink: #000;
+    --highlight-muted: #333; --highlight-rule: #888; --positive-on-dark: #000; --negative-on-dark: #000; }
+  .kpi-value.strong, .kpi-value.strong:not(.neg) { color: #000; }
   h1, h2 { break-after: avoid; }
   a { color: inherit; text-decoration: none; }
   table { width: 100%; border-collapse: collapse; }

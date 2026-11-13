@@ -45,10 +45,19 @@
   --wash: linear-gradient(180deg, transparent 0%, transparent 60%, var(--ground) 100%),
           linear-gradient(112deg, var(--accent-dark) 0%, var(--accent-base) 48%, var(--accent-light) 100%);
   --wash-h: 340px; --wash-h-narrow: 600px; --wash-radius: 28px;
-  /* the one card in the app color (Dashboard, Money this month): dark at the top left, lighter at the
-     bottom right; its text is --on-accent */
-  --highlight-fill: linear-gradient(160deg, var(--accent-dark) 0%, var(--accent-base) 55%, var(--accent-light) 100%);
-  --highlight-rule: color-mix(in srgb, var(--on-accent) 20%, transparent);
+  /* the one dark card (Dashboard, Money this month): the app color as text (--accent-text, dark enough
+     to read on white) taken darker, from the top left (darkest) to the bottom right (softer). It is dark
+     for every app color, so its text is white and the Balance a light green or a light red;
+     tests/test_pages_ui.py checks 4.5:1 for each text on each of the 3 stops, for any color */
+  --highlight: color-mix(in srgb, var(--accent-text), #000000 50%);
+  --highlight-mid: color-mix(in srgb, var(--accent-text), #000000 30%);
+  --highlight-end: color-mix(in srgb, var(--accent-text), #000000 15%);
+  --highlight-fill: linear-gradient(160deg, var(--highlight) 0%, var(--highlight-mid) 55%, var(--highlight-end) 100%);
+  --highlight-ink: #ffffff;                                                  /* title, amounts, links */
+  --highlight-muted: color-mix(in srgb, #ffffff 88%, var(--accent-text));    /* labels, the month */
+  --highlight-rule: color-mix(in srgb, var(--highlight-ink) 20%, transparent);  /* lines, the empty box */
+  --highlight-focus: #ffffff;                                                /* the focus ring on it */
+  --positive-on-dark: #9af2c4; --negative-on-dark: #ffd6d2;                  /* the Balance on it */
   --shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent), 0 6px 20px color-mix(in srgb, var(--text) 7%, transparent);
   --shadow-raised: 0 10px 30px color-mix(in srgb, var(--text) 16%, transparent);
   --font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
@@ -116,13 +125,15 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
    small white note; the filter row under it is a white bar (.list-toolbar below) */
 .canvas > .hint, .canvas > .lead { width: fit-content; max-width: 100%; padding: 8px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
 
-/* ---------- panels and the 12-column grid ---------- */
+/* ---------- panels and the 12-column grid ----------
+   A card (spec 4.3): white, a 1px --border edge, --radius-card corners and the soft --shadow; a bold ink
+   title, a grey sub line, ink foot links. An empty list keeps its frame (.empty below). */
 .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--gap); }
 .span-3 { grid-column: span 3; } .span-4 { grid-column: span 4; } .span-5 { grid-column: span 5; }
 .span-6 { grid-column: span 6; } .span-7 { grid-column: span 7; } .span-12 { grid-column: 1 / -1; }
-.panel { display: flex; flex-direction: column; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--card-pad); }
+.panel { display: flex; flex-direction: column; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow); padding: var(--card-pad); }
 .panel > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-.panel h2 { font-size: var(--fs-body); line-height: 24px; font-weight: 600; }
+.panel h2 { font-size: var(--fs-body); line-height: 24px; font-weight: 700; }
 .panel .meta { display: block; color: var(--muted); font-size: var(--fs-meta); line-height: 20px; }
 .panel .count { color: var(--text); font-weight: 600; white-space: nowrap; }
 .panel > footer { margin-top: auto; padding-top: 12px; display: flex; flex-wrap: wrap; gap: 8px 20px; }
@@ -148,30 +159,45 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .empty { padding: 12px 16px; border: 1px dashed var(--control); border-radius: var(--radius); color: var(--muted); }
 .kpis + .empty, .kpi + .rows, .kpi + .empty { margin-top: 12px; }
 
-/* KPIs are type: a grey label above an ink value, split by 1px rules */
+/* KPIs are type: a grey label above an ink value (24px, tabular figures), split by 1px rules. The
+   Balance (the strong value) is green when it is 0 or more and red below 0 (.neg): green and red are on
+   money amounts only (spec 4.4). */
 .kpis { display: grid; }
 .kpi { display: flex; flex-direction: column; padding: 8px 0; }
 .kpi + .kpi { border-top: 1px solid var(--rule); }
 .kpi-label { color: var(--muted); font-size: var(--fs-meta); line-height: 20px; }
 .kpi-value { font-size: var(--fs-title); line-height: 32px; font-weight: 500; white-space: nowrap; }
 .kpi-value.strong { font-weight: 700; }
+.kpi-value.strong:not(.neg) { color: var(--positive); }
 .neg { color: var(--negative); }
 
-/* Services: one series, faint grid, the line in the plain accent, its last value in --accent-text. One
-   height at every width (B17: the height attribute, CHART_HEIGHT in dashboard.py): x places are
-   percentages of the plot, the y ticks and the last value sit in the side padding, the line's stroke does
-   not scale. */
+/* Services: one series, faint grid, the line in the plain accent (2.5px, round joins), its last value
+   bold in --accent-text. One height at every width (B17: the height attribute, CHART_HEIGHT in
+   dashboard.py): x places are percentages of the plot, the y ticks and the last value sit in the side
+   padding, the line's stroke does not scale. The trend word is not money: Up in --accent-text, Down in
+   grey, both bold; the word carries the meaning, not a green or a red (spec D5). */
 .chart { display: block; width: 100%; margin: 4px 0 8px; padding: 0 32px 0 40px; overflow: visible; }
 .chart .plot { overflow: visible; }
 .chart .gridline { stroke: var(--grid); stroke-width: 1; }
 .chart .gridline.base { stroke: var(--grid-base); }
 .chart .tick { fill: var(--muted); font-size: 12px; font-family: var(--font); }
-.chart .line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-.chart .end { fill: var(--accent-text); font-size: 12px; font-weight: 600; font-family: var(--font); }
+.chart .line { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.chart .end { fill: var(--accent-text); font-size: 12px; font-weight: 700; font-family: var(--font); }
 .trend { font-size: var(--fs-meta); line-height: 20px; color: var(--muted); }
-.trend strong { color: var(--text); }
-.trend .trend-up { color: var(--positive); }
-.trend .trend-down { color: var(--negative); }
+.trend strong { color: var(--text); font-weight: 700; }
+.trend .trend-up { color: var(--accent-text); }
+.trend .trend-down { color: var(--muted); }
+
+/* ---------- the one dark card: Dashboard, Money this month (spec 4.3, D2) ----------
+   No other card is dark. It sets its own tokens, so every rule inside (the title, the month, the KPI
+   labels and values, the lines between them, the Balance, the foot links, the empty box, the text of a
+   panel that failed to load and the focus ring, which is --accent-text) reads on the dark fill. It keeps
+   its 1px edge, in transparent, so it is as high as its neighbours; align-self: start (B11) stays. */
+.dashboard > [data-panel="money-month"] {
+  --text: var(--highlight-ink); --muted: var(--highlight-muted); --faint: var(--highlight-muted);
+  --rule: var(--highlight-rule); --border: var(--highlight-rule); --control: var(--highlight-rule);
+  --positive: var(--positive-on-dark); --negative: var(--negative-on-dark); --accent-text: var(--highlight-focus);
+  background: var(--highlight-fill); border-color: transparent; box-shadow: var(--shadow-raised); color: var(--text); }
 
 /* ---------- search in the title row; live results float under it ---------- */
 .title-search { position: relative; }
@@ -315,8 +341,9 @@ details.change .form { max-width: none; }
 .toolbar { flex: 0 1 440px; }
 .toolbar .input { flex: 1; }
 
-/* the Private note box: a tone step, no border; print.css hides .no-print */
-.panel.private { background: var(--raised); border-color: var(--raised); }
+/* the Private note box: not like the other cards at a glance (spec 4.10): the --raised tint, a dashed
+   --control edge and no shadow; print.css hides .no-print */
+.panel.private { background: var(--raised); border: 1px dashed var(--control); box-shadow: none; }
 .notes { list-style: none; padding: 0; margin-bottom: 16px; display: grid; }
 .note { padding: 8px 0; }
 .note + .note { border-top: 1px solid var(--border); }
@@ -374,7 +401,9 @@ details.change .form { max-width: none; }
 .cal-day { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px; padding: 4px 0; }
 .cal-day + .cal-day { border-top: 1px solid var(--rule); }
 .cal-date { padding-top: 10px; font-size: var(--fs-meta); line-height: 24px; font-weight: 600; }
-.today-tag { display: block; color: var(--accent-text); font-size: var(--fs-small); line-height: 16px; font-weight: 600; }
+/* Today: a small pill under the date, outlined in --accent-text (bold --accent-text on white reads for any
+   app color; on the --active tint it does not for some colors) */
+.today-tag { display: block; width: fit-content; margin-top: 2px; padding: 0 8px; border: 1px solid currentColor; border-radius: var(--radius-pill); color: var(--accent-text); font-size: var(--fs-small); line-height: 18px; font-weight: 700; }
 .cal-none { padding: 10px 0; color: var(--faint); font-size: var(--fs-meta); line-height: 24px; }
 .cal-day .cal-none { margin-top: 0; }      /* not the panel's p + p gap: it sits level with the date */
 .cal-row { align-items: flex-start; }
@@ -399,9 +428,10 @@ fieldset.group legend { padding: 0; margin-bottom: 8px; font-size: var(--fs-meta
 .confirm-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; }
 .confirm-actions .form { display: block; }
 
-/* Money: the totals are type in one container split by 1px rules; Balance is the bold figure */
-.kpi-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: var(--gap); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
-.kpi-strip .kpi { padding: 14px 20px; }
+/* Money: the totals are type in one light card split by 1px rules (not dark: only the Dashboard card
+   is); Balance is the bold figure, green or red (spec 4.4) */
+.kpi-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: var(--gap); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow); }
+.kpi-strip .kpi { padding: 18px 24px; }
 .kpi-strip .kpi + .kpi { border-top: 0; border-left: 1px solid var(--rule); }
 .kpi-sub { color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
 table.money td.n { white-space: nowrap; }
@@ -472,8 +502,8 @@ details.rename[open] { flex-basis: 100%; padding-bottom: 4px; }
 details.rename[open] > summary { margin-bottom: 8px; }
 details.rename .form { max-width: none; }
 
-/* Handover: the result is a tone step; a refusal is the pale negative pair */
-.result, .refusal { margin-bottom: 16px; padding: 12px 16px; border-radius: var(--radius-control); font-size: var(--fs-meta); line-height: 20px; }
+/* Handover: the result is a tone step; a refusal is the pale negative pair (red is a state, D4) */
+.result, .refusal { margin-bottom: 16px; padding: 12px 16px; border-radius: var(--radius); font-size: var(--fs-meta); line-height: 20px; }
 .result { background: var(--raised); }
 .refusal { background: var(--refusal-bg); }
 .refusal strong { color: var(--refusal-ink); }
