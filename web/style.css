@@ -16,6 +16,14 @@
   --muted: #5c6066;
   --faint: #6b6b6b;
   --accent: #1f5c99;          /* the one hue: the Services line and focus */
+  /* The app color (Settings). The page head sets these 4 for the color the pastor picked
+     (churchmgr/app_color.py theme); these are the values of the default color. */
+  --accent-base: #1f5c99;     /* the color the gradient is made from */
+  --on-accent: #ffffff;       /* text on the gradient: readable on both ends */
+  --accent-text: #1f5c99;     /* the app color as text on the light surfaces */
+  --accent-light: color-mix(in srgb, var(--accent-base), #ffffff 15%);
+  --accent-dark: color-mix(in srgb, var(--accent-base), #000000 30%);
+  --gradient: linear-gradient(135deg, var(--accent-light), var(--accent-dark));
   --primary: #1d1f20;
   --primary-ink: #ffffff;
   --positive: #247b50;

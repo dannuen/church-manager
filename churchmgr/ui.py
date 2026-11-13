@@ -16,7 +16,7 @@ import html
 import threading
 import urllib.parse
 
-from . import i18n, money, settings
+from . import app_color, i18n, money, settings
 from .i18n import t
 
 NAV = (  # (key, TEXT key of the label, href)
@@ -264,6 +264,20 @@ def link_button(text, href, kind="secondary"):
 
 # ---------------------------------------------------------------- layout
 
+def _app_color_style():
+    """``<style>`` that sets the 4 colors of the app color of the open church copy (``app_color.theme`` of
+    a checked ``#rrggbb``), right after style.css. No church copy open (first run), or it cannot be read:
+    nothing, and style.css keeps its default colors."""
+    req = current_request()
+    if req is None or req.state.copy_folder is None:
+        return ""
+    try:
+        values = app_color.theme(settings.get_app_color(req.conn))
+    except Exception:  # the church copy cannot be read: the error page still needs its head
+        return ""
+    return "<style>:root{" + ";".join(f"{name}:{value}" for name, value in values.items()) + "}</style>\n"
+
+
 def _head(title):
     lang = current_lang()
     # The title holds pastor data (a name, the church name), and no element can carry its own lang there.
@@ -273,7 +287,8 @@ def _head(title):
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f'{title_tag}{h(title)}</title>\n'
         '<link rel="stylesheet" href="/static/style.css">\n'
-        '<link rel="stylesheet" href="/static/print.css">\n'
+        + _app_color_style()
+        + '<link rel="stylesheet" href="/static/print.css">\n'
         '<script src="/static/app.js" defer></script>\n</head>\n'
     )
 

@@ -1,5 +1,6 @@
-"""Settings (card C3): ``/settings`` changes the church name, the care reminder time, the Hermes door and
-the language of the screens. ``POST /language`` is the language switch at the top of every page.
+"""Settings (card C3): ``/settings`` changes the church name, the care reminder time, the Hermes door,
+the language of the screens and the app color. ``POST /language`` is the language switch at the top of
+every page.
 
 The care reminder time is a whole number of months from 1 to 24: a Person needs a visit when their
 last Visit is older than that. The page shows what the setting gives today (how many People need a
@@ -36,6 +37,15 @@ def safe_next(value):
     return "/"
 
 
+def _shown_color(conn, posted):
+    """The color in the picker: the one sent back with a refused form when it is a good color, else the
+    saved one (a color picker cannot show a bad value)."""
+    try:
+        return settings.check_app_color(posted)
+    except ValueError:
+        return settings.get_app_color(conn)
+
+
 def _view(req, values=None, errors=None, status=200):
     conn = req.conn
     errors = errors or {}
@@ -56,6 +66,8 @@ def _view(req, values=None, errors=None, status=200):
         + ui.select_field(t("core.language"), settings.LANGUAGE, ui.LANG_NAMES,
                           v.get(settings.LANGUAGE, settings.get_language(conn)), error=errors.get(settings.LANGUAGE),
                           hint=t("settings.language_hint"))
+        + ui.field(t("settings.app_color"), settings.APP_COLOR, _shown_color(conn, v.get(settings.APP_COLOR)),
+                   type="color", error=errors.get(settings.APP_COLOR), hint=t("settings.app_color_hint"))
         + form_error(errors) + ui.button(t("settings.save"))
     )
     form_panel = panel("settings-form", t("settings.panel_church"), ui.form("/settings", inner))
@@ -102,6 +114,12 @@ def settings_post(req):
             settings.check_language(lang)
         except ValueError as exc:
             errors[settings.LANGUAGE] = i18n.error_text(exc)
+    color = f.get(settings.APP_COLOR)  # no field (an old form) = keep the app color as it is
+    if color is not None:
+        try:
+            color = settings.check_app_color(color)
+        except ValueError as exc:
+            errors[settings.APP_COLOR] = i18n.error_text(exc)
     if errors:
         return _view(req, f, errors, 400)
     with transaction(req.conn):
@@ -111,6 +129,8 @@ def settings_post(req):
             settings.set_setting(req.conn, settings.HERMES_DOOR, door)
         if lang is not None:
             settings.set_setting(req.conn, settings.LANGUAGE, lang)
+        if color is not None:
+            settings.set_setting(req.conn, settings.APP_COLOR, color)
     door_now = "on" if settings.hermes_door_on(req.conn) else "off"
     # made after the save: the flash is in the language the next page shows
     return Response.redirect(ui.url("/settings", msg=t("settings.saved", name=name, months=tn("core.months", months),
