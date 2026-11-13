@@ -40,11 +40,12 @@
   /* the Year report chart: the Offerings and Expenses bars and their legend keys. Spec 3.3: the two
      colors stay as they were, on screen and on paper (green is money) */
   --bar-offerings: #2f6f4f; --bar-expenses: #999999;
-  /* the wash at the top of the canvas: the app color from dark (left) to light (right), fading into the
-     ground in its lower 40% */
-  --wash: linear-gradient(180deg, transparent 0%, transparent 60%, var(--ground) 100%),
+  /* the wash at the top of the canvas: the app color from dark (left) to light (right). Its first layer is
+     the fade into the ground, drawn over its last --wash-fade only (.canvas::before): 40% of --wash-h, so a
+     wash of --wash-h looks as before, and a taller wash (a tall head) keeps the same fade under its text */
+  --wash: linear-gradient(180deg, transparent, var(--ground)),
           linear-gradient(112deg, var(--accent-dark) 0%, var(--accent-base) 48%, var(--accent-light) 100%);
-  --wash-h: 340px; --wash-h-narrow: 600px; --wash-radius: 28px;
+  --wash-h: 340px; --wash-h-narrow: 600px; --wash-fade: 136px; --wash-fade-narrow: 240px; --wash-radius: 28px;
   /* the one dark card (Dashboard, Money this month): the app color as text (--accent-text, dark enough
      to read on white) taken darker, from the top left (darkest) to the bottom right (softer). It is dark
      for every app color, so its text is white and the Balance a light green or a light red;
@@ -94,11 +95,12 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 /* The wash: one layer of the app color behind the top of the canvas (the language switch, the title row
    and the top of the first cards). It is not a card. The sidebar stays on the plain ground. */
 .canvas { position: relative; isolation: isolate; min-width: 0; padding: 14px var(--pad) var(--pad); }
-.canvas::before { content: ""; position: absolute; z-index: -1; top: 8px; left: 0; right: 12px; height: var(--wash-h); background: var(--wash); border-radius: var(--wash-radius) var(--wash-radius) 0 0; pointer-events: none; }
+.canvas::before { content: ""; position: absolute; z-index: -1; top: 8px; left: 0; right: 12px; height: var(--wash-h); background: var(--wash); background-size: 100% var(--wash-fade), 100% 100%; background-position: 0 100%, 0 0; background-repeat: no-repeat; border-radius: var(--wash-radius) var(--wash-radius) 0 0; pointer-events: none; }
 
 /* ---------- title row on the wash: one h1, one finding line, the actions ----------
-   The title keeps at least 240px: when the actions leave it less, they wrap under it (861px to 1180px) */
-.title-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: var(--gap); padding: 0 12px 14px; color: var(--on-accent); }
+   The title keeps at least 240px: when the actions leave it less, they wrap under it (861px to 1180px).
+   It is the anchor the wash grows with (STYLE-FIX-1, at the end of this file). */
+.title-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: var(--gap); padding: 0 12px 14px; color: var(--on-accent); anchor-name: --title-row; }
 .title-row > :first-child { flex: 1 1 240px; min-width: 0; }
 .title-row h1 { font-size: var(--fs-display); line-height: 36px; font-weight: 700; }
 .title-row .sub { margin-top: 2px; color: var(--on-accent); }
@@ -254,8 +256,10 @@ input[type="checkbox"] { width: 20px; height: 20px; margin: 0; accent-color: var
    last; the row under the pointer turns --raised with round ends. Only a data row (data-row) does: never
    a total row. Figures stay right-aligned in tabular figures, in ink. A wide table scrolls inside its card
    (.table-wrap), never the page. Separate borders (spacing 0): a collapsed table cannot round a cell.
-   :where() keeps the header and the cells at the weight of one tag, so print.css (later) still wins. */
-.table-wrap { overflow-x: auto; max-width: 100%; scrollbar-width: thin; scrollbar-color: var(--control) transparent; }
+   :where() keeps the header and the cells at the weight of one tag, so print.css (later) still wins.
+   The wrap is positioned: the hidden header word of an Edit column (.sr-only, absolute) stays inside its
+   scroll box; it pushed the Money page sideways from 1250px to 1340px (STYLE-FIX-1). */
+.table-wrap { position: relative; overflow-x: auto; max-width: 100%; scrollbar-width: thin; scrollbar-color: var(--control) transparent; }
 table { width: 100%; border-collapse: separate; border-spacing: 0; }
 th { padding: 0 12px; text-align: left; font-weight: 600; }
 :where(thead) th { height: 36px; font-size: var(--fs-small); line-height: 16px; color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap; }
@@ -290,7 +294,7 @@ td .num { white-space: nowrap; }   /* a phone number, a date or an amount never 
   .nav-item { flex: none; min-height: 44px; }
   .nav-item[aria-current="page"] { scroll-initial-target: nearest; }
   .canvas { padding: 16px; }
-  .canvas::before { left: 8px; right: 8px; height: var(--wash-h-narrow); }   /* the title row stacks */
+  .canvas::before { left: 8px; right: 8px; height: var(--wash-h-narrow); background-size: 100% var(--wash-fade-narrow), 100% 100%; }   /* the title row stacks */
   .grid > * { grid-column: 1 / -1 !important; }
   .title-row { flex-direction: column; align-items: stretch; }
   .title-row > :first-child { flex: none; }   /* a column: no 240px basis in height */
@@ -647,6 +651,9 @@ table.documents td:last-child a { color: var(--text); font-weight: 600; }
 @media screen and (min-width: 1181px) {
   .canvas:has(> .dashboard) { height: 100vh; min-height: 640px; padding-bottom: 12px; display: flex; flex-direction: column; }
   .canvas:has(> .dashboard) > .lang-switch { position: absolute; top: 12px; right: 40px; margin: 0; z-index: 1; }
+  /* a flash comes first at the canvas top: then the language switch goes back in the flow above it, as on
+     every other page, so it never sits on the pale flash (STYLE-FIX-1) */
+  .canvas:has(> .dashboard):has(> .flash) > .lang-switch { position: static; flex: none; margin: 0 12px 4px; }
   .canvas:has(> .dashboard) > .title-row { flex: none; margin-bottom: 12px; padding-top: 6px; padding-bottom: 8px; }
   .canvas:has(> .dashboard) > .flash { flex: none; margin-bottom: 8px; }
   .dashboard { flex: 1 1 0; min-height: 0; gap: 14px; grid-template-rows: minmax(150px, 1fr) auto; }
@@ -660,13 +667,32 @@ table.documents td:last-child a { color: var(--text); font-weight: 600; }
     flex: 1 1 0; min-height: 0; overflow-y: auto; align-content: start; overscroll-behavior: contain;
     scrollbar-width: thin; scrollbar-color: var(--control) transparent; scrollbar-gutter: stable;
     margin-right: -14px; padding-right: 6px; }
-  /* row 2 keeps its own height (B11), at least --dash-row2; Sent documents never taller: its rows scroll */
+  /* row 2 keeps its own height (B11), at least --dash-row2. Sent documents and Money this month are never
+     taller: the Sent rows scroll; the Money amounts sit 4px closer, and in an empty month (its dashed box
+     under them) the 3 zero amounts sit side by side, as on the Money page, so every word still shows
+     (STYLE-FIX-1: the empty card was 372-392px, and the page scrolled) */
   .dashboard > [data-panel="services"], .dashboard > [data-panel="money-month"],
   .dashboard > [data-panel="sent-documents"] { min-height: var(--dash-row2); }
-  .dashboard > [data-panel="sent-documents"] { max-height: var(--dash-row2); }
+  .dashboard > [data-panel="money-month"], .dashboard > [data-panel="sent-documents"] { max-height: var(--dash-row2); }
+  .dashboard > [data-panel="money-month"] .kpi { padding: 4px 0; }
+  .dashboard > [data-panel="money-month"]:has(> .empty) .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dashboard > [data-panel="money-month"]:has(> .empty) .kpi + .kpi { border-top: 0; border-left: 1px solid var(--rule); padding-left: 12px; }
 }
 @media screen and (min-width: 1181px) and (max-height: 720px) {
   .dashboard .row { min-height: 34px; padding: 2px 0; }
   .dashboard > [data-panel="services"], .dashboard > [data-panel="money-month"],
   .dashboard > [data-panel="sent-documents"] { padding-top: 10px; padding-bottom: 8px; }
+}
+
+/* ---------- STYLE-FIX-1: the wash grows with the head ----------
+   The head above the cards (the language switch, a flash, the title row) can be as tall as its text: a
+   long name, a finding line on 2 lines, the buttons wrapped under the title (861px to 1180px). The wash
+   ends --wash-fade + 8px under the title row (its anchor), so every text on it sits on the solid part;
+   it is never shorter than before (--wash-h, --wash-h-narrow), so a short head looks the same. A browser
+   with no anchors keeps the fixed height above. */
+@supports (anchor-name: --a) {
+  .canvas::before { height: auto; min-height: var(--wash-h); bottom: calc(anchor(--title-row bottom) - var(--wash-fade) - 8px); }
+  @media (max-width: 860px) {
+    .canvas::before { min-height: var(--wash-h-narrow); bottom: calc(anchor(--title-row bottom) - var(--wash-fade-narrow) - 8px); }
+  }
 }

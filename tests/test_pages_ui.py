@@ -12,6 +12,8 @@ STYLE-4 (classes FormsAndButtonsTest, FormControlsTest): pills, one control heig
 focus ring that no rule takes away; every form control of a page carries a class that style.css styles.
 STYLE-5 (class CardsAndChartsTest): cards, the one dark card, green and red on money only.
 STYLE-6 (class PrintAndFinalWalkTest): paper is ink on white; the faults of the final walk stay fixed.
+STYLE-FIX-1 (class StyleFix1Test): the wash grows with the head; the Dashboard language switch and a flash;
+a table's own scroll box; Money this month fits row 2 in an empty month.
 """
 
 import datetime as dt
@@ -883,6 +885,111 @@ class PrintAndFinalWalkTest(PagesTestBase):
         # card head link broke over 2 lines
         self.assertIn("max-width: none", declarations(".list-item .side"))
         self.assertIn("white-space: nowrap", declarations("header .card-link"))
+
+
+# ---------------------------------------------------------------- STYLE-FIX-1 helpers
+
+def at_block(css, head):
+    """The inside of the first ``<head> {…}`` block of ``css``, and ``css`` without that block."""
+    start = css.index(head)
+    inside = css.index("{", start) + 1
+    depth, end = 1, inside
+    while depth:
+        depth += {"{": 1, "}": -1}.get(css[end], 0)
+        end += 1
+    return css[inside:end - 1], css[:start] + css[end:]
+
+
+def block_props(css, selector):
+    """``{property: value}`` of the rules of ``css`` whose selector list holds exactly ``selector``."""
+    found = {}
+    for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css):
+        if selector in (s.strip() for s in sel.split(",")):
+            found.update((p.strip(), v.strip()) for p, v in (d.split(":", 1) for d in body.split(";") if d.strip()))
+    return found
+
+
+WIDE = "screen and (min-width: 1181px)"  # the Dashboard on one screen
+
+
+class StyleFix1Test(PagesTestBase):
+    """STYLE-FIX-1, the bugs of TEST-STYLE-1. BUG-2: the wash grows with the head (a CSS anchor on the title
+    row), so its white text never sits on the fade, whatever the title, the width or a flash; a short head
+    looks as before. BUG-1: on the Dashboard a flash puts the language switch back in the flow (it sat on
+    the pale flash). BUG-3: the hidden Edit header of a table stays in the table's own scroll box (the Money
+    page scrolled sideways). BUG-4: Money this month fits row 2 of the Dashboard, an empty month too."""
+
+    def test_bug2_the_wash_grows_with_the_head(self):
+        tokens = root_tokens()
+        # the fade is a fixed length at the bottom of the wash: 40% of the old fixed heights, so a wash of
+        # the old height looks the same
+        self.assertEqual((tokens["--wash-h"], tokens["--wash-fade"]), ("340px", "136px"))
+        self.assertEqual((tokens["--wash-h-narrow"], tokens["--wash-fade-narrow"]), ("600px", "240px"))
+        self.assertTrue(tokens["--wash"].startswith("linear-gradient(180deg, transparent, var(--ground)),"))
+        self.assertEqual(rule_props(".title-row")["anchor-name"], "--title-row")
+        inside, outside = at_block(style_css(), "@supports (anchor-name: --a)")
+        narrow, wide = at_block(inside, "@media (max-width: 860px)")
+        # with no anchors (outside @supports): the fixed height as before, the fade drawn at its bottom
+        self.assertNotIn("anchor(", outside)
+        top_level = re.sub(r"@media[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}", "", outside)
+        base = block_props(top_level, ".canvas::before")
+        self.assertEqual((base["height"], base["background"], base["background-size"], base["background-position"],
+                          base["background-repeat"]),
+                         ("var(--wash-h)", "var(--wash)", "100% var(--wash-fade), 100% 100%", "0 100%, 0 0", "no-repeat"))
+        stacked = media_props("(max-width: 860px)", ".canvas::before")
+        self.assertIn("height: var(--wash-h-narrow)", stacked)
+        self.assertIn("background-size: 100% var(--wash-fade-narrow), 100% 100%", stacked)
+        # with anchors: the wash ends its fade + 8px under the title row, never shorter than before
+        for css, low, fade in ((wide, "var(--wash-h)", "var(--wash-fade)"),
+                               (narrow, "var(--wash-h-narrow)", "var(--wash-fade-narrow)")):
+            rule = block_props(css, ".canvas::before")
+            self.assertEqual(rule.get("min-height"), low)
+            self.assertEqual(rule.get("bottom"), f"calc(anchor(--title-row bottom) - {fade} - 8px)")
+        self.assertEqual(block_props(wide, ".canvas::before")["height"], "auto")
+        # one title row a page, in the canvas next to the wash: the anchor is that page's own
+        page = self.page("/people")
+        self.assertEqual(page.count('class="title-row"'), 1)
+        self.assertRegex(page, r'<main class="canvas">.*<header class="title-row">')
+
+    def test_bug1_with_a_flash_the_dashboard_language_switch_is_in_the_flow(self):
+        # no flash: as before, the switch sits at the top right of the canvas
+        self.assertIn("position: absolute", media_props(WIDE, ".canvas:has(> .dashboard) > .lang-switch"))
+        flow = media_props(WIDE, ".canvas:has(> .dashboard):has(> .flash) > .lang-switch")
+        self.assertIn("position: static", flow)
+        self.assertIn("margin: 0 12px 4px", flow)  # as on every other page (.lang-switch)
+        self.assertIn("margin: 0 12px 4px", declarations(".lang-switch"))
+        # the real page: the switch, then the flash, both children of the canvas; the grid too
+        page = self.page("/?msg=" + urllib.parse.quote("Đã lưu."))
+        self.assertRegex(page, r'<main class="canvas"><form class="lang-switch"[^>]*>.*?</form><p class="flash" role="status">')
+        self.assertIn('</header><div class="grid dashboard">', page)
+
+    def test_bug3_a_table_scrolls_inside_its_own_box(self):
+        # the hidden Edit header word is absolute: the positioned wrap holds it (it pushed the Money page
+        # sideways from 1250px to 1340px)
+        self.assertIn("position: absolute", declarations(".sr-only"))
+        wrap = rule_props(".table-wrap")
+        self.assertEqual((wrap["position"], wrap["overflow-x"]), ("relative", "auto"))
+        page = self.page("/money")
+        self.assertIn('<th scope="col" class="edit no-print"><span class="sr-only">', page)
+        self.assertIn('<div class="table-wrap">', page)
+
+    def test_bug4_money_this_month_fits_row_2_in_an_empty_month(self):
+        card = media_props(WIDE, CARD)
+        self.assertIn("min-height: var(--dash-row2)", card)
+        self.assertIn("max-height: var(--dash-row2)", card)
+        # capped, never cut: no rule of the card hides what does not fit; the content is made to fit
+        self.assertNotIn("overflow", " ".join(body for sel, body in css_rules() if "money-month" in sel))
+        self.assertIn("padding: 4px 0", media_props(WIDE, CARD + " .kpi"))
+        empty = CARD + ":has(> .empty)"  # an empty month: the 3 zero amounts side by side
+        self.assertIn("grid-template-columns: repeat(3, minmax(0, 1fr))", media_props(WIDE, empty + " .kpis"))
+        side = media_props(WIDE, empty + " .kpi + .kpi")
+        self.assertIn("border-top: 0", side)
+        self.assertIn("border-left: 1px solid var(--rule)", side)
+        # the real markup: in an empty month the dashed box is a child of the card, right after the amounts
+        html = dashboard._money_month({"offerings": 0, "expenses": 0, "balance": 0}, TODAY, "span-4")
+        self.assertIn('</div></div><p class="empty">', html)
+        self.assertNotIn('class="empty"', dashboard._money_month({"offerings": 5, "expenses": 2, "balance": 3},
+                                                                 TODAY, "span-4"))
 
 
 if __name__ == "__main__":

@@ -561,3 +561,15 @@ for w, f, b in NONTEXT:
     print(f"{w:74} {P[f]:8} {P[b]:8} {r:5.2f}  {'PASS' if r >= 3 else ('info' if 'information' in w else 'FAIL')}")
 print(f"LOWEST NON-TEXT RATIO: {lown[0]:.2f}  ({lown[1]})")
 ```
+
+## After approval (pastor rules)
+
+These rules came after the pastor said yes to round 2. Where they differ from the text above, they win. `web/style.css` follows them.
+
+| # | Rule | What the code does |
+|---|---|---|
+| A1 | The colors come from the app color (pastor rule on t_be2d76ac) | The teal hex values in sections 3, 4 and 6 are only the look of one color. `--primary*`, `--focus` and the `--wash-*` colors are not tokens of their own: they are built from the app color the pastor picks in Settings, as the `--accent-*` tokens (`--accent`, `--accent-base`, `--accent-text`, `--accent-light`, `--accent-dark`, `--accent-deep`), `--on-accent` and `--gradient`. The page head sets 4 of them. |
+| A2 | Today tag | An outlined pill: `--accent-text` text and a 1px edge in the same color, no fill. |
+| A3 | Main button in the title row, on hover | Its text is underlined; the fill stays `--on-accent`. |
+| A4 | Text of the current chip (the tint chip) | `--accent-deep`, bold: it reads on the `--active` tint (contrast). |
+| A5 | The wash grows with the head (STYLE-FIX-1) | The wash is never shorter than before (`--wash-h` 340px; `--wash-h-narrow` 600px under 861px). When the head is taller (a long title, a flash, buttons wrapped under the title), the wash ends `--wash-fade` + 8px under the title row (a CSS anchor on `.title-row`), so every text on it sits on the solid part. The fade is a fixed length at its bottom: `--wash-fade` 136px (`--wash-fade-narrow` 240px), 40% of the old heights, so a short head looks as before. A browser with no CSS anchors keeps the fixed height. |
