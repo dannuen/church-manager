@@ -323,6 +323,23 @@ def check_statement(port, source_db, kind, bodies):
                 f"in the source); {'PRIVATE NOTE FOUND' if leak else 'no PRIVATE-NOTE-MARKER'}")
 
 
+def check_year_report(port, source_db, bodies):
+    year = date.today().year
+    status, _h, body = request(port, "GET", f"/money/year?year={year}")
+    page = body.decode("utf-8")
+    with closing(read_only(source_db)) as conn:
+        names = [r[0] for r in conn.execute(
+            "SELECT p.full_name FROM offering o JOIN person p ON p.id = o.giver_person_id UNION "
+            "SELECT f.name FROM offering o JOIN family f ON f.id = o.giver_family_id")]
+        span = (f"{year}-01-01", f"{year}-12-31")
+        sums = [conn.execute(f"SELECT COALESCE(SUM(amount), 0) FROM {t} WHERE date BETWEEN ? AND ?", span).fetchone()[0]
+                for t in ("offering", "expense")]
+    shown = [int(m.replace(".", "")) for m in re.findall(r"(-?[0-9][0-9.]*) ₫", strip_tags(page))]
+    leak = MARKER in body or any(b in body for b in bodies) or any(html.escape(n) in page for n in names)
+    ok = status == 200 and "Year report" in page and all(s in shown for s in sums) and not leak
+    return ok, f"GET /money/year -> {status}; totals {sums} {'shown' if all(s in shown for s in sums) else 'NOT shown'}; {'LEAK' if leak else 'no Giver name, no Private note'}"
+
+
 def agent(copy, root, *argv):
     """``python -m churchmgr.agent ARGV --copy COPY --copies-root ROOT``, run in this folder.
     Returns ``(exit code, the JSON answer, stdout + stderr bytes)``."""
@@ -514,6 +531,7 @@ def page_paths(db_path):
     out += ["/care", "/care?log=all",
             "/money", f"/money?month={today:%Y-%m}", "/money/offerings/new", "/money/expenses/new",
             f"/money/expenses/{expense}/edit", "/money/statement",
+            f"/money/year?year={today.year}",
             f"/money/statement?person_id={giver}&year={today.year}",
             f"/money/statement?family_id={giver_family}&year={today.year}"]
     out += [f"/money/offerings/{oid}/edit" for oid in offerings]
@@ -767,6 +785,7 @@ def check_app(checks, port, tmp, source_db, people, state):
 
     for kind in ("person", "family"):
         checks.run(f"5. Giving statement of a {kind.title()}", check_statement, port, source_db, kind, bodies)
+    checks.run("5. Year report totals, no Giver name, no Private note", check_year_report, port, source_db, bodies)
     checks.run("5. Agent CLI (Hermes door)", check_agent, port, tmp, source_db, bodies)
 
 

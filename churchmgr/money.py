@@ -257,6 +257,46 @@ def month_totals(conn, year, month):
     return {"offerings": offerings, "expenses": expenses, "balance": offerings - expenses}
 
 
+def percent_change(now, before):
+    """Whole percent (half away from zero) that ``now`` moved from ``before`` (a rise is +, even from a negative); ``None`` when ``before`` is 0.
+    Shown only, never stored. Integer maths: no float."""
+    if before == 0:
+        return None
+    top, bottom = (now - before) * 100, abs(before)
+    whole, rest = divmod(abs(top), bottom)
+    whole += 1 if 2 * rest >= bottom else 0
+    return whole if top > 0 else -whole
+
+
+def year_report(conn, year):
+    """The Year report: totals only (no Giver, no note). Returns ``{'year', 'church_name', 'months': [12 of
+    {'month', 'offerings', 'expenses', 'balance'}], 'funds': [(name, total)], 'categories': [(name, total)],
+    'total': {...}, 'before': {...} or None (year 1900)}``. ``before`` and ``total`` hold offerings,
+    expenses and balance of the year. A no-name offering counts everywhere."""
+    year = _check_year(year)
+
+    def year_total(y):
+        rows = [month_totals(conn, y, mo) for mo in range(1, 13)]
+        offerings, expenses = sum(r["offerings"] for r in rows), sum(r["expenses"] for r in rows)
+        return rows, {"offerings": offerings, "expenses": expenses, "balance": offerings - expenses}
+
+    def by(table, join_column):
+        return [(r[0], r[1]) for r in conn.execute(
+            f"SELECT li.name, SUM(x.amount) FROM {table} x JOIN list_item li ON li.id = x.{join_column} "
+            "WHERE x.date BETWEEN ? AND ? GROUP BY li.id ORDER BY li.name", (f"{year:04d}-01-01", f"{year:04d}-12-31"))]
+
+    rows, total = year_total(year)
+    return {
+        "year": year,
+        "church_name": settings.get_setting(conn, "church_name"),
+        "months": [{"month": i + 1, **r} for i, r in enumerate(rows)],
+        "funds": by("offering", "fund_id"),
+        "categories": by("expense", "spending_category_id"),
+        "total": total,
+        "before": year_total(year - 1)[1] if year > 1900 else None,
+    }
+
+
 # ---------------------------------------------------------------- Giving statement
 
 _FAMILY_WHERE = (

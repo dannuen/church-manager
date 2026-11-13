@@ -225,7 +225,8 @@ def money_page(req):
         + f'<div class="span-6 stack">{_expenses_panel(expenses, totals["expenses"], scope)}'
         + f"{_statement_picker(conn, year)}</div></div>"
     )
-    actions = (ui.link_button(t("money.record_expense"), "/money/expenses/new")
+    actions = (ui.link_button(t("money.year_report"), ui.url("/money/year", year=year))
+               + ui.link_button(t("money.record_expense"), "/money/expenses/new")
                + ui.link_button(t("money.record_offering"), "/money/offerings/new", "primary"))
     return Response.html(ui.page(t("money.title"), body, "money", sub=finding, actions=actions))
 
@@ -604,6 +605,99 @@ def statement_page(req):
     return Response.html(ui.page(t("money.giving_statement"), body, "money", sub=sub, actions=actions))
 
 
+# ---------------------------------------------------------------- /money/year
+
+def _signed(n):
+    return ("+" if n > 0 else "") + money_data.format_vnd(n)
+
+
+def _chart(report):
+    """Bars of Offerings and Expenses per month, inline SVG. Heights are whole pixels (integer maths);
+    fills are colours, so they print (a CSS background would not)."""
+    top = max([m[k] for m in report["months"] for k in ("offerings", "expenses")] + [1])
+    bars = ""
+    for m in report["months"]:
+        x = (m["month"] - 1) * 60 + 8
+        for k, dx, fill in (("offerings", 0, "#2f6f4f"), ("expenses", 22, "#999")):
+            height = m[k] * 150 // top
+            bars += f'<rect x="{x + dx}" y="{160 - height}" width="20" height="{height}" fill="{fill}"/>'
+        bars += f'<text x="{x + 20}" y="178" text-anchor="middle" font-size="11">{m["month"]}</text>'
+    label = t("money.year_chart", year=report["year"])
+    legend = (f'<p class="hint"><span style="color:#2f6f4f">\u25a0</span> {h(t("money.offerings"))} \u00b7 '
+              f'<span style="color:#999">\u25a0</span> {h(t("money.expenses"))}</p>')
+    return (f'<svg class="year-chart" viewBox="0 0 720 184" role="img" aria-label="{h(label)}" width="100%">{bars}</svg>'
+            + legend)
+
+
+def _months_table(report):
+    rows = "".join(
+        f'<tr data-row><td>{h(ui.fmt_month(report["year"], m["month"]))}</td><td class="n">{money_cell(m["offerings"])}</td>'
+        f'<td class="n">{money_cell(m["expenses"])}</td><td class="n">{money_cell(m["balance"])}</td></tr>'
+        for m in report["months"])
+    tot = report["total"]
+    rows += (f'<tr class="total"><th scope="row">{h(t("money.year"))} {report["year"]}</th>'
+             f'<td class="n">{money_cell(tot["offerings"], True)}</td><td class="n">{money_cell(tot["expenses"], True)}</td>'
+             f'<td class="n">{money_cell(tot["balance"], True)}</td></tr>')
+    head = "".join(f'<th scope="col"{c}>{h(w)}</th>' for w, c in (
+        (t("money.month"), ""), (t("money.offerings"), ' class="n"'), (t("money.expenses"), ' class="n"'),
+        (t("money.balance"), ' class="n"')))
+    return (f'<div class="table-wrap"><table class="list money year-months"><thead><tr>{head}</tr></thead>'
+            f"<tbody>{rows}</tbody></table></div>")
+
+
+def _compare_table(report):
+    before = report["before"]
+    if before is None:
+        return empty(t("money.compare_none", year=report["year"] - 1))
+    head = "".join(f'<th scope="col"{c}>{h(w)}</th>' for w, c in (
+        ("", ""), (report["year"], ' class="n"'), (report["year"] - 1, ' class="n"'),
+        (t("money.compare_change"), ' class="n"'), (t("money.compare_percent"), ' class="n"')))
+    rows = ""
+    for key, label in (("offerings", "money.offerings"), ("expenses", "money.expenses"), ("balance", "money.balance")):
+        now, then = report["total"][key], before[key]
+        pct = money_data.percent_change(now, then)
+        pct_text = "\u2013" if pct is None else ("+" if pct > 0 else "") + f"{pct}%"
+        rows += (f'<tr data-row><th scope="row">{h(t(label))}</th><td class="n">{money_cell(now)}</td>'
+                 f'<td class="n">{money_cell(then)}</td><td class="n">{h(_signed(now - then))}</td>'
+                 f'<td class="n">{h(pct_text)}</td></tr>')
+    return (f'<div class="table-wrap"><table class="list money year-compare"><thead><tr>{head}</tr></thead>'
+            f"<tbody>{rows}</tbody></table></div>")
+
+
+def year_page(req):
+    today = _dt.date.today()
+    raw = (req.query.get("year") or "").strip() or str(today.year)
+    try:
+        report = money_data.year_report(req.conn, raw)
+    except ValueError as exc:
+        body = f'<p class="error" role="alert">{h(i18n.error_text(exc))}</p>'
+        return Response.html(ui.page(t("money.year_report"), body, "money"), 400)
+    year, tot = report["year"], report["total"]
+    funds = _table("year-funds", [(t("money.fund"), False), (t("money.amount"), True)],
+                   [[h(n), money_cell(a)] for n, a in report["funds"]], t("money.total_offerings"), tot["offerings"])
+    cats = _table("year-categories", [(t("money.spending_category"), False), (t("money.amount"), True)],
+                  [[h(n), money_cell(a)] for n, a in report["categories"]], t("money.total_expenses"), tot["expenses"])
+    form = ('<form class="year-form" action="/money/year" method="get">'
+            f'<label for="yr-year">{h(t("money.year"))}</label><div class="search-line">'
+            f'<input class="input" id="yr-year" name="year" type="number" min="1900" max="9999" step="1" '
+            f'value="{year}" required><button class="btn secondary" type="submit">{h(t("money.show"))}</button></div></form>')
+    actions = form + f'<button class="btn primary" type="button" data-print>{h(t("core.btn_print"))}</button>'
+    body = (
+        '<section class="panel statement year-report" data-panel="year-report" aria-labelledby="yr-title">'
+        '<header class="statement-head">'
+        f'<p class="statement-church" lang="vi">{h(report["church_name"] or "")}</p>'
+        f'<h2 id="yr-title">{h(t("money.year_report_title", year=year))}</h2>'
+        '<dl class="kv">'
+        f'<div><dt>{h(t("money.printed"))}</dt><dd class="num">{h(ui.fmt_date(today))}</dd></div>'
+        "</dl></header>"
+        f"{_chart(report)}{_months_table(report)}"
+        f'<h3>{h(t("money.by_fund"))}</h3>{funds}'
+        f'<h3>{h(t("money.by_category"))}</h3>{cats}'
+        f'<h3>{h(t("money.compare_title", year=year - 1))}</h3>{_compare_table(report)}'
+        "</section>")
+    return Response.html(ui.page(t("money.year_report"), body, "money", actions=actions))
+
+
 ROUTES = [
     ("GET", "/money", money_page),
     ("GET", "/money/offerings/new", offering_new_page),
@@ -617,4 +711,5 @@ ROUTES = [
     ("POST", "/money/expenses/<int:id>/edit", expense_edit_post),
     ("POST", "/money/expenses/<int:id>/delete", expense_delete_post),
     ("GET", "/money/statement", statement_page),
+    ("GET", "/money/year", year_page),
 ]

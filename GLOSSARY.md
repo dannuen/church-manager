@@ -112,6 +112,11 @@ _Tiếng Việt_: Tổng kết dâng hiến
 _Tránh (tiếng Việt)_: biên nhận, biên lai, phiếu thu
 _Avoid_: Receipt, tax letter
 
+**Year report**:
+A printable page for the church board with one year of Offerings and Expenses: totals only, no Giver name.
+_Tiếng Việt_: Báo cáo năm
+_Avoid_: Financial statement
+
 ## Care
 
 **Visit**:

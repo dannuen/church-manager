@@ -456,5 +456,51 @@ class CorrectMoneyPagesTest(PagesTestBase):
         self.assertIn("1.900.000 ₫", section(self.page("/money?month=1900-01"), "money-totals"))
 
 
+class YearReportTest(PagesTestBase):
+    """Year report: totals equal the database, no Giver name, no Private note, no-name offering counts."""
+
+    def test_year_report_totals_chart_and_privacy(self):
+        db = self.db()
+        year = TODAY.year
+        pid = next(p["id"] for p in people.list_persons(db) if p["full_name"] == fake.FIRST_PERSON)
+        self.post(f"/people/{pid}/private-notes", {"body": "YR-PRIVATE-note"})
+        fund = lists.find_item(db, "fund", name="General")["id"]
+        money.add_offering(db, f"{year}-01-05", 700_000, fund, giver_person_id=pid)
+        money.add_offering(db, f"{year}-01-06", 300_000, fund)  # no-name offering
+        page = self.page(f"/money/year?year={year}")
+        sheet = section(page, "year-report")
+        span = (f"{year}-01-01", f"{year}-12-31")
+        want_o, want_e = (db.execute(f"SELECT COALESCE(SUM(amount),0) FROM {t} WHERE date BETWEEN ? AND ?", span).fetchone()[0]
+                          for t in ("offering", "expense"))
+        report = money.year_report(db, year)
+        self.assertEqual(report["total"], {"offerings": want_o, "expenses": want_e, "balance": want_o - want_e})
+        self.assertEqual(sum(a for _, a in report["funds"]), want_o)
+        self.assertEqual(sum(a for _, a in report["categories"]), want_e)
+        self.assertEqual(sum(m["offerings"] for m in report["months"]), want_o)
+        self.assertGreaterEqual(want_o, 1_000_000)  # the no-name offering is in
+        self.assertIn(fake.CHURCH_NAME, sheet)
+        self.assertIn(f"Year report {year}", sheet)
+        self.assertIn("<svg", sheet)
+        self.assertIn(f"Compared with {year - 1}", sheet)
+        self.assertIn("data-print", page)
+        self.assertIn(money.format_vnd(want_o), sheet)
+        for hidden in (fake.FIRST_PERSON, "YR-PRIVATE-note"):
+            self.assertNotIn(hidden, sheet)
+        self.assertEqual(self.request("GET", "/money/year?year=1800")[0], 400)
+        self.assertIn(f"/money/year?year={year}", self.page("/money"))
+
+
+class PercentChangeTest(unittest.TestCase):
+    def test_whole_percent_with_no_float(self):
+        pc = money.percent_change
+        self.assertEqual(pc(150, 100), 50)
+        self.assertEqual(pc(50, 100), -50)
+        self.assertEqual(pc(2, 3), -33)
+        self.assertEqual(pc(1, 3), -67)
+        self.assertEqual(pc(-50, -100), 50)  # a balance from -100 to -50 rose
+        self.assertIsNone(pc(5, 0))
+        self.assertIs(type(pc(7, 9)), int)
+
+
 if __name__ == "__main__":
     unittest.main()
