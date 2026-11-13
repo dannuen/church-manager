@@ -1011,6 +1011,8 @@ TEXT = {
         "settings.door_hint": "Không bắt buộc. Khi Bật, trợ lý Hermes trên máy tính này được đọc Dữ liệu Hội Thánh "
                               "này và lưu hồ sơ mới sau khi được đồng ý. Trợ lý không bao giờ thấy Ghi chú cá nhân.",
         "settings.language_hint": "Chữ trên màn hình. Tên, ghi chú và các mục trong Danh mục vẫn giữ như đã nhập.",
+        "settings.app_color": "Màu giao diện",
+        "settings.app_color_hint": "Chọn một màu. Ứng dụng tự tạo màu chuyển cho phần đầu trang, menu và các nút.",
         "settings.panel_church": "Hội Thánh",
         "settings.needs_today": "Cần thăm viếng hôm nay",
         "settings.no_visit_in": "Không có Thăm viếng trong {months} qua, hoặc chưa bao giờ",
@@ -1083,6 +1085,7 @@ TEXT = {
         "errors.setting_value": "Cài đặt {name} cần có giá trị.",
         "errors.care_reminder_months": "Nhắc thăm viếng phải là số tháng nguyên từ 1 đến 120.",
         "errors.language": "Ngôn ngữ phải là Tiếng Việt hoặc English.",
+        "errors.app_color": "Màu này không hợp lệ. Hãy chọn lại một màu.",
     },
     "en": {
         # --- core
@@ -2067,6 +2070,9 @@ TEXT = {
         "settings.door_hint": "Optional. On lets the Hermes helper on this computer read this church copy and save "
                               "new records after you say yes. It never sees Private notes.",
         "settings.language_hint": "The words on the screens. Names, notes and list items stay as they were typed.",
+        "settings.app_color": "App color",
+        "settings.app_color_hint": "Pick one color. The app makes the gradient for the page header, the menu and "
+                                   "the buttons.",
         "settings.panel_church": "Church",
         "settings.needs_today": "Needs a visit today",
         "settings.no_visit_in": "No Visit in the last {months}, or never",
@@ -2138,6 +2144,7 @@ TEXT = {
         "errors.setting_value": "Setting {name} needs a value.",
         "errors.care_reminder_months": "Care reminder time must be a whole number of months from 1 to 120.",
         "errors.language": "Language must be Tiếng Việt or English.",
+        "errors.app_color": "This color is not valid. Pick a color again.",
     },
 }
 

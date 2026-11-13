@@ -70,6 +70,7 @@ VI_ASCII_OK = frozenset({
     "cung",      # Vietnamese: "Lễ Cung Hiến", the example subject of a Sent document
     "english",   # the name of the switch button: "Tiếng Việt hoặc English"
     "gia",       # Vietnamese: Gia đình
+    "menu",      # Vietnamese screen word of the glossary: Menu chính
     "onedrive",  # the name of the cloud folder a church copy must stay out of
     "thu",       # Vietnamese: "thu hẹp" (to narrow a search)
     "tin",       # Vietnamese: thông tin, Tin Lành

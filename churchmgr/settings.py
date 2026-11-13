@@ -1,13 +1,31 @@
 """Settings of one church copy (table ``setting``): church_name, care_reminder_months, hermes_door,
-language."""
+language, app_color."""
 
-from . import i18n, text
+from . import app_color, i18n, text
 from .i18n import TextError
 
 HERMES_DOOR = "hermes_door"  # "on" or "off"; no row = off (the default)
 HERMES_DOOR_CHOICES = ("off", "on")
 LANGUAGE = "language"  # "vi" or "en"; no row, or any other text, = "vi"
 LANGUAGE_CHOICES = i18n.LANGS  # ("vi", "en")
+APP_COLOR = "app_color"  # "#rrggbb", saved in lower case; no row, or any other text, = DEFAULT_APP_COLOR
+DEFAULT_APP_COLOR = "#1f5c99"
+
+
+def get_app_color(conn):
+    """The app color the pastor picked (``#rrggbb``, lower case). No row, or a bad value, is the default."""
+    try:
+        return check_app_color(get_setting(conn, APP_COLOR))
+    except ValueError:
+        return DEFAULT_APP_COLOR
+
+
+def check_app_color(value):
+    """``"#1F5C99"`` -> ``"#1f5c99"``. Only text that is exactly ``#`` and 6 hex digits (no space, no
+    short ``#fff``, no color name); anything else raises ``ValueError``."""
+    if not isinstance(value, str) or app_color.HEX.fullmatch(value) is None:
+        raise TextError("errors.app_color")
+    return value.lower()
 
 
 def hermes_door_on(conn):
@@ -57,6 +75,8 @@ def set_setting(conn, key, value):
         check_hermes_door(value)  # exactly "on" or "off": no spaces, no other case, no None
     elif key == LANGUAGE:
         check_language(value)  # exactly "vi" or "en"
+    elif key == APP_COLOR:
+        value = check_app_color(value)  # exactly "#rrggbb", saved in lower case
     if value is None:
         raise TextError("errors.setting_value", name=key)
     value = text.nfc(str(value)).strip()

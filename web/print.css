@@ -16,7 +16,10 @@
   .canvas { padding: 0; }
   .panel { border: 0; padding: 0; }
   .panel .table-wrap { margin: 0; overflow: visible; }   /* the screen's -12px bleed would pass the sheet edge */
-  .title-row { margin-bottom: 6mm; }
+  /* paper never gets the gradient: the header band and the active filter print as plain ink on white */
+  .title-row { margin-bottom: 6mm; padding: 0; background: none; color: #000; }
+  .title-row .sub { color: #333; }
+  .chip[aria-current="true"] { background: none; border-color: #000; color: #000; }
   h1, h2 { break-after: avoid; }
   a { color: inherit; text-decoration: none; }
   table { width: 100%; border-collapse: collapse; }
