@@ -8,6 +8,8 @@ first row keep their own height. B12 one filled primary button on the Person pag
 FIX-T 2b (class UiMinorsRound2Test): B15 B16 B17 B19.
 FIX-T 4b (class UiMinorsRound4Test): B25 no action words on paper, B26 row titles wrap to 2 lines.
 STYLE-2 (class StyleTokensTest): every color of style.css is a token, made from the app color.
+STYLE-4 (classes FormsAndButtonsTest, FormControlsTest): pills, one control height, the states and one
+focus ring that no rule takes away; every form control of a page carries a class that style.css styles.
 """
 
 import datetime as dt
@@ -428,10 +430,13 @@ TEXT_PAIRS = (  # (text, what it sits on): at least 4.5:1
     ("--negative", "--surface"), ("--negative", "--raised"), ("--positive", "--surface"),
     # the wash, the current menu item; the white pill of the title row is --accent-dark on --on-accent
     *(("--on-accent", s) for s in ("--accent-dark", "--accent-base", "--accent-light")),
+    ("--accent-deep", "--active"),  # STYLE-4: the bold text of the current chip on its tint
 )
 PART_PAIRS = (  # a field border or the focus ring: at least 3:1
     ("--control", "--surface"), ("--control", "--ground"), ("--control", "--raised"),
     ("--accent-text", "--surface"), ("--accent-text", "--ground"),
+    # STYLE-4: the ring on the Private note panel and beside a tint; the edge of the current chip
+    ("--accent-text", "--raised"), ("--accent-text", "--active"),
 )
 
 
@@ -523,6 +528,135 @@ class TablesAndListsTest(PagesTestBase):
         for sel in hovered_rows:
             self.assertIn("tr[data-row]:hover", sel)  # a total row has no data-row: it never lights up
         self.assertIn('<tr class="total">', section(self.page("/money/year"), "year-report"))
+
+
+# ---------------------------------------------------------------- STYLE-4 helpers
+
+def media_rules(query):
+    """``[(selector, declarations)]`` of the ``@media <query> {…}`` blocks of ``web/style.css`` only."""
+    css, out = style_css(), []
+    for m in re.finditer(r"@media ([^{]+)\{", css):
+        if m.group(1).strip() != query:
+            continue
+        depth, end = 1, m.end()
+        while depth:
+            depth += {"{": 1, "}": -1}.get(css[end], 0)
+            end += 1
+        out += [(sel.strip(), body) for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css[m.end():end - 1])]
+    return out
+
+
+DATE_RINGS = tuple(f'input[type="{kind}"].input:focus-within' for kind in ("date", "datetime-local", "month"))
+
+
+class FormsAndButtonsTest(unittest.TestCase):
+    """STYLE-4 (spec 4.6, 4.7): a field and a button are one height (``--control-height``, 44px under
+    861px); buttons, chips, the change summaries, the search fields and the file button are pills; a
+    field has 12px corners. The states: hover, an error in red (a state, D4), disabled still readable,
+    the current chip bold. One focus ring (2px ``--accent-text``, 2px away; ``--on-accent`` on the wash)
+    that no rule takes away. Nothing moves on hover."""
+
+    def test_fields_and_buttons_are_one_height_and_buttons_are_pills(self):
+        self.assertEqual(root_tokens()["--control-height"], "40px")
+        for selector in (".btn", ".input"):
+            self.assertIn("height: var(--control-height)", declarations(selector), selector)
+        self.assertIn("min-height: var(--control-height)", declarations("details.change > summary"))
+        phone = media_rules("(max-width: 860px)")
+        for selector, height in ((".btn", "height: 44px"), (".input", "height: 44px"),
+                                 ("details.change > summary", "min-height: 44px")):
+            self.assertIn(height, " ".join(body for sel, body in phone if sel == selector), selector)
+        for selector in (".btn", ".chip", "details.change > summary", ".toolbar .input", ".search-line .input",
+                         'input[type="file"].input::file-selector-button', ".title-row .input"):
+            self.assertIn("border-radius: var(--radius-pill)", declarations(selector), selector)
+        self.assertIn("border-radius: var(--radius-control)", declarations(".input"))
+        self.assertEqual(root_tokens()["--radius-control"], "12px")
+
+    def test_secondary_danger_hover_error_and_disabled(self):
+        button = declarations(".btn")
+        for part in ("background: var(--surface)", "border: 1px solid var(--control)", "color: var(--text)"):
+            self.assertIn(part, button)
+        self.assertIn("background: var(--raised)", declarations(".btn:hover"))
+        danger = declarations(".btn.danger")
+        for part in ("color: var(--negative)", "border-color: currentColor", "background: var(--surface)"):
+            self.assertIn(part, danger)
+        self.assertIn("border-color: var(--muted)", declarations(":where(.input):hover"))
+        self.assertIn("border-color: var(--negative)", declarations('.input[aria-invalid="true"]'))
+        self.assertIn("color: var(--negative)", declarations(".error"))
+        for selector in (".btn:disabled", ".btn:disabled:hover", '.btn[aria-disabled="true"]', ".input:disabled"):
+            rule = declarations(selector)
+            for part in ("background: var(--raised)", "border-color: var(--border)", "color: var(--faint)",
+                         "cursor: not-allowed"):
+                self.assertIn(part, rule, selector)
+        # hover never moves: the only transition or animation is the reduced-motion "none"
+        moves = re.findall(r"\b(?:transition|animation)\s*:\s*([^;]+)", style_css())
+        self.assertEqual(set(moves), {"none !important"})
+
+    def test_the_current_chip_is_marked_by_more_than_its_color(self):
+        chip, current = declarations(".chip"), declarations('.chip[aria-current="true"]')
+        self.assertIn("border: 1px solid var(--border)", chip)
+        self.assertNotIn("font-weight", chip)
+        for part in ("background: var(--active)", "border-color: var(--accent-text)", "font-weight: 600"):
+            self.assertIn(part, current)
+
+    def test_one_focus_ring_that_no_rule_takes_away(self):
+        ring = declarations(":focus-visible")
+        self.assertIn("outline: 2px solid var(--accent-text)", ring)
+        self.assertIn("outline-offset: 2px", ring)
+        colors = set()
+        for selector, body in css_rules():
+            self.assertNotRegex(body, r"outline(?:-style|-width)?\s*:\s*(?:none|0)\b", selector)
+            colors |= set(re.findall(r"outline(?:-color)?\s*:[^;]*?(var\(--[\w-]+\))", body))
+        # the ring is one of the 2 tokens StyleTokensTest and test_app_color check for 3:1 on what is under it
+        self.assertEqual(colors, {"var(--accent-text)", "var(--on-accent)"})
+        # Tab also stops on the calendar button inside a date field: the field keeps the ring then
+        for selector in DATE_RINGS:
+            self.assertIn("outline: 2px solid var(--accent-text)", declarations(selector), selector)
+            self.assertIn("outline-offset: 2px", declarations(selector), selector)
+
+
+class FormControlsTest(PagesTestBase):
+    """STYLE-4: every form control of the pages with a form carries a class that style.css styles, so the
+    one CSS pass reaches all of them; a refused form marks its field and its sentence with the classes
+    style.css paints red."""
+
+    STYLED = {".input", ".btn", ".link-btn", ".lang-switch button", 'input[type="checkbox"]',
+              "details.change > summary", "details.rename > summary"}
+
+    def test_every_form_control_carries_a_class_style_css_styles(self):
+        conn = self.db()
+        pid = people.list_persons(conn)[0]["id"]
+        fid = people.list_families(conn)[0]["id"]
+        iid = cal.add_calendar_item(conn, "Service", "STYLE-4 Thờ phượng", f"{YESTERDAY} 08:00")[0]
+        paths = ("/people/new", f"/people/{pid}", f"/people/{pid}/edit", f"/families/{fid}", "/money",
+                 "/money/offerings/new", "/money/expenses/new", "/money/statement", "/money/year",
+                 "/calendar", "/calendar/new", f"/calendar/{iid}", "/care", "/lists", "/copies", "/sent/new",
+                 "/people/file", "/search", "/settings", "/")
+        for path in paths:
+            page = self.page(path)
+            controls = re.findall(r"<(input|select|textarea|button)\b([^>]*)>", page)
+            self.assertTrue(controls, path)
+            for tag, attrs in controls:
+                if 'type="hidden"' in attrs or 'type="checkbox"' in attrs:
+                    continue
+                if tag == "button" and 'name="lang"' in attrs:  # the language switch (.lang-switch button)
+                    self.assertIn("lang-switch", page)
+                    continue
+                cls = re.search(r'class="([^"]*)"', attrs)
+                self.assertTrue(cls and {"input", "btn", "link-btn"} & set(cls.group(1).split()),
+                                (path, tag, attrs))
+            for attrs in re.findall(r"<details\b([^>]*)>", page):  # its summary is a pill or a text action
+                self.assertRegex(attrs, r'class="(change|rename)"', path)
+        for selector in self.STYLED:
+            self.assertTrue(declarations(selector), selector)
+
+    def test_an_empty_required_field_shows_its_error_in_red(self):
+        form = {"full_name": "", "gender": "", "birth_date": "", "phone": "", "address": "", "note": "",
+                "status_id": self.item("status", code="visitor"), "start_date": TODAY.isoformat()}
+        _h, page = self.post("/people/new", form, expect=400)
+        self.assertRegex(page, r'<input class="input" id="f-full_name"[^>]* aria-invalid="true"')
+        self.assertIn('<p class="error" id="f-full_name-error">', page)
+        self.assertIn("border-color: var(--negative)", declarations('.input[aria-invalid="true"]'))
+        self.assertIn("color: var(--negative)", declarations(".error"))
 
 
 if __name__ == "__main__":

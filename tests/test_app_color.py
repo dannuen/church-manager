@@ -266,17 +266,25 @@ def props(selector, name="style.css"):
 class SurfacesTest(unittest.TestCase):
     """COLOR-2, then STYLE-2 (the approved round-2 look in the pastor's color): the wash of the app color
     at the top of the canvas (``.canvas::before``, ``--wash``) carries the title row, whose text is
-    ``--on-accent``; the gradient is on the active menu item, the active filter and the primary buttons,
-    with ``--on-accent`` text; the plain accent is on the chart line; the focus ring and the color as text
-    on the light surfaces are ``--accent-text``. Paper never gets the gradient."""
+    ``--on-accent``; the gradient is on the active menu item and the primary buttons, with ``--on-accent``
+    text; the plain accent is on the chart line; the focus ring and the color as text on the light
+    surfaces are ``--accent-text``. STYLE-4 (pastor, t_121417d4): the active filter is the spec's tint
+    chip. Paper never gets the gradient."""
 
-    GRADIENT = ('.nav-item[aria-current="page"]', '.chip[aria-current="true"]', ".btn.primary")
+    GRADIENT = ('.nav-item[aria-current="page"]', ".btn.primary")
 
     def test_the_wash_the_active_menu_item_the_active_filter_and_primary_buttons_use_the_app_color(self):
         for selector in self.GRADIENT:
             rule = props(selector)
             self.assertEqual(rule["background"], "var(--gradient)", selector)
             self.assertEqual(rule["color"], "var(--on-accent)", selector)
+        # the active filter: the tint of the app color, an --accent-text edge, a deeper accent text
+        chip = props('.chip[aria-current="true"]')
+        self.assertEqual((chip["background"], chip["border-color"], chip["color"]),
+                         ("var(--active)", "var(--accent-text)", "var(--accent-deep)"))
+        tint = re.search(r"--active: ([^;]+);", (pathlib.Path(_support.ROOT) / "web" / "style.css").read_text(
+            encoding="utf-8")).group(1)
+        self.assertIn("var(--accent-base)", tint)  # the tint is made from the app color
         # the wash replaces the band: one layer made only from the accent tokens and the ground
         self.assertEqual(props(".canvas::before")["background"], "var(--wash)")
         css = re.sub(r"/\*.*?\*/", "", (pathlib.Path(_support.ROOT) / "web" / "style.css").read_text(
@@ -289,8 +297,7 @@ class SurfacesTest(unittest.TestCase):
         self.assertNotIn("background", row)
         self.assertNotIn("border-radius", row)
         self.assertEqual((row["padding"], row["color"]), ("0 12px 14px", "var(--on-accent)"))
-        for selector in ('.chip[aria-current="true"]', ".btn.primary"):  # the border goes with the gradient
-            self.assertEqual(props(selector)["border-color"], "var(--accent-dark)", selector)
+        self.assertEqual(props(".btn.primary")["border-color"], "var(--accent-dark)")  # the border goes with the gradient
         self.assertEqual(props(".btn.primary:hover"), {"background": "var(--accent-dark)"})
         # the main action on the wash: a pill of --on-accent with --accent-dark text
         self.assertEqual(props(".title-row .btn.primary"), {"background": "var(--on-accent)",

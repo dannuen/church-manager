@@ -18,6 +18,7 @@
   --accent-text: #1f5c99;     /* the color as text on the light surfaces, and the focus ring */
   --accent-light: color-mix(in srgb, var(--accent-base), #ffffff 15%);
   --accent-dark: color-mix(in srgb, var(--accent-base), #000000 30%);
+  --accent-deep: color-mix(in srgb, var(--accent-text) 85%, #000000);   /* the bold text of the current chip on its tint */
   --gradient: linear-gradient(135deg, var(--accent-light), var(--accent-dark));
   /* Surfaces, lines and text: grey with a touch of the app color. tests/test_pages_ui.py checks, for any
      color, 4.5:1 for each text on the surfaces it sits on and 3:1 for the field border. */
@@ -186,21 +187,37 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 form.panel.search-form { max-width: 640px; margin-bottom: var(--gap); }
 form.panel.search-form .input { flex: 1; }
 
-/* ---------- forms: label above the field, one Save per form ---------- */
+/* ---------- forms and buttons: label above the field, one Save per form (spec 4.6) ----------
+   A field is --control-height high (44px under 861px), white, a 1px --control edge, 12px corners; a
+   search field is a pill. A button is a pill of the same height: secondary white with a --control edge,
+   primary in the gradient of the app color, danger with a red word and edge (red is a state, D4).
+   Disabled: a --raised fill, a --border edge and --faint text, still readable. Every control keeps the
+   one focus ring of :focus-visible above (2px --accent-text, 2px away); no rule takes it away. */
 .form { display: grid; gap: 16px; max-width: 560px; }
 .field { display: grid; gap: 8px; }
 .field label { font-size: var(--fs-meta); font-weight: 500; line-height: 20px; }
 .hint { color: var(--muted); font-size: var(--fs-meta); line-height: 20px; }
-.error { color: var(--negative); font-size: var(--fs-meta); line-height: 20px; }
+.error { color: var(--negative); font-size: var(--fs-meta); line-height: 20px; font-weight: 500; }
 .input { height: var(--control-height); padding: 0 12px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); font: inherit; color: inherit; min-width: 0; }
+select.input { padding: 0 8px; cursor: pointer; }   /* the browser adds 4px inside: its text lines up with the other fields */
 textarea.input { height: auto; padding: 8px 12px; resize: vertical; }
+input[type="color"].input { width: 72px; padding: 4px 6px; cursor: pointer; }
+.toolbar .input, .search-line .input { border-radius: var(--radius-pill); padding: 0 18px; }
+/* a date or time field: Tab also stops on its own calendar button inside it; the field keeps the ring then */
+input[type="date"].input:focus-within, input[type="datetime-local"].input:focus-within,
+input[type="month"].input:focus-within { outline: 2px solid var(--accent-text); outline-offset: 2px; }
 .input::placeholder { color: var(--faint); }
+:where(.input):hover { border-color: var(--muted); }   /* one class weight: the wash field and an error keep their edge */
 .input[aria-invalid="true"] { border-color: var(--negative); }
-.btn { display: inline-flex; align-items: center; justify-content: center; height: var(--control-height); padding: 0 16px; border-radius: var(--radius-control); border: 1px solid var(--control); background: var(--surface); color: var(--text); font: inherit; font-size: var(--fs-meta); font-weight: 600; cursor: pointer; white-space: nowrap; justify-self: start; }
+input[type="checkbox"] { width: 20px; height: 20px; margin: 0; accent-color: var(--accent-text); cursor: pointer; }
+.btn { display: inline-flex; align-items: center; justify-content: center; height: var(--control-height); padding: 0 20px; border-radius: var(--radius-pill); border: 1px solid var(--control); background: var(--surface); color: var(--text); font: inherit; font-size: var(--fs-meta); font-weight: 600; cursor: pointer; white-space: nowrap; justify-self: start; }
 .btn:hover { background: var(--raised); text-decoration: none; }
 .btn.primary { background: var(--gradient); color: var(--on-accent); border-color: var(--accent-dark); }
 .btn.primary:hover { background: var(--accent-dark); }
 .btn.danger { color: var(--negative); border-color: currentColor; background: var(--surface); }
+.btn.danger:hover { background: var(--raised); }
+.btn:disabled, .btn:disabled:hover, .btn[aria-disabled="true"], .btn[aria-disabled="true"]:hover, .input:disabled {
+  background: var(--raised); border-color: var(--border); color: var(--faint); cursor: not-allowed; }
 
 /* ---------- tables (spec 4.5) ----------
    A small bold grey header over one --border line; a --rule line between rows (no zebra), none under the
@@ -243,6 +260,7 @@ td .num { white-space: nowrap; }   /* a phone number, a date or an amount never 
   .title-search .input { width: auto; flex: 1; }
   .btn { height: 44px; }
   .input { height: 44px; }
+  details.change > summary { min-height: 44px; }
   .row { flex-wrap: wrap; }
   .row .what { flex-basis: 100%; order: -1; white-space: normal; }
   .row .side { max-width: none; }
@@ -275,9 +293,9 @@ table.story td:first-child { width: 104px; white-space: nowrap; font-weight: 400
 .kv dt { color: var(--muted); }
 .kv dd { margin: 0; overflow-wrap: anywhere; }
 
-/* a change form folded under one click; it opens by itself when it shows an error */
+/* a change form folded under one click (a pill like .btn); it opens by itself when it shows an error */
 details.change { margin-top: 12px; }
-details.change > summary { display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); font-size: var(--fs-meta); font-weight: 600; cursor: pointer; list-style: none; }
+details.change > summary { display: inline-flex; align-items: center; min-height: var(--control-height); padding: 0 20px; border: 1px solid var(--control); border-radius: var(--radius-pill); background: var(--surface); font-size: var(--fs-meta); font-weight: 600; cursor: pointer; list-style: none; }
 details.change > summary::-webkit-details-marker { display: none; }
 details.change > summary::after { content: "+"; margin-left: 8px; color: var(--muted); }
 details.change[open] > summary::after { content: "−"; }
@@ -288,10 +306,12 @@ details.change .form { max-width: none; }
 /* Status filter and the quick search above the People list, on one row: a white bar, so its labels never
    sit on the wash */
 .list-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; margin-bottom: 16px; padding: 10px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow); }
+/* the chips (Status filter, week / month, Money month): pills on the white bar; the current one is the
+   tint of the app color with an --accent-text edge and --accent-deep bold text (spec 4.7) */
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.chip { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); color: var(--muted); font-size: var(--fs-meta); }
+.chip { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 16px; border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--surface); color: var(--muted); font-size: var(--fs-meta); }
 .chip:hover { background: var(--raised); color: var(--text); text-decoration: none; }
-.chip[aria-current="true"] { background: var(--gradient); border-color: var(--accent-dark); color: var(--on-accent); font-weight: 600; }
+.chip[aria-current="true"] { background: var(--active); border-color: var(--accent-text); color: var(--accent-deep); font-weight: 600; }
 .toolbar { flex: 0 1 440px; }
 .toolbar .input { flex: 1; }
 
@@ -474,7 +494,7 @@ details.rename .form { max-width: none; }
 table.sent td:nth-child(-n+4) { white-space: nowrap; }
 table.sent td:last-child { width: 50%; }
 input[type="file"].input { height: auto; min-height: var(--control-height); padding: 5px 6px; font-size: var(--fs-meta); line-height: 28px; }
-input[type="file"].input::file-selector-button { height: 28px; margin-right: 12px; padding: 0 12px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+input[type="file"].input::file-selector-button { height: 28px; margin-right: 12px; padding: 0 14px; border: 1px solid var(--control); border-radius: var(--radius-pill); background: var(--surface); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
 input[type="file"].input::file-selector-button:hover { background: var(--raised); }
 .next-number .kpi-value { font-weight: 600; }
 @media (max-width: 640px) {
