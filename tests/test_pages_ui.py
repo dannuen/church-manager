@@ -483,5 +483,47 @@ class StyleTokensTest(unittest.TestCase):
         self.assertEqual(low, [])
 
 
+class TablesAndListsTest(PagesTestBase):
+    """STYLE-3: tables and lists. No page puts a ``style`` attribute in its HTML: every look is a class of
+    style.css, so the one CSS pass reaches it. The Year report chart paints its bars and its legend keys
+    with a class each, and style.css gives each class its color from a token (an SVG fill prints on
+    paper: it is not a CSS background). A wide table scrolls inside its card; only a data row (never the
+    total row) lights up under the pointer."""
+
+    PAGES = ("/people", "/money", "/documents", "/money/year", "/families", "/chi-phai", "/sent")
+
+    def test_pages_have_no_inline_style(self):
+        for path in self.PAGES:
+            page = self.page(path)
+            self.assertFalse('style="' in page, (path, re.findall(r'<[^<>]* style="[^"]*"', page)))
+        page = self.page("/money/year")
+        svg = re.search(r'<svg class="year-chart"[^>]*>(.*?)</svg>', page, re.S).group(1)
+        bars = re.findall(r"<rect [^>]*>", svg)
+        self.assertEqual(len(bars), 24)  # 12 months, an Offerings bar and an Expenses bar each
+        for kind in ("offerings", "expenses"):
+            self.assertEqual(sum(f'class="bar-{kind}"' in bar for bar in bars), 12, kind)
+            self.assertIn(f'<span class="bar-{kind}">\u25a0</span>', page)  # its legend key
+            rule = declarations(f".bar-{kind}")
+            self.assertIn(f"fill: var(--bar-{kind})", rule)
+            self.assertIn(f"color: var(--bar-{kind})", rule)
+        self.assertNotIn(" fill=", svg)  # the color comes from style.css only
+        tokens = root_tokens()  # spec 3.3: the two bar colors stay as they were; they are tokens now
+        self.assertEqual((tokens["--bar-offerings"], tokens["--bar-expenses"]), ("#2f6f4f", "#999999"))
+
+    def test_a_wide_table_scrolls_inside_its_card_and_only_data_rows_light_up(self):
+        self.assertIn("overflow-x: auto", declarations(".table-wrap"))
+        self.assertIn("max-width: 100%", declarations(".table-wrap"))
+        # in a panel the wrap is 24px wider than the panel's inside (12px each side): no cap, or the right
+        # side would end 24px short of the left
+        self.assertIn("margin: 0 -12px", declarations(".panel .table-wrap"))
+        self.assertIn("max-width: none", declarations(".panel .table-wrap"))
+        hovered_rows = [s.strip() for sel, _body in css_rules() for s in sel.split(",")
+                        if re.search(r"(?<![\w-])tr(\[[^\]]*\])*:hover", s)]
+        self.assertTrue(hovered_rows)
+        for sel in hovered_rows:
+            self.assertIn("tr[data-row]:hover", sel)  # a total row has no data-row: it never lights up
+        self.assertIn('<tr class="total">', section(self.page("/money/year"), "year-report"))
+
+
 if __name__ == "__main__":
     unittest.main()

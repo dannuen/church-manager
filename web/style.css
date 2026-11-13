@@ -36,6 +36,9 @@
   --refusal-bg: #ffedea; --refusal-ink: #831c1e;                     /* a Handover refusal */
   --grid: color-mix(in srgb, var(--accent-base) 8%, #f0f0f0);       /* the Services chart */
   --grid-base: color-mix(in srgb, var(--accent-base) 24%, #f2f2f2);
+  /* the Year report chart: the Offerings and Expenses bars and their legend keys. Spec 3.3: the two
+     colors stay as they were, on screen and on paper (green is money) */
+  --bar-offerings: #2f6f4f; --bar-expenses: #999999;
   /* the wash at the top of the canvas: the app color from dark (left) to light (right), fading into the
      ground in its lower 40% */
   --wash: linear-gradient(180deg, transparent 0%, transparent 60%, var(--ground) 100%),
@@ -137,10 +140,11 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .row .time { flex: none; width: 44px; color: var(--muted); font-size: var(--fs-meta); }
 .row .figure { flex: none; width: 96px; text-align: right; font-size: var(--fs-meta); }
 .row .sub { display: block; color: var(--muted); font-size: var(--fs-meta); font-weight: 400; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.list-head { display: flex; gap: 12px; padding-bottom: 4px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.list-head { display: flex; gap: 12px; padding-bottom: 4px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: var(--fs-small); line-height: 16px; font-weight: 600; }
 .list-head span:first-child { flex: 1; }
 .list-head span:last-child { width: 96px; text-align: right; }
-.empty { padding: 12px 16px; border: 1px dashed var(--control); border-radius: var(--radius-control); color: var(--muted); }
+/* an empty list keeps its frame: one sentence in a dashed box (spec 4.3) */
+.empty { padding: 12px 16px; border: 1px dashed var(--control); border-radius: var(--radius); color: var(--muted); }
 .kpis + .empty, .kpi + .rows, .kpi + .empty { margin-top: 12px; }
 
 /* KPIs are type: a grey label above an ink value, split by 1px rules */
@@ -198,13 +202,26 @@ textarea.input { height: auto; padding: 8px 12px; resize: vertical; }
 .btn.primary:hover { background: var(--accent-dark); }
 .btn.danger { color: var(--negative); border-color: currentColor; background: var(--surface); }
 
-/* ---------- tables (for the pages of cards C1-C3) ---------- */
-.table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; }
-th { height: 36px; padding: 0 12px; text-align: left; font-weight: 400; font-size: var(--fs-small); color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap; }
-td { padding: 10px 12px; border-bottom: 1px solid var(--rule); vertical-align: baseline; }
-tbody tr:last-child td { border-bottom: 0; }
+/* ---------- tables (spec 4.5) ----------
+   A small bold grey header over one --border line; a --rule line between rows (no zebra), none under the
+   last; the row under the pointer turns --raised with round ends. Only a data row (data-row) does: never
+   a total row. Figures stay right-aligned in tabular figures, in ink. A wide table scrolls inside its card
+   (.table-wrap), never the page. Separate borders (spacing 0): a collapsed table cannot round a cell.
+   :where() keeps the header and the cells at the weight of one tag, so print.css (later) still wins. */
+.table-wrap { overflow-x: auto; max-width: 100%; }
+table { width: 100%; border-collapse: separate; border-spacing: 0; }
+th { padding: 0 12px; text-align: left; font-weight: 600; }
+:where(thead) th { height: 36px; font-size: var(--fs-small); line-height: 16px; color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap; }
+td, :where(tbody) th { padding: 10px 12px; border-bottom: 1px solid var(--rule); vertical-align: baseline; }
+tbody tr:last-child > * { border-bottom: 0; }
+@media screen { tbody tr:has(+ tr.total) > * { border-bottom: 0; } }   /* a total row draws its own line (paper: collapsed borders) */
 th.n, td.n { text-align: right; }
+td .num { white-space: nowrap; }   /* a phone number, a date or an amount never breaks inside */
+@media (hover: hover) and (min-width: 641px) {
+  tbody tr[data-row]:hover > * { background: var(--raised); }
+  tbody tr[data-row]:hover > :first-child { border-radius: var(--radius) 0 0 var(--radius); }
+  tbody tr[data-row]:hover > :last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+}
 
 /* ---------- laptop: still 2 rows; tablet and phone: one column, the nav becomes a top bar ---------- */
 @media (max-width: 1180px) {
@@ -241,14 +258,15 @@ th.n, td.n { text-align: right; }
 .side-4 { grid-column: span 4; }
 .stack { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
 .grid.person, .grid.family, .grid.chi-phai, .grid.care { align-items: start; }
-.panel .table-wrap { margin: 0 -12px; }          /* cell text lines up with the panel title */
+.panel .table-wrap { margin: 0 -12px; max-width: none; }   /* cell text lines up with the panel title: 24px wider than the panel's inside */
 .table-wrap + .hint, .empty + .hint, .kv + .table-wrap, .kv + .empty { margin-top: 12px; }
-table.list td { font-size: var(--fs-meta); line-height: 20px; padding: 8px 12px; }
+table.list td, table.list :where(tbody) th { font-size: var(--fs-meta); line-height: 20px; padding: 8px 12px; }
 table.list td:first-child { font-weight: 500; }
 table.list td.n, table.list th.n { white-space: nowrap; }
 table.history th.n, table.history td.n { width: 112px; }   /* From / To sit together at the right */
 table.story td:first-child { width: 104px; white-space: nowrap; font-weight: 400; color: var(--muted); }
 .list-panel { padding-top: 8px; padding-bottom: 8px; }
+.list-panel > .empty { margin: 16px 0; }   /* the same air above and below as at its sides */
 
 /* key-value rows (Details, the current Family) */
 .kv { display: grid; margin: 0; }
@@ -309,8 +327,8 @@ details.change .form { max-width: none; }
   table.list, table.list tbody { display: block; }
   table.list tr { display: flex; flex-wrap: wrap; gap: 2px 12px; padding: 8px 12px; border-bottom: 1px solid var(--rule); }
   table.list tbody tr:last-child { border-bottom: 0; }
-  table.list td { display: block; padding: 0; border: 0; color: var(--muted); }
-  table.list td:first-child { flex-basis: 100%; color: var(--text); }
+  table.list td, table.list tr[data-row] > th { display: block; padding: 0; border: 0; color: var(--muted); }
+  table.list td:first-child, table.list tr[data-row] > th:first-child { flex-basis: 100%; color: var(--text); }
   table.list td.n { text-align: left; }
   table.list td.n + td.n::before { content: "– "; }
   table.story td:first-child { width: auto; }
@@ -370,6 +388,9 @@ table.money td.n { white-space: nowrap; }
 table.money tr.total > * { border-top: 1px solid var(--border); border-bottom: 0; padding: 10px 12px; font-size: var(--fs-meta); line-height: 20px; color: var(--text); font-weight: 600; height: auto; }
 table.money tr.total th { text-align: left; }
 table.money.expenses td:nth-child(3) { color: var(--muted); }
+/* the Year report chart: each bar and its legend key take their color from a token (a fill prints) */
+.bar-offerings { fill: var(--bar-offerings); color: var(--bar-offerings); }
+.bar-expenses { fill: var(--bar-expenses); color: var(--bar-expenses); }
 
 /* the Giving statement sheet (print.css turns it into ink on white A4) */
 .statement { max-width: 840px; }
@@ -377,6 +398,9 @@ table.money.expenses td:nth-child(3) { color: var(--muted); }
 .statement-church { font-weight: 600; }
 .statement-head h2 { margin: 2px 0 12px; font-size: var(--fs-title); line-height: 32px; font-weight: 600; }
 .statement .table-wrap + .hint { margin-top: 12px; }
+/* the Year report: some air between its chart, its legend and its tables */
+.year-report .year-chart + .hint { margin: 4px 0 12px; }
+.year-report h3 { margin: 28px 0 4px; font-size: var(--fs-body); line-height: 24px; font-weight: 600; }
 
 @media (max-width: 1023px) {
   .grid.calendar > *, .grid.calendar-item > *, .grid.money-month > * { grid-column: 1 / -1; }
@@ -392,6 +416,7 @@ table.money.expenses td:nth-child(3) { color: var(--muted); }
   .kpi-strip { grid-template-columns: minmax(0, 1fr); }
   .kpi-strip .kpi + .kpi { border-left: 0; border-top: 1px solid var(--rule); }
   table.money td.n { margin-left: auto; color: var(--text); }
+  table.money td.n + td.n::before { content: none; }   /* a dash before an amount would read as a minus */
   table.money tr.total { justify-content: space-between; }
   table.money tr.total > * { display: block; padding: 0; border: 0; }
   .link-btn { min-height: 44px; }
@@ -409,8 +434,8 @@ table.money.expenses td:nth-child(3) { color: var(--muted); }
 .kv.wide > div { grid-template-columns: 128px minmax(0, 1fr); }
 .next-number { padding-top: 0; }
 
-/* a small grey word inside a row: Hidden, Open now */
-.tag { display: inline-flex; align-items: center; flex: none; height: 20px; margin-left: 8px; padding: 0 8px; border-radius: 4px; background: var(--active); color: var(--muted); font-size: var(--fs-small); font-weight: 500; white-space: nowrap; vertical-align: 1px; }
+/* a small grey word inside a row: Hidden, Open now (a pill, spec 4.7) */
+.tag { display: inline-flex; align-items: center; flex: none; height: 20px; margin-left: 8px; padding: 0 8px; border-radius: var(--radius-pill); background: var(--active); color: var(--muted); font-size: var(--fs-small); font-weight: 500; white-space: nowrap; vertical-align: 1px; }
 .list-item.is-hidden .what { color: var(--muted); }
 
 /* a name field with its button on one line (Add, Rename) */

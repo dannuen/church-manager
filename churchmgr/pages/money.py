@@ -612,19 +612,20 @@ def _signed(n):
 
 
 def _chart(report):
-    """Bars of Offerings and Expenses per month, inline SVG. Heights are whole pixels (integer maths);
-    fills are colours, so they print (a CSS background would not)."""
+    """Bars of Offerings and Expenses per month, inline SVG. Heights are whole pixels (integer maths).
+    Each bar and each legend key has a class (``bar-offerings``, ``bar-expenses``); style.css gives it its
+    color from a token. An SVG fill prints on paper (a CSS background would not)."""
     top = max([m[k] for m in report["months"] for k in ("offerings", "expenses")] + [1])
     bars = ""
     for m in report["months"]:
         x = (m["month"] - 1) * 60 + 8
-        for k, dx, fill in (("offerings", 0, "#2f6f4f"), ("expenses", 22, "#999")):
+        for k, dx in (("offerings", 0), ("expenses", 22)):
             height = m[k] * 150 // top
-            bars += f'<rect x="{x + dx}" y="{160 - height}" width="20" height="{height}" fill="{fill}"/>'
+            bars += f'<rect class="bar-{k}" x="{x + dx}" y="{160 - height}" width="20" height="{height}"/>'
         bars += f'<text x="{x + 20}" y="178" text-anchor="middle" font-size="11">{m["month"]}</text>'
     label = t("money.year_chart", year=report["year"])
-    legend = (f'<p class="hint"><span style="color:#2f6f4f">\u25a0</span> {h(t("money.offerings"))} \u00b7 '
-              f'<span style="color:#999">\u25a0</span> {h(t("money.expenses"))}</p>')
+    legend = (f'<p class="hint"><span class="bar-offerings">\u25a0</span> {h(t("money.offerings"))} \u00b7 '
+              f'<span class="bar-expenses">\u25a0</span> {h(t("money.expenses"))}</p>')
     return (f'<svg class="year-chart" viewBox="0 0 720 184" role="img" aria-label="{h(label)}" width="100%">{bars}</svg>'
             + legend)
 
