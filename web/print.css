@@ -14,6 +14,7 @@
   body { font: 11pt/1.4 "Segoe UI", Arial, sans-serif; }
   .app { display: block; }
   .canvas { padding: 0; }
+  .canvas::before { display: none !important; }   /* no wash of the app color on paper */
   .panel { border: 0; padding: 0; }
   .panel .table-wrap { margin: 0; overflow: visible; }   /* the screen's -12px bleed would pass the sheet edge */
   /* paper never gets the gradient: the header band and the active filter print as plain ink on white */

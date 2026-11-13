@@ -7,17 +7,19 @@ wrap to 2 lines (full text in the title) instead of one cut line. B11 the Dashbo
 first row keep their own height. B12 one filled primary button on the Person page and on a Calendar item.
 FIX-T 2b (class UiMinorsRound2Test): B15 B16 B17 B19.
 FIX-T 4b (class UiMinorsRound4Test): B25 no action words on paper, B26 row titles wrap to 2 lines.
+STYLE-2 (class StyleTokensTest): every color of style.css is a token, made from the app color.
 """
 
 import datetime as dt
+import itertools
 import re
 import unittest
 import urllib.parse
 from html.parser import HTMLParser
 
 import _support  # noqa: F401 - puts the repo root on sys.path
+from churchmgr import app_color, care, documents, lists, money, people, sent, ui
 from churchmgr import calendar as cal
-from churchmgr import care, documents, lists, money, people, sent, ui
 from churchmgr.pages import dashboard
 from test_pages_people import ROOT, TODAY, VOID, PagesTestBase, section
 from test_server import PANELS, parse_panels
@@ -408,6 +410,77 @@ class UiMinorsRound4Test(PagesTestBase):
         # one row height rule for every list: each part sits on the first line of the title
         self.assertIn("align-items: baseline", declarations(".row:has(> .what.wrap)"))
         self.assertIn("white-space: nowrap", declarations(".row .time"))
+
+
+# ---------------------------------------------------------------- STYLE-2 helpers
+
+# a raw color: #rgb, #rgba, #rrggbb, #rrggbbaa (an id such as #head-count is not one), rgb(), hsl()
+RAW_HEX = re.compile(r"#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})(?![0-9a-zA-Z_-])")
+RAW_FUNCTION = re.compile(r"\b(?:rgba?|hsla?)\([^)]*\)", re.IGNORECASE)
+CSS_MIX = re.compile(r"color-mix\(in srgb, (#[0-9a-f]{6})(?: (\d+)%)?, (#[0-9a-f]{6})(?: (\d+)%)?\)")
+SAMPLE_COLORS = ("#1f5c99", "#2c6e70", "#ffffcc", "#ffff00", "#00ff00", "#ff0000", "#808080", "#7f7fff",
+                 "#000000", "#ffffff")
+TEXT_PAIRS = (  # (text, what it sits on): at least 4.5:1
+    *(("--text", s) for s in ("--surface", "--ground", "--raised", "--active")),
+    *(("--muted", s) for s in ("--surface", "--ground", "--raised", "--active")),
+    *(("--faint", s) for s in ("--surface", "--ground", "--raised")),
+    ("--accent-text", "--surface"), ("--accent-text", "--ground"),  # the church name in the sidebar
+    ("--negative", "--surface"), ("--negative", "--raised"), ("--positive", "--surface"),
+    # the wash, the current menu item; the white pill of the title row is --accent-dark on --on-accent
+    *(("--on-accent", s) for s in ("--accent-dark", "--accent-base", "--accent-light")),
+)
+PART_PAIRS = (  # a field border or the focus ring: at least 3:1
+    ("--control", "--surface"), ("--control", "--ground"), ("--control", "--raised"),
+    ("--accent-text", "--surface"), ("--accent-text", "--ground"),
+)
+
+
+def style_css(comments=False):
+    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    return css if comments else re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+
+
+def root_tokens():
+    """``{token: value}`` of the one ``:root {…}`` block of ``web/style.css``."""
+    body = re.search(r":root \{([^{}]*)\}", style_css()).group(1)
+    declarations_ = (d.split(":", 1) for d in body.split(";") if d.strip())
+    return {name.strip(): value.strip() for name, value in declarations_}
+
+
+def token_color(tokens, name):
+    """The ``#rrggbb`` a color token comes to: ``var()`` and ``color-mix(in srgb, …)`` worked out as the
+    browser does (``app_color.mix``)."""
+    value = re.sub(r"var\((--[\w-]+)\)", lambda m: token_color(tokens, m.group(1)), tokens[name]).lower()
+    if re.fullmatch(r"#[0-9a-f]{6}", value):
+        return value
+    a, share_a, b, share_b = CSS_MIX.fullmatch(value).groups()
+    return app_color.mix(a, b, int(share_b) if share_b else 100 - int(share_a) if share_a else 50)
+
+
+class StyleTokensTest(unittest.TestCase):
+    """STYLE-2: every color of ``web/style.css`` is a token of its ``:root`` block, and the tokens are made
+    from the app color (Settings) so that text stays readable whatever color the pastor picks."""
+
+    def test_style_uses_only_tokens(self):
+        rest, blocks = re.subn(r":root \{[^{}]*\}", "", style_css())
+        self.assertEqual(blocks, 1)
+        raw = RAW_HEX.findall(rest) + RAW_FUNCTION.findall(rest)  # in @media rules too
+        self.assertEqual(raw, [], "raw colors outside :root")
+        self.assertNotIn("prefers-color-scheme", style_css(comments=True))  # light only
+
+    def test_every_token_reads_on_its_surface_for_any_app_color(self):
+        root = root_tokens()
+        levels = range(0, 256, 51)
+        colors = {"#%02x%02x%02x" % rgb for rgb in itertools.product(levels, repeat=3)} | set(SAMPLE_COLORS)
+        low = []
+        for color in sorted(colors):
+            tokens = {**root, **app_color.theme(color)}  # what the page head sets for that color
+            for pairs, need in ((TEXT_PAIRS, 4.5), (PART_PAIRS, 3.0)):
+                for fg, bg in pairs:
+                    ratio = app_color.contrast(token_color(tokens, fg), token_color(tokens, bg))
+                    if ratio < need:
+                        low.append((color, fg, bg, round(ratio, 2)))
+        self.assertEqual(low, [])
 
 
 if __name__ == "__main__":

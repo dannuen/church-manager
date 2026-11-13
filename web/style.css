@@ -1,38 +1,57 @@
 /* Church Manager: one light app screen style. Plain CSS, no build, works offline.
-   Rules (design-taste-frontend, app screens): one color, picked in Settings (the app color). Its gradient
-   is on the header band (.title-row), the active menu item, the active filter and the primary buttons,
-   with text in --on-accent; the plain accent is on the chart lines and the focus ring; the color as text
-   on the light surfaces is --accent-text. Flat surfaces with a 1px border, no shadows at rest; one system
-   face; sizes 12/14/16/24; tabular figures on every number.
-   Grid sum at 1440px: sidebar 232 + canvas (24 + 1160 + 24); 12 columns, 16px gutter. */
+   The look (docs/superpowers/specs/2026-11-12-app-styling-design.md, round 2, approved by the pastor): a
+   light ground; a wash of the app color at the top of the canvas with the page title on it; white cards
+   with round corners and a soft shadow; pill buttons; green and red only on money amounts. Light only.
+   Every color is a token of :root, made from the one app color the pastor picks in Settings: the page
+   head sets 4 of them (churchmgr/app_color.py theme). Text on the wash and on the gradient is
+   --on-accent; the color as text on the light surfaces, and the focus ring, is --accent-text; the plain
+   accent is on the chart lines. One system face; sizes 12/14/16/24 and 28 for the page title; tabular
+   figures on every number.
+   Grid sum at 1440px: sidebar 232 + canvas (24 + 1160 + 24); 12 columns, 20px gutter. */
 
 :root {
-  --ground: #f7f7f6;
-  --surface: #ffffff;
-  --raised: #f2f2f1;
-  --active: #e8e8e7;
-  --border: #e8e8e8;
-  --rule: #f0f0f0;
-  --control: #cfd3d6;
-  --text: #151515;
-  --muted: #5c6066;
-  --faint: #6b6b6b;
-  --accent: #1f5c99;          /* the app color as picked: the chart lines and the focus ring */
-  /* The app color (Settings). The page head sets these 4 for the color the pastor picked
-     (churchmgr/app_color.py theme); these are the values of the default color. */
-  --accent-base: #1f5c99;     /* the color the gradient is made from */
-  --on-accent: #ffffff;       /* text on the gradient: readable on both ends */
-  --accent-text: #1f5c99;     /* the app color as text on the light surfaces */
+  /* The app color (Settings). The page head sets these 4 for the color the pastor picked; these are the
+     values of the default color. */
+  --accent: #1f5c99;          /* the color as picked: the chart lines */
+  --accent-base: #1f5c99;     /* the color the gradient, the wash and the tints are made from */
+  --on-accent: #ffffff;       /* text on the gradient and on the wash: readable on both ends */
+  --accent-text: #1f5c99;     /* the color as text on the light surfaces, and the focus ring */
   --accent-light: color-mix(in srgb, var(--accent-base), #ffffff 15%);
   --accent-dark: color-mix(in srgb, var(--accent-base), #000000 30%);
   --gradient: linear-gradient(135deg, var(--accent-light), var(--accent-dark));
-  --positive: #247b50;
-  --negative: #c4242a;
+  /* Surfaces, lines and text: grey with a touch of the app color. tests/test_pages_ui.py checks, for any
+     color, 4.5:1 for each text on the surfaces it sits on and 3:1 for the field border. */
+  --ground: color-mix(in srgb, var(--accent-base) 2%, #f8f9f9);
+  --surface: #ffffff;
+  --raised: color-mix(in srgb, var(--accent-base) 10%, #ffffff);    /* hover, the Private note panel */
+  --active: color-mix(in srgb, var(--accent-base) 16%, #ffffff);    /* the tint: flash, tag */
+  --border: color-mix(in srgb, var(--accent-base) 12%, #fafafa);
+  --rule: color-mix(in srgb, var(--accent-base) 8%, #fcfcfc);
+  --control: color-mix(in srgb, var(--accent-text) 36%, #949494);   /* the border of a field or a button */
+  --text: color-mix(in srgb, var(--accent-text) 35%, #000000);
+  --muted: color-mix(in srgb, var(--accent-text) 38%, #585858);
+  --faint: color-mix(in srgb, var(--accent-text) 36%, #686868);
+  --positive: #1b7a4a;        /* green and red on money amounts only; red also for errors */
+  --negative: #b3261e;
+  --refusal-bg: #ffedea; --refusal-ink: #831c1e;                     /* a Handover refusal */
+  --grid: color-mix(in srgb, var(--accent-base) 8%, #f0f0f0);       /* the Services chart */
+  --grid-base: color-mix(in srgb, var(--accent-base) 24%, #f2f2f2);
+  /* the wash at the top of the canvas: the app color from dark (left) to light (right), fading into the
+     ground in its lower 40% */
+  --wash: linear-gradient(180deg, transparent 0%, transparent 60%, var(--ground) 100%),
+          linear-gradient(112deg, var(--accent-dark) 0%, var(--accent-base) 48%, var(--accent-light) 100%);
+  --wash-h: 340px; --wash-h-narrow: 600px; --wash-radius: 28px;
+  /* the one card in the app color (Dashboard, Money this month): dark at the top left, lighter at the
+     bottom right; its text is --on-accent */
+  --highlight-fill: linear-gradient(160deg, var(--accent-dark) 0%, var(--accent-base) 55%, var(--accent-light) 100%);
+  --highlight-rule: color-mix(in srgb, var(--on-accent) 20%, transparent);
+  --shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent), 0 6px 20px color-mix(in srgb, var(--text) 7%, transparent);
+  --shadow-raised: 0 10px 30px color-mix(in srgb, var(--text) 16%, transparent);
   --font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
-  --fs-small: 12px; --fs-meta: 14px; --fs-body: 16px; --fs-title: 24px;
-  --gap: 16px; --pad: 24px; --card-pad: 20px;
-  --radius: 8px; --radius-control: 6px;
-  --sidebar: 232px; --control-height: 40px; --row: 44px;
+  --fs-small: 12px; --fs-meta: 14px; --fs-body: 16px; --fs-title: 24px; --fs-display: 28px;
+  --gap: 20px; --pad: 24px; --card-pad: 24px;
+  --radius: 12px; --radius-control: 12px; --radius-card: 18px; --radius-pill: 999px;
+  --sidebar: 232px; --control-height: 40px; --row: 44px; --dash-row2: 294px;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -41,7 +60,7 @@ body { margin: 0; background: var(--ground); color: var(--text); font: var(--fs-
 h1, h2, h3, p, ul, ol { margin: 0; }
 a { color: inherit; text-decoration: none; }
 a:hover { text-decoration: underline; text-underline-offset: 3px; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; border-radius: 4px; }
 .num, table, .kpi-value, input, select { font-variant-numeric: tabular-nums; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .dash, .faint { color: var(--faint); }
@@ -49,36 +68,49 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 /* ---------- shell: sidebar on the page ground, canvas beside it ---------- */
 .app { display: grid; grid-template-columns: var(--sidebar) minmax(0, 1fr); min-height: 100vh; }
-.sidebar { position: sticky; top: 0; height: 100vh; overflow: auto; padding: 20px 12px; display: flex; flex-direction: column; gap: 16px; }
-.brand { display: flex; flex-direction: column; padding: 0 10px; }
+.sidebar { position: sticky; top: 0; height: 100vh; overflow: auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 20px; }
+.brand { display: flex; flex-direction: column; padding: 0 16px; }
 .brand:hover { text-decoration: none; }
 .brand-app { font-size: var(--fs-small); line-height: 16px; color: var(--muted); }
-.brand-church { font-weight: 600; line-height: 22px; }
+.brand-church { color: var(--accent-text); font-weight: 700; line-height: 22px; }
 .nav { display: flex; flex-direction: column; gap: 2px; }
-.nav-item { display: flex; align-items: center; min-height: 36px; padding: 0 10px; border-radius: var(--radius); color: var(--muted); font-size: var(--fs-meta); }
+.nav-item { display: flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: var(--radius-pill); color: var(--muted); font-size: var(--fs-meta); }
 .nav-item:hover { background: var(--raised); color: var(--text); text-decoration: none; }
 .nav-item[aria-current="page"] { background: var(--gradient); color: var(--on-accent); font-weight: 600; }
-.canvas { min-width: 0; padding: var(--pad); }
+.nav-item[aria-current="page"]:hover { background: var(--accent-dark); }
+/* The wash: one layer of the app color behind the top of the canvas (the language switch, the title row
+   and the top of the first cards). It is not a card. The sidebar stays on the plain ground. */
+.canvas { position: relative; isolation: isolate; min-width: 0; padding: 14px var(--pad) var(--pad); }
+.canvas::before { content: ""; position: absolute; z-index: -1; top: 8px; left: 0; right: 12px; height: var(--wash-h); background: var(--wash); border-radius: var(--wash-radius) var(--wash-radius) 0 0; pointer-events: none; }
 
-/* ---------- title row: the header band (the gradient), one h1, one finding line, the actions ---------- */
-.title-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; padding: 16px 20px; border-radius: var(--radius); background: var(--gradient); color: var(--on-accent); }
-.title-row h1 { font-size: var(--fs-title); line-height: 32px; font-weight: 600; }
+/* ---------- title row on the wash: one h1, one finding line, the actions ---------- */
+.title-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: var(--gap); padding: 0 12px 14px; color: var(--on-accent); }
+.title-row h1 { font-size: var(--fs-display); line-height: 36px; font-weight: 700; }
 .title-row .sub { margin-top: 2px; color: var(--on-accent); }
 .title-row .actions { display: flex; align-items: flex-end; gap: 12px; flex: none; }
-/* In the band every text is --on-accent at full strength. A control with its own white surface keeps its
-   ink (a secondary .btn, the search field, the live results); a primary button gets a 1px ring. The focus
-   ring is --on-accent (an accent ring cannot be seen on the band), but not on the white results. */
+/* On the wash every text is --on-accent at full strength. The main action is a pill filled with
+   --on-accent and --accent-dark text; the other buttons are pills outlined in --on-accent. The search
+   field and the live results keep their white surface and ink; the field gets an --on-accent border. The
+   focus ring is --on-accent on the wash and --accent-text on the white results. */
+.title-row .btn { border-color: var(--on-accent); border-radius: var(--radius-pill); background: transparent; color: var(--on-accent); }
+.title-row .btn:hover { background: var(--accent-dark); }
+.title-row .btn.primary { background: var(--on-accent); color: var(--accent-dark); border-color: var(--on-accent); }
+.title-row .btn.primary:hover { background: var(--on-accent); text-decoration: underline; text-underline-offset: 3px; }
 .title-row .input, .title-row .results { color: var(--text); }
-.title-row .btn.primary { border-color: var(--on-accent); }
+.title-row .input { border-color: var(--on-accent); border-radius: var(--radius-pill); padding: 0 18px; }
 .title-row :focus-visible { outline-color: var(--on-accent); }
-.title-row .results :focus-visible { outline-color: var(--accent); }
-.flash { margin-bottom: 16px; padding: 10px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
-/* the language switch at the top of every page: two quiet buttons, the current one marked */
-.lang-switch { display: flex; justify-content: flex-end; gap: 4px; margin: -8px 0 8px; }
-.lang-switch button { min-height: 28px; padding: 0 10px; border: 1px solid transparent; border-radius: var(--radius-control); background: none; color: var(--muted); font: inherit; font-size: var(--fs-small); cursor: pointer; }
-.lang-switch button:hover { background: var(--raised); color: var(--text); }
-.lang-switch button[aria-pressed="true"] { border-color: var(--control); background: var(--surface); color: var(--text); font-weight: 600; }
+.title-row .results :focus-visible { outline-color: var(--accent-text); }
+.flash { margin-bottom: 16px; padding: 10px 16px; background: var(--active); border-radius: var(--radius); }
+/* the language switch at the top of every page, on the wash: two small pills, the current one white */
+.lang-switch { display: flex; justify-content: flex-end; gap: 4px; margin: 0 12px 4px; }
+.lang-switch button { min-height: 28px; padding: 0 10px; border: 1px solid transparent; border-radius: var(--radius-pill); background: none; color: var(--on-accent); font: inherit; font-size: var(--fs-small); cursor: pointer; }
+.lang-switch button:hover { background: var(--accent-dark); color: var(--on-accent); }
+.lang-switch button[aria-pressed="true"] { border-color: var(--on-accent); background: var(--surface); color: var(--text); font-weight: 600; }
+.lang-switch :focus-visible { outline-color: var(--on-accent); }
 .lead { font-size: var(--fs-body); margin-bottom: 12px; }
+/* text outside a card never sits on the wash: a note right under the title row (the Documents hint) is a
+   small white note; the filter row under it is a white bar (.list-toolbar below) */
+.canvas > .hint, .canvas > .lead { width: fit-content; max-width: 100%; padding: 8px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
 
 /* ---------- panels and the 12-column grid ---------- */
 .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--gap); }
@@ -126,8 +158,8 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
    not scale. */
 .chart { display: block; width: 100%; margin: 4px 0 8px; padding: 0 32px 0 40px; overflow: visible; }
 .chart .plot { overflow: visible; }
-.chart .gridline { stroke: #ececec; stroke-width: 1; }
-.chart .gridline.base { stroke: #cfcfcf; }
+.chart .gridline { stroke: var(--grid); stroke-width: 1; }
+.chart .gridline.base { stroke: var(--grid-base); }
 .chart .tick { fill: var(--muted); font-size: 12px; font-family: var(--font); }
 .chart .line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .chart .end { fill: var(--accent-text); font-size: 12px; font-weight: 600; font-family: var(--font); }
@@ -142,7 +174,7 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .search-form label { font-size: var(--fs-meta); font-weight: 500; line-height: 20px; }
 .search-line { display: flex; gap: 8px; }
 .title-search .input { width: clamp(180px, 22vw, 300px); }
-.results { position: absolute; z-index: 10; top: calc(100% + 4px); left: 0; right: 0; list-style: none; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08); max-height: 360px; overflow: auto; }
+.results { position: absolute; z-index: 10; top: calc(100% + 4px); left: 0; right: 0; list-style: none; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-raised); max-height: 360px; overflow: auto; }
 .results li a, .results li span.none { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: var(--radius-control); }
 .results li a:hover, .results li a:focus-visible { background: var(--raised); text-decoration: none; }
 .results .status { color: var(--muted); font-size: var(--fs-meta); }
@@ -187,6 +219,7 @@ th.n, td.n { text-align: right; }
   .nav { flex-direction: row; overflow-x: auto; gap: 4px; padding-bottom: 4px; }
   .nav-item { flex: none; min-height: 44px; }
   .canvas { padding: 16px; }
+  .canvas::before { left: 8px; right: 8px; height: var(--wash-h-narrow); }   /* the title row stacks */
   .grid > * { grid-column: 1 / -1 !important; }
   .title-row { flex-direction: column; align-items: stretch; }
   .title-row .actions { flex-direction: column; align-items: stretch; }
@@ -202,7 +235,7 @@ th.n, td.n { text-align: right; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
 
 /* ---------- card C1: People, Families, Chi phái and Care pages ----------
-   Grid sum at 1440px: canvas 1160 = 8 columns (main) + 4 columns (side), 16px gutter (Care: 7 + 5).
+   Grid sum at 1440px: canvas 1160 = 8 columns (main) + 4 columns (side), 20px gutter (--gap) (Care: 7 + 5).
    Below 1024px every column takes the full width. */
 .span-8 { grid-column: span 8; }
 .side-4 { grid-column: span 4; }
@@ -234,8 +267,9 @@ details.change > summary:hover { background: var(--raised); }
 details.change[open] > summary { margin-bottom: 16px; }
 details.change .form { max-width: none; }
 
-/* Status filter and the quick search above the People list, on one row */
-.list-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; margin-bottom: 16px; }
+/* Status filter and the quick search above the People list, on one row: a white bar, so its labels never
+   sit on the wash */
+.list-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; margin-bottom: 16px; padding: 10px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow); }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); color: var(--muted); font-size: var(--fs-meta); }
 .chip:hover { background: var(--raised); color: var(--text); text-decoration: none; }
@@ -286,7 +320,7 @@ details.change .form { max-width: none; }
 }
 
 /* ---------- card C2: Calendar and Money pages ----------
-   Grid sum at 1440px: canvas 1160 = 8 columns (agenda, item page) + 4 columns (side), 16px gutter;
+   Grid sum at 1440px: canvas 1160 = 8 columns (agenda, item page) + 4 columns (side), 20px gutter (--gap);
    Money: 6 columns (Offerings) + 6 columns (Expenses, Giving statement). Below 1024px one column. */
 .grid.calendar, .grid.calendar-item, .grid.money-month { align-items: start; }
 .span-5.stack, .span-7.stack { min-width: 0; }
@@ -365,7 +399,7 @@ table.money.expenses td:nth-child(3) { color: var(--muted); }
 
 /* ---------- card C3: Documents, Sent documents, Lists, Copies and Settings ----------
    Grid sum at 1440px: canvas 1160 = 8 + 4 columns (Sent documents), 7 + 5 (Copies, Settings) and
-   6 + 6 (Lists: two sections a row), 16px gutter. Below 1024px every column takes the full width. */
+   6 + 6 (Lists: two sections a row), 20px gutter (--gap). Below 1024px every column takes the full width. */
 .grid.sent, .grid.lists, .grid.copies, .grid.settings { align-items: start; }
 .lists > .span-6 { min-width: 0; }
 .list-foot { margin-top: 12px; }
@@ -396,8 +430,8 @@ details.rename .form { max-width: none; }
 /* Handover: the result is a tone step; a refusal is the pale negative pair */
 .result, .refusal { margin-bottom: 16px; padding: 12px 16px; border-radius: var(--radius-control); font-size: var(--fs-meta); line-height: 20px; }
 .result { background: var(--raised); }
-.refusal { background: #ffedea; }
-.refusal strong { color: #831c1e; }
+.refusal { background: var(--refusal-bg); }
+.refusal strong { color: var(--refusal-ink); }
 .result p + p, .refusal p + p, .refusal .places + p, .refusal p + .places { margin-top: 8px; }
 .places { padding-left: 20px; }
 .places li + li { margin-top: 4px; }
@@ -504,3 +538,42 @@ table.documents td:last-child a { color: var(--text); font-weight: 600; }
    the Calendar agenda); times, dates and numbers stay on one line. */
 .row:has(> .what.wrap) { align-items: baseline; }
 .row .day, .row .time { white-space: nowrap; }
+
+/* ---------- STYLE-2: a short window, and the Dashboard on one screen ----------
+   From 861px wide and up to 720px high the menu is one notch tighter, on every page: all 13 items stay in
+   view. From 1181px wide the Dashboard page itself never scrolls: the canvas is one window high (at least
+   640px), the grid fills what is left under the title row, and a long list scrolls inside its own card
+   (the card title and its foot link stay in place). Row 1 takes what is left; row 2 is --dash-row2 high.
+   From 861px to 1180px the grid has 3 rows and the page may scroll; under 861px it is the top bar. Screen
+   only: on paper every list prints whole. */
+@media (min-width: 861px) and (max-height: 720px) {
+  .sidebar { padding: 14px 16px; gap: 12px; }
+  .nav-item { min-height: 34px; }
+}
+@media screen and (min-width: 1181px) {
+  .canvas:has(> .dashboard) { height: 100vh; min-height: 640px; padding-bottom: 12px; display: flex; flex-direction: column; }
+  .canvas:has(> .dashboard) > .lang-switch { position: absolute; top: 12px; right: 40px; margin: 0; z-index: 1; }
+  .canvas:has(> .dashboard) > .title-row { flex: none; margin-bottom: 12px; padding-top: 6px; padding-bottom: 8px; }
+  .canvas:has(> .dashboard) > .flash { flex: none; margin-bottom: 8px; }
+  .dashboard { flex: 1 1 0; min-height: 0; gap: 14px; grid-template-rows: minmax(150px, 1fr) auto; }
+  .dashboard > .panel { min-height: 0; padding: 14px 20px 12px; }
+  .dashboard .panel > header { margin-bottom: 4px; }
+  .dashboard .panel > header > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; }
+  .dashboard .panel > footer { padding-top: 8px; }
+  .dashboard .row { min-height: 40px; padding: 4px 0; }
+  .dashboard .row .day { width: 112px; }   /* "Chúa Nhật 15/11" is wider than 92px */
+  .dashboard > [data-panel="this-week"] .rows, .dashboard > [data-panel="needs-visit"] .rows,
+  .dashboard > [data-panel="sent-documents"] .rows {
+    flex: 1 1 0; min-height: 0; overflow-y: auto; align-content: start; overscroll-behavior: contain;
+    scrollbar-width: thin; scrollbar-color: var(--control) transparent; scrollbar-gutter: stable;
+    margin-right: -14px; padding-right: 6px; }
+  /* row 2 keeps its own height (B11), at least --dash-row2; Sent documents never taller: its rows scroll */
+  .dashboard > [data-panel="services"], .dashboard > [data-panel="money-month"],
+  .dashboard > [data-panel="sent-documents"] { min-height: var(--dash-row2); }
+  .dashboard > [data-panel="sent-documents"] { max-height: var(--dash-row2); }
+}
+@media screen and (min-width: 1181px) and (max-height: 720px) {
+  .dashboard .row { min-height: 34px; padding: 2px 0; }
+  .dashboard > [data-panel="services"], .dashboard > [data-panel="money-month"],
+  .dashboard > [data-panel="sent-documents"] { padding-top: 10px; padding-bottom: 8px; }
+}
