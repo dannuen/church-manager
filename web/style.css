@@ -96,8 +96,10 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .canvas { position: relative; isolation: isolate; min-width: 0; padding: 14px var(--pad) var(--pad); }
 .canvas::before { content: ""; position: absolute; z-index: -1; top: 8px; left: 0; right: 12px; height: var(--wash-h); background: var(--wash); border-radius: var(--wash-radius) var(--wash-radius) 0 0; pointer-events: none; }
 
-/* ---------- title row on the wash: one h1, one finding line, the actions ---------- */
-.title-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: var(--gap); padding: 0 12px 14px; color: var(--on-accent); }
+/* ---------- title row on the wash: one h1, one finding line, the actions ----------
+   The title keeps at least 240px: when the actions leave it less, they wrap under it (861px to 1180px) */
+.title-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: var(--gap); padding: 0 12px 14px; color: var(--on-accent); }
+.title-row > :first-child { flex: 1 1 240px; min-width: 0; }
 .title-row h1 { font-size: var(--fs-display); line-height: 36px; font-weight: 700; }
 .title-row .sub { margin-top: 2px; color: var(--on-accent); }
 .title-row .actions { display: flex; align-items: flex-end; gap: 12px; flex: none; }
@@ -124,6 +126,7 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 /* text outside a card never sits on the wash: a note right under the title row (the Documents hint) is a
    small white note; the filter row under it is a white bar (.list-toolbar below) */
 .canvas > .hint, .canvas > .lead { width: fit-content; max-width: 100%; padding: 8px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.canvas > .empty { background: var(--surface); }   /* the Search page with no result: its dashed box is white, not on the wash */
 
 /* ---------- panels and the 12-column grid ----------
    A card (spec 4.3): white, a 1px --border edge, --radius-card corners and the soft --shadow; a bold ink
@@ -140,7 +143,8 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .panel.narrow { max-width: 640px; }
 .panel p + p, .panel p + .form, .panel .form + p { margin-top: 12px; }
 .card-link { font-size: var(--fs-meta); font-weight: 600; color: var(--text); }
-.card-link::after { content: " ›"; }
+.card-link::after { content: "\00a0›"; }   /* a no-break space: the sign never sits alone on a line */
+header .card-link { white-space: nowrap; }   /* in a card head (Money): the title wraps, the link stays whole */
 
 /* list rows: a rule between rows, none above the first; one line each */
 .rows { list-style: none; padding: 0; display: grid; }
@@ -148,7 +152,7 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .row + .row { border-top: 1px solid var(--rule); }
 .row .what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .row .side { flex: 0 1 auto; max-width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--fs-meta); }
-.row .day { flex: none; width: 92px; font-size: var(--fs-meta); }
+.row .day { flex: none; width: 112px; font-size: var(--fs-meta); }   /* "Chúa Nhật 15/11" is wider than 92px */
 .row .time { flex: none; width: 44px; color: var(--muted); font-size: var(--fs-meta); }
 .row .figure { flex: none; width: 96px; text-align: right; font-size: var(--fs-meta); }
 .row .sub { display: block; color: var(--muted); font-size: var(--fs-meta); font-weight: 400; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -251,7 +255,7 @@ input[type="checkbox"] { width: 20px; height: 20px; margin: 0; accent-color: var
    a total row. Figures stay right-aligned in tabular figures, in ink. A wide table scrolls inside its card
    (.table-wrap), never the page. Separate borders (spacing 0): a collapsed table cannot round a cell.
    :where() keeps the header and the cells at the weight of one tag, so print.css (later) still wins. */
-.table-wrap { overflow-x: auto; max-width: 100%; }
+.table-wrap { overflow-x: auto; max-width: 100%; scrollbar-width: thin; scrollbar-color: var(--control) transparent; }
 table { width: 100%; border-collapse: separate; border-spacing: 0; }
 th { padding: 0 12px; text-align: left; font-weight: 600; }
 :where(thead) th { height: 36px; font-size: var(--fs-small); line-height: 16px; color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap; }
@@ -269,19 +273,27 @@ td .num { white-space: nowrap; }   /* a phone number, a date or an amount never 
 /* ---------- laptop: still 2 rows; tablet and phone: one column, the nav becomes a top bar ---------- */
 @media (max-width: 1180px) {
   .span-3, .span-4 { grid-column: span 6; }
-  .dashboard > [data-panel="this-week"], .dashboard > [data-panel="needs-visit"] { grid-column: span 6; }
+  /* the two list cards take the full row here: at half the canvas a name or a title of This week was
+     squeezed to a few characters a line beside the day, the time and the kind */
+  .dashboard > [data-panel="this-week"], .dashboard > [data-panel="needs-visit"] { grid-column: 1 / -1; }
   .dashboard > [data-panel="services"] { grid-column: 1 / -1; }
 }
 @media (max-width: 860px) {
-  .app { grid-template-columns: minmax(0, 1fr); }
+  /* the top bar keeps its own height and the canvas takes the rest: on a short page the bar never grows
+     an empty band under the menu */
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
   .sidebar { position: static; height: auto; flex-direction: column; gap: 8px; padding: 12px 16px 8px; border-bottom: 1px solid var(--border); }
   .brand { padding: 0; }
-  .nav { flex-direction: row; overflow-x: auto; gap: 4px; padding-bottom: 4px; }
+  /* the menu is one row that scrolls sideways: a thin bar in the line color (not the browser's grey one),
+     and the current page's pill is scrolled into view when the page opens */
+  .nav { flex-direction: row; overflow-x: auto; gap: 4px; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: var(--control) transparent; }
   .nav-item { flex: none; min-height: 44px; }
+  .nav-item[aria-current="page"] { scroll-initial-target: nearest; }
   .canvas { padding: 16px; }
   .canvas::before { left: 8px; right: 8px; height: var(--wash-h-narrow); }   /* the title row stacks */
   .grid > * { grid-column: 1 / -1 !important; }
   .title-row { flex-direction: column; align-items: stretch; }
+  .title-row > :first-child { flex: none; }   /* a column: no 240px basis in height */
   .title-row .actions { flex-direction: column; align-items: stretch; }
   .title-search .input { width: auto; flex: 1; }
   .btn { height: 44px; }
@@ -307,7 +319,7 @@ td .num { white-space: nowrap; }   /* a phone number, a date or an amount never 
 table.list td, table.list :where(tbody) th { font-size: var(--fs-meta); line-height: 20px; padding: 8px 12px; }
 table.list td:first-child { font-weight: 500; }
 table.list td.n, table.list th.n { white-space: nowrap; }
-table.history th.n, table.history td.n { width: 112px; }   /* From / To sit together at the right */
+table.history th.n, table.history td.n { width: 1%; white-space: nowrap; }   /* From / To sit together at the right, as wide as a date: the name gets the rest (a narrow side card too) */
 table.story td:first-child { width: 104px; white-space: nowrap; font-weight: 400; color: var(--muted); }
 .list-panel { padding-top: 8px; padding-bottom: 8px; }
 .list-panel > .empty { margin: 16px 0; }   /* the same air above and below as at its sides */
@@ -338,7 +350,8 @@ details.change .form { max-width: none; }
 .chip { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 16px; border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--surface); color: var(--muted); font-size: var(--fs-meta); }
 .chip:hover { background: var(--raised); color: var(--text); text-decoration: none; }
 .chip[aria-current="true"] { background: var(--active); border-color: var(--accent-text); color: var(--accent-deep); font-weight: 600; }
-.toolbar { flex: 0 1 440px; }
+/* the People search: it may shrink in the bar (its field, Search and Clear buttons never push the page) */
+.toolbar { flex: 0 1 440px; min-width: 0; grid-template-columns: minmax(0, 1fr); }
 .toolbar .input { flex: 1; }
 
 /* the Private note box: not like the other cards at a glance (spec 4.10): the --raised tint, a dashed
@@ -377,11 +390,14 @@ details.change .form { max-width: none; }
   table.list td, table.list tr[data-row] > th { display: block; padding: 0; border: 0; color: var(--muted); }
   table.list td:first-child, table.list tr[data-row] > th:first-child { flex-basis: 100%; color: var(--text); }
   table.list td.n { text-align: left; }
+  table.history th.n, table.history td.n { width: auto; }   /* a row of the phone list: the dates take their own width */
   table.list td.n + td.n::before { content: "– "; }
   table.story td:first-child { width: auto; }
   .inline-fields { grid-template-columns: minmax(0, 1fr); }
   .kv > div { grid-template-columns: 96px minmax(0, 1fr); }
   .chip, details.change > summary { min-height: 44px; }
+  .toolbar .search-line { flex-wrap: wrap; }
+  .toolbar .input { flex-basis: 100%; }   /* a phone: the field on its own line, the buttons under it */
 }
 
 /* ---------- card C2: Calendar and Money pages ----------
@@ -495,6 +511,7 @@ table.money.expenses td:nth-child(3) { color: var(--muted); }
 
 /* each list item: name, what uses it, Hide/Show, Rename (the form opens on its own line) */
 .list-item { flex-wrap: wrap; }
+.list-item .side { max-width: none; }   /* "6 người đang phục vụ" is never cut while the row has room */
 details.rename > summary { display: inline-flex; align-items: center; min-height: 36px; padding: 0 4px; font-size: var(--fs-meta); font-weight: 600; cursor: pointer; list-style: none; }
 details.rename > summary::-webkit-details-marker { display: none; }
 details.rename > summary:hover { text-decoration: underline; text-underline-offset: 3px; }
@@ -538,10 +555,12 @@ input[type="file"].input::file-selector-button:hover { background: var(--raised)
 table.money .edit { width: 1%; white-space: nowrap; text-align: right; }
 table.money td.edit a { color: var(--text); font-weight: 600; }
 @media (max-width: 640px) {
-  /* line 1: the Date and its Edit link; line 2: the other fields, the amount at the right edge */
-  table.money tr[data-row] > td:first-child { flex: 1 0 calc(100% - 48px); }
+  /* line 1: the Date and its Edit link; line 2: the other fields, the amount at the right edge. The Edit
+     link takes its own width ("Chỉnh sửa" is wider than "Edit"); an empty item after it ends line 1 */
+  table.money tr[data-row] > td:first-child { flex: 1 1 0; min-width: 0; }
   table.money tr[data-row] > td:not(:first-child):not(.edit) { order: 2; }
-  table.money td.edit { flex: 0 0 36px; order: 1; }
+  table.money td.edit { flex: none; width: auto; order: 1; }
+  table.money tr[data-row]::after { content: ""; flex-basis: 100%; order: 1; }
   table.money tr.total td.edit { display: none; }
   table.money td.edit a { display: inline-block; padding: 12px 0 12px 8px; margin: -12px 0 -12px -8px; }   /* a 44px tap */
 }
@@ -636,7 +655,6 @@ table.documents td:last-child a { color: var(--text); font-weight: 600; }
   .dashboard .panel > header > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; }
   .dashboard .panel > footer { padding-top: 8px; }
   .dashboard .row { min-height: 40px; padding: 4px 0; }
-  .dashboard .row .day { width: 112px; }   /* "Chúa Nhật 15/11" is wider than 92px */
   .dashboard > [data-panel="this-week"] .rows, .dashboard > [data-panel="needs-visit"] .rows,
   .dashboard > [data-panel="sent-documents"] .rows {
     flex: 1 1 0; min-height: 0; overflow-y: auto; align-content: start; overscroll-behavior: contain;

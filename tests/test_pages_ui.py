@@ -10,6 +10,8 @@ FIX-T 4b (class UiMinorsRound4Test): B25 no action words on paper, B26 row title
 STYLE-2 (class StyleTokensTest): every color of style.css is a token, made from the app color.
 STYLE-4 (classes FormsAndButtonsTest, FormControlsTest): pills, one control height, the states and one
 focus ring that no rule takes away; every form control of a page carries a class that style.css styles.
+STYLE-5 (class CardsAndChartsTest): cards, the one dark card, green and red on money only.
+STYLE-6 (class PrintAndFinalWalkTest): paper is ink on white; the faults of the final walk stay fixed.
 """
 
 import datetime as dt
@@ -769,6 +771,118 @@ class CardsAndChartsTest(PagesTestBase):
         self.assertEqual(rule_props(".kpi-strip", "print.css")["box-shadow"], "none")
         for selector in (".kpi-value.strong", ".kpi-value.strong:not(.neg)"):  # no green or red Balance
             self.assertEqual(rule_props(selector, "print.css")["color"], "#000", selector)
+
+
+# ---------------------------------------------------------------- STYLE-6 helpers
+
+def print_media_props(selector):
+    """``{property: value}`` of the rules inside ``@media print {…}`` of ``web/print.css`` whose selector
+    list holds exactly ``selector`` (a later rule wins), comments removed."""
+    css = re.sub(r"/\*.*?\*/", "", (ROOT / "web" / "print.css").read_text(encoding="utf-8"), flags=re.S)
+    start = css.index("@media print {") + len("@media print {")
+    depth, end = 1, start
+    while depth:
+        depth += {"{": 1, "}": -1}.get(css[end], 0)
+        end += 1
+    found = {}
+    for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css[start:end - 1]):
+        if selector in (s.strip() for s in sel.split(",")):
+            found.update((p.strip(), v.strip()) for p, v in (d.split(":", 1) for d in body.split(";") if d.strip()))
+    assert found, f"no @media print rule for {selector!r}"
+    return found
+
+
+def media_props(query, selector):
+    """The declarations of ``selector`` in the ``@media <query>`` blocks of ``web/style.css``, joined."""
+    found = [body for sel, body in media_rules(query) if selector in (s.strip() for s in sel.split(","))]
+    assert found, f"no rule for {selector!r} in @media {query}"
+    return " ".join(found)
+
+
+# the properties that paint: a token used in one of them shows on paper unless print.css re-sets it
+PAINT = re.compile(r"(?:color|background(?:-color)?|border(?:-(?:top|right|bottom|left))?(?:-color)?|outline(?:-color)?"
+                   r"|fill|stroke|accent-color|scrollbar-color|box-shadow)")
+PAPER_KEEPS = {"--bar-offerings", "--bar-expenses"}  # spec 3.3: the Year report bars print in their two colors
+# backgrounds whose rules print.css clears or hides itself: the wash (.canvas::before), the fill of the dark
+# card, the gradient of the current menu item and of the primary button (the menu and the buttons)
+PAPER_CLEARS = {"--wash", "--highlight-fill", "--gradient"}
+GREY = re.compile(r"#(?:([0-9a-f])\1\1|([0-9a-f]{2})\2\2)")  # red = green = blue: ink, a grey or white
+
+
+class PrintAndFinalWalkTest(PagesTestBase):
+    """STYLE-6 (spec D6, 4.13, and the final walk over every page at 1440, 800 and 390px). On paper no card,
+    title row or dark card keeps a shadow or a fill, and every color token that style.css paints with turns
+    ink, grey or white (whatever the app color): print.css comes after the app color of the page head, so
+    its ``:root`` wins. The layout faults the walk found (also at 900, 1000 and 1180px) stay fixed."""
+
+    def test_on_paper_no_shadow_and_no_fill_on_cards_the_title_row_and_the_dark_card(self):
+        for selector in (".panel", ".title-row", CARD):
+            rule = print_media_props(selector)
+            self.assertEqual((rule.get("box-shadow"), rule.get("background")), ("none", "none"), selector)
+        self.assertEqual(print_media_props(".canvas::before")["display"], "none !important")  # no wash
+        # print.css is last: after style.css and after the <style> that sets the app color
+        page = self.page("/people")
+        self.assertLess(page.index('href="/static/style.css"'), page.index("<style>:root{"))
+        self.assertLess(page.index("<style>:root{"), page.index('href="/static/print.css"'))
+
+    def test_on_paper_every_paint_token_is_ink_grey_or_white(self):
+        used = set()
+        for sel, body in css_rules():
+            if sel == ":root":
+                continue
+            for decl in body.split(";"):
+                prop, _colon, value = decl.partition(":")
+                if PAINT.fullmatch(prop.strip()):
+                    used |= set(re.findall(r"var\((--[\w-]+)\)", value))
+        paper = print_media_props(":root")
+        need = used - PAPER_KEEPS - PAPER_CLEARS
+        self.assertGreaterEqual(len(need), 20)  # the text, line, tint, chart and shadow tokens
+        for token in sorted(need):
+            value = paper.get(token, "")  # "": print.css does not re-set it, so it keeps its screen color
+            self.assertTrue(value == "none" or GREY.fullmatch(value), (token, value))
+        # the gradient sits only on the current menu item and on the primary button: print.css hides both
+        hidden = {selector for selector, _parts in print_hide_selectors()}
+        self.assertLessEqual({".sidebar", ".btn"}, hidden)
+        for sel, body in css_rules():
+            if "var(--gradient)" in body:
+                self.assertTrue(sel.startswith(".nav-item") or ".btn" in sel, sel)
+
+    def test_the_layout_faults_of_the_final_walk_stay_fixed(self):
+        # under 861px a short page (Chi phái, Documents): the top bar kept growing an empty band of up to
+        # 200px under the menu; it keeps its own height now and the canvas takes the rest
+        self.assertIn("grid-template-rows: auto 1fr", media_props("(max-width: 860px)", ".app"))
+        # the menu row: a thin bar in the line color, not the browser's grey one; the current page's pill
+        # is in view when the page opens (Money, Settings sat off screen to the right)
+        self.assertIn("scrollbar-width: thin", media_props("(max-width: 860px)", ".nav"))
+        self.assertIn("scroll-initial-target: nearest", media_props("(max-width: 860px)", '.nav-item[aria-current="page"]'))
+        # the Dashboard day column: "Chúa Nhật 15/11" ran into the time at 92px under 1181px
+        self.assertIn("width: 112px", declarations(".row .day"))
+        # the Search page with no result: its dashed box sat on the wash (1.05:1); it is white now
+        self.assertIn("background: var(--surface)", declarations(".canvas > .empty"))
+        # the People search with a query (a field and 2 buttons) pushed the page 72px sideways at 390px
+        self.assertIn("min-width: 0", declarations(".toolbar"))
+        self.assertIn("flex-basis: 100%", media_props("(max-width: 640px)", ".toolbar .input"))
+        # a phone: "Chỉnh sửa" was wider than the 36px kept for Edit, so each Money list scrolled 20px
+        self.assertIn("width: auto", media_props("(max-width: 640px)", "table.money td.edit"))
+        self.assertIn("flex-basis: 100%", media_props("(max-width: 640px)", "table.money tr[data-row]::after"))
+        # the sign of a card link never sits alone on the next line
+        self.assertIn('content: "\\00a0›"', declarations(".card-link::after"))
+        # 861px to 1180px: the actions squeezed a Person's name to 108px (3 lines); the title keeps 240px
+        # now and the actions wrap under it (from 1181px the Dashboard title row still fits one line)
+        self.assertIn("flex-wrap: wrap", declarations(".title-row"))
+        self.assertIn("flex: 1 1 240px", declarations(".title-row > :first-child"))
+        self.assertIn("flex: none", media_props("(max-width: 860px)", ".title-row > :first-child"))
+        # ... and on the Dashboard a name of Needs visit or a title of This week was squeezed to a few
+        # characters a line at half the canvas: the two list cards take the full row there; a Chi phái
+        # name in a narrow history table got 27px beside two 112px dates
+        for panel in ("this-week", "needs-visit"):
+            self.assertIn("grid-column: 1 / -1", media_props("(max-width: 1180px)", f'.dashboard > [data-panel="{panel}"]'))
+        self.assertIn("width: 1%", declarations("table.history td.n"))
+        self.assertIn("width: auto", media_props("(max-width: 640px)", "table.history td.n"))  # a phone row
+        # Lists (1180px): "6 người đang phục vụ" was cut at 30% of a row with room; Money (390px): the
+        # card head link broke over 2 lines
+        self.assertIn("max-width: none", declarations(".list-item .side"))
+        self.assertIn("white-space: nowrap", declarations("header .card-link"))
 
 
 if __name__ == "__main__":
