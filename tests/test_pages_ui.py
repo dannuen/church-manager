@@ -15,6 +15,8 @@ STYLE-6 (class PrintAndFinalWalkTest): paper is ink on white; the faults of the 
 STYLE-FIX-1 (class StyleFix1Test): the wash grows with the head; the Dashboard language switch and a flash;
 a table's own scroll box; Money this month fits row 2 in an empty month.
 STYLE-FIX-2 (class StyleFix2Test): a Dashboard list row is as tall as its 2-line title (no overlap).
+STYLE-FIX-3 (class StyleFix3Test): Dashboard row 1 always shows one whole row in This week and Needs a
+visit (no fixed 150px floor); up to 720px high the space around row 1 is tighter and the hint is one line.
 """
 
 import datetime as dt
@@ -1017,6 +1019,88 @@ class StyleFix2Test(PagesTestBase):
         week = section(self.page("/"), "this-week")
         self.assertRegex(week, r'<ul class="rows"><li class="row" data-row>.*<span class="what wrap">'
                                rf'<span class="clamp-2" lang="vi" title="{title}">')
+
+
+def media_wins(query, selector):
+    """``{property: value}`` of ``selector`` in the ``@media <query>`` blocks of ``web/style.css`` (a later rule
+    wins, as in the browser for rules of one weight)."""
+    found = {}
+    for sel, body in media_rules(query):
+        if selector in (s.strip() for s in sel.split(",")):
+            found.update((p.strip(), v.strip()) for p, v in (d.split(":", 1) for d in body.split(";") if d.strip()))
+    assert found, f"no rule for {selector!r} in @media {query}"
+    return found
+
+
+SHORT = WIDE + " and (max-height: 720px)"  # the Dashboard on one screen, up to 720px high
+ROW1 = ("this-week", "needs-visit")  # the 2 cards of Dashboard row 1
+
+
+class StyleFix3Test(PagesTestBase):
+    """STYLE-FIX-3, BUG-6 of TEST-STYLE-FIX-2. From 1181px row 1 of the Dashboard had a fixed 150px floor: on a
+    short window (1181x640 in vi) the Needs a visit list kept 1px and showed no row. Row 1 is now never shorter
+    than its 2 cards with one whole row in each list: the list is at least as high as one row at its tallest (a
+    title clamped to 2 lines) and row 1 is min-content. Up to 720px high that height comes from the space around
+    the row 1 cards and the title row, and the Needs a visit hint takes the whole header width (one line); it
+    never comes from the text. Row 2 stays as it was."""
+
+    def test_bug6_row_1_always_shows_one_whole_row_in_each_list(self):
+        grid = media_wins(WIDE, ".dashboard")
+        self.assertEqual(grid["grid-template-rows"], "minmax(min-content, 1fr) auto")
+        self.assertNotIn("minmax(150px", style_css())  # no fixed floor is left
+        for panel in ROW1:
+            rows = f'.dashboard > [data-panel="{panel}"] .rows'
+            # one row at its tallest: a title on 2 lines of 24px plus the row padding (8px; 4px up to 720px high)
+            self.assertEqual(media_wins(WIDE, rows)["min-height"], "56px", panel)
+            self.assertEqual(media_wins(SHORT, rows)["min-height"], "52px", panel)
+            self.assertEqual(media_wins(WIDE, rows)["overflow-y"], "auto", panel)  # the rest scrolls in the card
+        self.assertEqual(media_wins(WIDE, ".dashboard .row")["min-height"], "40px")  # the row min-heights as before
+        self.assertEqual(media_wins(SHORT, ".dashboard .row")["min-height"], "34px")
+        self.assertEqual(media_wins(WIDE, ".dashboard .row")["padding"], "4px 0")
+        self.assertEqual(media_wins(SHORT, ".dashboard .row")["padding"], "2px 0")
+        self.assertIn("font: var(--fs-body)/24px", declarations("body"))  # a title line is 24px high
+        # the Sent documents list (row 2) keeps no floor of its own
+        self.assertEqual(media_wins(WIDE, '.dashboard > [data-panel="sent-documents"] .rows')["min-height"], "0")
+        # the real page: the Needs a visit rows are a <ul class="rows"> inside its card, under the list head
+        visit = section(self.page("/"), "needs-visit")
+        self.assertRegex(visit, r'<div class="list-head" aria-hidden="true">.*</div><ul class="rows">'
+                                r'<li class="row" data-row>')
+
+    def test_bug6_up_to_720px_high_the_space_around_row_1_is_tighter(self):
+        title_row = media_wins(SHORT, ".canvas:has(> .dashboard) > .title-row")
+        self.assertEqual((title_row["padding-top"], title_row["padding-bottom"], title_row["margin-bottom"]),
+                         ("0", "4px", "8px"))
+        self.assertEqual(media_wins(SHORT, ".dashboard")["row-gap"], "10px")
+        for panel in ROW1:
+            card = f'.dashboard > [data-panel="{panel}"]'
+            props = media_wins(SHORT, card)
+            self.assertEqual((props["padding-top"], props["padding-bottom"]), ("10px", "8px"), panel)
+            self.assertEqual(media_wins(SHORT, card + " > header")["margin-bottom"], "2px", panel)
+            self.assertEqual(media_wins(SHORT, card + " > footer")["padding-top"], "4px", panel)
+        # the Needs a visit hint takes the whole header width: one line; the count stays on the title line
+        head = '.dashboard > [data-panel="needs-visit"] > header'
+        self.assertEqual((media_wins(SHORT, head)["flex-wrap"], media_wins(SHORT, head)["row-gap"]), ("wrap", "0"))
+        self.assertEqual(media_wins(SHORT, head + " > div")["display"], "contents")
+        meta = media_wins(SHORT, head + " > div > .meta")
+        self.assertEqual((meta["order"], meta["flex-basis"]), ("1", "100%"))
+        visit = section(self.page("/"), "needs-visit")
+        self.assertRegex(visit, r'^<header><div><h2 id="p-needs-visit">[^<]+</h2><span class="meta">[^<]+</span></div>'
+                                r'<span class="count num">[^<]+</span></header>')
+        # never from the text: no size, line or hiding rule in the short block
+        body = " ".join(body for sel, body in media_rules(SHORT))
+        for word in ("font-size", "line-height", "display: none", "visibility", "-webkit-line-clamp"):
+            self.assertNotIn(word, body)
+        # row 2 as it was: its height, its padding, the Money this month card
+        self.assertEqual(root_tokens()["--dash-row2"], "294px")
+        for panel in ("services", "money-month", "sent-documents"):
+            card = f'.dashboard > [data-panel="{panel}"]'
+            self.assertEqual(media_wins(WIDE, card)["min-height"], "var(--dash-row2)", panel)
+            self.assertEqual((media_wins(SHORT, card)["padding-top"], media_wins(SHORT, card)["padding-bottom"]),
+                             ("10px", "8px"), panel)
+        self.assertEqual(media_wins(WIDE, CARD)["max-height"], "var(--dash-row2)")
+        # screen only: on paper every list prints whole
+        for query in (WIDE, SHORT):
+            self.assertTrue(query.startswith("screen and "))
 
 
 if __name__ == "__main__":

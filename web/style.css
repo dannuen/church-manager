@@ -641,7 +641,8 @@ table.documents td:last-child a { color: var(--text); font-weight: 600; }
    From 861px wide and up to 720px high the menu is one notch tighter, on every page: all 13 items stay in
    view. From 1181px wide the Dashboard page itself never scrolls: the canvas is one window high (at least
    640px), the grid fills what is left under the title row, and a long list scrolls inside its own card
-   (the card title and its foot link stay in place). Row 1 takes what is left; row 2 is --dash-row2 high.
+   (the card title and its foot link stay in place). Row 1 takes what is left, but never less than its 2 cards
+   with one whole row in each list; row 2 is --dash-row2 high.
    From 861px to 1180px the grid has 3 rows and the page may scroll; under 861px it is the top bar. Screen
    only: on paper every list prints whole. */
 @media (min-width: 861px) and (max-height: 720px) {
@@ -656,7 +657,7 @@ table.documents td:last-child a { color: var(--text); font-weight: 600; }
   .canvas:has(> .dashboard):has(> .flash) > .lang-switch { position: static; flex: none; margin: 0 12px 4px; }
   .canvas:has(> .dashboard) > .title-row { flex: none; margin-bottom: 12px; padding-top: 6px; padding-bottom: 8px; }
   .canvas:has(> .dashboard) > .flash { flex: none; margin-bottom: 8px; }
-  .dashboard { flex: 1 1 0; min-height: 0; gap: 14px; grid-template-rows: minmax(150px, 1fr) auto; }
+  .dashboard { flex: 1 1 0; min-height: 0; gap: 14px; grid-template-rows: minmax(min-content, 1fr) auto; }
   .dashboard > .panel { min-height: 0; padding: 14px 20px 12px; }
   .dashboard .panel > header { margin-bottom: 4px; }
   .dashboard .panel > header > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; }
@@ -670,6 +671,10 @@ table.documents td:last-child a { color: var(--text); font-weight: 600; }
     grid-auto-rows: max-content;
     scrollbar-width: thin; scrollbar-color: var(--control) transparent; scrollbar-gutter: stable;
     margin-right: -14px; padding-right: 6px; }
+  /* This week and Needs a visit always show one whole row: the list is at least as high as one row at its
+     tallest (a title on 2 lines: 2 x 24px + 8px padding) and row 1 grows to fit its cards (min-content). A
+     fixed 150px floor left Needs a visit 1px high, no row, at 1181x640 (STYLE-FIX-3) */
+  .dashboard > [data-panel="this-week"] .rows, .dashboard > [data-panel="needs-visit"] .rows { min-height: 56px; }
   /* row 2 keeps its own height (B11), at least --dash-row2. Sent documents and Money this month are never
      taller: the Sent rows scroll; the Money amounts sit 4px closer, and in an empty month (its dashed box
      under them) the 3 zero amounts sit side by side, as on the Money page, so every word still shows
@@ -685,6 +690,19 @@ table.documents td:last-child a { color: var(--text); font-weight: 600; }
   .dashboard .row { min-height: 34px; padding: 2px 0; }
   .dashboard > [data-panel="services"], .dashboard > [data-panel="money-month"],
   .dashboard > [data-panel="sent-documents"] { padding-top: 10px; padding-bottom: 8px; }
+  /* one row at its tallest is 52px here (2 x 24px + 4px). The height for it comes from the space around the
+     row 1 cards and the title row, never from the text, and the Needs a visit hint takes the whole header
+     width (one line, the count stays on the title line), so the page stays one screen down to 640px high
+     (STYLE-FIX-3) */
+  .dashboard > [data-panel="this-week"] .rows, .dashboard > [data-panel="needs-visit"] .rows { min-height: 52px; }
+  .dashboard > [data-panel="needs-visit"] > header { flex-wrap: wrap; row-gap: 0; }
+  .dashboard > [data-panel="needs-visit"] > header > div { display: contents; }
+  .dashboard > [data-panel="needs-visit"] > header > div > .meta { order: 1; flex-basis: 100%; }
+  .canvas:has(> .dashboard) > .title-row { padding-top: 0; padding-bottom: 4px; margin-bottom: 8px; }
+  .dashboard { row-gap: 10px; }
+  .dashboard > [data-panel="this-week"], .dashboard > [data-panel="needs-visit"] { padding-top: 10px; padding-bottom: 8px; }
+  .dashboard > [data-panel="this-week"] > header, .dashboard > [data-panel="needs-visit"] > header { margin-bottom: 2px; }
+  .dashboard > [data-panel="this-week"] > footer, .dashboard > [data-panel="needs-visit"] > footer { padding-top: 4px; }
 }
 
 /* ---------- STYLE-FIX-1: the wash grows with the head ----------
