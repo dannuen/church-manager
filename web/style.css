@@ -1,38 +1,71 @@
 /* Church Manager: one light app screen style. Plain CSS, no build, works offline.
-   Rules (design-taste-frontend, app screens): one color, picked in Settings (the app color). Its gradient
-   is on the header band (.title-row), the active menu item, the active filter and the primary buttons,
-   with text in --on-accent; the plain accent is on the chart lines and the focus ring; the color as text
-   on the light surfaces is --accent-text. Flat surfaces with a 1px border, no shadows at rest; one system
-   face; sizes 12/14/16/24; tabular figures on every number.
-   Grid sum at 1440px: sidebar 232 + canvas (24 + 1160 + 24); 12 columns, 16px gutter. */
+   The look (docs/superpowers/specs/2026-11-12-app-styling-design.md, round 2, approved by the pastor): a
+   light ground; a wash of the app color at the top of the canvas with the page title on it; white cards
+   with round corners and a soft shadow; pill buttons; green and red only on money amounts. Light only.
+   Every color is a token of :root, made from the one app color the pastor picks in Settings: the page
+   head sets 4 of them (churchmgr/app_color.py theme). Text on the wash and on the gradient is
+   --on-accent; the color as text on the light surfaces, and the focus ring, is --accent-text; the plain
+   accent is on the chart lines. One system face; sizes 12/14/16/24 and 28 for the page title; tabular
+   figures on every number.
+   Grid sum at 1440px: sidebar 232 + canvas (24 + 1160 + 24); 12 columns, 20px gutter. */
 
 :root {
-  --ground: #f7f7f6;
-  --surface: #ffffff;
-  --raised: #f2f2f1;
-  --active: #e8e8e7;
-  --border: #e8e8e8;
-  --rule: #f0f0f0;
-  --control: #cfd3d6;
-  --text: #151515;
-  --muted: #5c6066;
-  --faint: #6b6b6b;
-  --accent: #1f5c99;          /* the app color as picked: the chart lines and the focus ring */
-  /* The app color (Settings). The page head sets these 4 for the color the pastor picked
-     (churchmgr/app_color.py theme); these are the values of the default color. */
-  --accent-base: #1f5c99;     /* the color the gradient is made from */
-  --on-accent: #ffffff;       /* text on the gradient: readable on both ends */
-  --accent-text: #1f5c99;     /* the app color as text on the light surfaces */
+  /* The app color (Settings). The page head sets these 4 for the color the pastor picked; these are the
+     values of the default color. */
+  --accent: #1f5c99;          /* the color as picked: the chart lines */
+  --accent-base: #1f5c99;     /* the color the gradient, the wash and the tints are made from */
+  --on-accent: #ffffff;       /* text on the gradient and on the wash: readable on both ends */
+  --accent-text: #1f5c99;     /* the color as text on the light surfaces, and the focus ring */
   --accent-light: color-mix(in srgb, var(--accent-base), #ffffff 15%);
   --accent-dark: color-mix(in srgb, var(--accent-base), #000000 30%);
+  --accent-deep: color-mix(in srgb, var(--accent-text) 85%, #000000);   /* the bold text of the current chip on its tint */
   --gradient: linear-gradient(135deg, var(--accent-light), var(--accent-dark));
-  --positive: #247b50;
-  --negative: #c4242a;
+  /* Surfaces, lines and text: grey with a touch of the app color. tests/test_pages_ui.py checks, for any
+     color, 4.5:1 for each text on the surfaces it sits on and 3:1 for the field border. */
+  --ground: color-mix(in srgb, var(--accent-base) 2%, #f8f9f9);
+  --surface: #ffffff;
+  --raised: color-mix(in srgb, var(--accent-base) 10%, #ffffff);    /* hover, the Private note panel */
+  --active: color-mix(in srgb, var(--accent-base) 16%, #ffffff);    /* the tint: flash, tag */
+  --border: color-mix(in srgb, var(--accent-base) 12%, #fafafa);
+  --rule: color-mix(in srgb, var(--accent-base) 8%, #fcfcfc);
+  --control: color-mix(in srgb, var(--accent-text) 36%, #949494);   /* the border of a field or a button */
+  --text: color-mix(in srgb, var(--accent-text) 35%, #000000);
+  --muted: color-mix(in srgb, var(--accent-text) 38%, #585858);
+  --faint: color-mix(in srgb, var(--accent-text) 36%, #686868);
+  --positive: #1b7a4a;        /* green and red on money amounts only; red also for errors */
+  --negative: #b3261e;
+  --refusal-bg: #ffedea; --refusal-ink: #831c1e;                     /* a Handover refusal */
+  --grid: color-mix(in srgb, var(--accent-base) 8%, #f0f0f0);       /* the Services chart */
+  --grid-base: color-mix(in srgb, var(--accent-base) 24%, #f2f2f2);
+  /* the Year report chart: the Offerings and Expenses bars and their legend keys. Spec 3.3: the two
+     colors stay as they were, on screen and on paper (green is money) */
+  --bar-offerings: #2f6f4f; --bar-expenses: #999999;
+  /* the wash at the top of the canvas: the app color from dark (left) to light (right). Its first layer is
+     the fade into the ground, drawn over its last --wash-fade only (.canvas::before): 40% of --wash-h, so a
+     wash of --wash-h looks as before, and a taller wash (a tall head) keeps the same fade under its text */
+  --wash: linear-gradient(180deg, transparent, var(--ground)),
+          linear-gradient(112deg, var(--accent-dark) 0%, var(--accent-base) 48%, var(--accent-light) 100%);
+  --wash-h: 340px; --wash-h-narrow: 600px; --wash-fade: 136px; --wash-fade-narrow: 240px; --wash-radius: 28px;
+  /* the one dark card (Dashboard, Money this month): the app color as text (--accent-text, dark enough
+     to read on white) taken darker, from the top left (darkest) to the bottom right (softer). It is dark
+     for every app color, so its text is white and the Balance a light green or a light red;
+     tests/test_pages_ui.py checks 4.5:1 for each text on each of the 3 stops, for any color */
+  --highlight: color-mix(in srgb, var(--accent-text), #000000 50%);
+  --highlight-mid: color-mix(in srgb, var(--accent-text), #000000 30%);
+  --highlight-end: color-mix(in srgb, var(--accent-text), #000000 15%);
+  --highlight-fill: linear-gradient(160deg, var(--highlight) 0%, var(--highlight-mid) 55%, var(--highlight-end) 100%);
+  --highlight-ink: #ffffff;                                                  /* title, amounts, links */
+  --highlight-muted: color-mix(in srgb, #ffffff 88%, var(--accent-text));    /* labels, the month */
+  --highlight-rule: color-mix(in srgb, var(--highlight-ink) 20%, transparent);  /* lines, the empty box */
+  --highlight-focus: #ffffff;                                                /* the focus ring on it */
+  --positive-on-dark: #9af2c4; --negative-on-dark: #ffd6d2;                  /* the Balance on it */
+  --shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent), 0 6px 20px color-mix(in srgb, var(--text) 7%, transparent);
+  --shadow-raised: 0 10px 30px color-mix(in srgb, var(--text) 16%, transparent);
   --font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
-  --fs-small: 12px; --fs-meta: 14px; --fs-body: 16px; --fs-title: 24px;
-  --gap: 16px; --pad: 24px; --card-pad: 20px;
-  --radius: 8px; --radius-control: 6px;
-  --sidebar: 232px; --control-height: 40px; --row: 44px;
+  --fs-small: 12px; --fs-meta: 14px; --fs-body: 16px; --fs-title: 24px; --fs-display: 28px;
+  --gap: 20px; --pad: 24px; --card-pad: 24px;
+  --radius: 12px; --radius-control: 12px; --radius-card: 18px; --radius-pill: 999px;
+  --sidebar: 232px; --control-height: 40px; --row: 44px; --dash-row2: 294px;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -41,7 +74,7 @@ body { margin: 0; background: var(--ground); color: var(--text); font: var(--fs-
 h1, h2, h3, p, ul, ol { margin: 0; }
 a { color: inherit; text-decoration: none; }
 a:hover { text-decoration: underline; text-underline-offset: 3px; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; border-radius: 4px; }
 .num, table, .kpi-value, input, select { font-variant-numeric: tabular-nums; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .dash, .faint { color: var(--faint); }
@@ -49,51 +82,71 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 /* ---------- shell: sidebar on the page ground, canvas beside it ---------- */
 .app { display: grid; grid-template-columns: var(--sidebar) minmax(0, 1fr); min-height: 100vh; }
-.sidebar { position: sticky; top: 0; height: 100vh; overflow: auto; padding: 20px 12px; display: flex; flex-direction: column; gap: 16px; }
-.brand { display: flex; flex-direction: column; padding: 0 10px; }
+.sidebar { position: sticky; top: 0; height: 100vh; overflow: auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 20px; }
+.brand { display: flex; flex-direction: column; padding: 0 16px; }
 .brand:hover { text-decoration: none; }
 .brand-app { font-size: var(--fs-small); line-height: 16px; color: var(--muted); }
-.brand-church { font-weight: 600; line-height: 22px; }
+.brand-church { color: var(--accent-text); font-weight: 700; line-height: 22px; }
 .nav { display: flex; flex-direction: column; gap: 2px; }
-.nav-item { display: flex; align-items: center; min-height: 36px; padding: 0 10px; border-radius: var(--radius); color: var(--muted); font-size: var(--fs-meta); }
+.nav-item { display: flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: var(--radius-pill); color: var(--muted); font-size: var(--fs-meta); }
 .nav-item:hover { background: var(--raised); color: var(--text); text-decoration: none; }
 .nav-item[aria-current="page"] { background: var(--gradient); color: var(--on-accent); font-weight: 600; }
-.canvas { min-width: 0; padding: var(--pad); }
+.nav-item[aria-current="page"]:hover { background: var(--accent-dark); }
+/* The wash: one layer of the app color behind the top of the canvas (the language switch, the title row
+   and the top of the first cards). It is not a card. The sidebar stays on the plain ground. */
+.canvas { position: relative; isolation: isolate; min-width: 0; padding: 14px var(--pad) var(--pad); }
+.canvas::before { content: ""; position: absolute; z-index: -1; top: 8px; left: 0; right: 12px; height: var(--wash-h); background: var(--wash); background-size: 100% var(--wash-fade), 100% 100%; background-position: 0 100%, 0 0; background-repeat: no-repeat; border-radius: var(--wash-radius) var(--wash-radius) 0 0; pointer-events: none; }
 
-/* ---------- title row: the header band (the gradient), one h1, one finding line, the actions ---------- */
-.title-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; padding: 16px 20px; border-radius: var(--radius); background: var(--gradient); color: var(--on-accent); }
-.title-row h1 { font-size: var(--fs-title); line-height: 32px; font-weight: 600; }
+/* ---------- title row on the wash: one h1, one finding line, the actions ----------
+   The title keeps at least 240px: when the actions leave it less, they wrap under it (861px to 1180px).
+   It is the anchor the wash grows with (STYLE-FIX-1, at the end of this file). */
+.title-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: var(--gap); padding: 0 12px 14px; color: var(--on-accent); anchor-name: --title-row; }
+.title-row > :first-child { flex: 1 1 240px; min-width: 0; }
+.title-row h1 { font-size: var(--fs-display); line-height: 36px; font-weight: 700; }
 .title-row .sub { margin-top: 2px; color: var(--on-accent); }
 .title-row .actions { display: flex; align-items: flex-end; gap: 12px; flex: none; }
-/* In the band every text is --on-accent at full strength. A control with its own white surface keeps its
-   ink (a secondary .btn, the search field, the live results); a primary button gets a 1px ring. The focus
-   ring is --on-accent (an accent ring cannot be seen on the band), but not on the white results. */
+/* On the wash every text is --on-accent at full strength. The main action is a pill filled with
+   --on-accent and --accent-dark text; the other buttons are pills outlined in --on-accent. The search
+   field and the live results keep their white surface and ink; the field gets an --on-accent border. The
+   focus ring is --on-accent on the wash and --accent-text on the white results. */
+.title-row .btn { border-color: var(--on-accent); border-radius: var(--radius-pill); background: transparent; color: var(--on-accent); }
+.title-row .btn:hover { background: var(--accent-dark); }
+.title-row .btn.primary { background: var(--on-accent); color: var(--accent-dark); border-color: var(--on-accent); }
+.title-row .btn.primary:hover { background: var(--on-accent); text-decoration: underline; text-underline-offset: 3px; }
 .title-row .input, .title-row .results { color: var(--text); }
-.title-row .btn.primary { border-color: var(--on-accent); }
+.title-row .input { border-color: var(--on-accent); border-radius: var(--radius-pill); padding: 0 18px; }
 .title-row :focus-visible { outline-color: var(--on-accent); }
-.title-row .results :focus-visible { outline-color: var(--accent); }
-.flash { margin-bottom: 16px; padding: 10px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
-/* the language switch at the top of every page: two quiet buttons, the current one marked */
-.lang-switch { display: flex; justify-content: flex-end; gap: 4px; margin: -8px 0 8px; }
-.lang-switch button { min-height: 28px; padding: 0 10px; border: 1px solid transparent; border-radius: var(--radius-control); background: none; color: var(--muted); font: inherit; font-size: var(--fs-small); cursor: pointer; }
-.lang-switch button:hover { background: var(--raised); color: var(--text); }
-.lang-switch button[aria-pressed="true"] { border-color: var(--control); background: var(--surface); color: var(--text); font-weight: 600; }
+.title-row .results :focus-visible { outline-color: var(--accent-text); }
+.flash { margin-bottom: 16px; padding: 10px 16px; background: var(--active); border-radius: var(--radius); }
+/* the language switch at the top of every page, on the wash: two small pills, the current one white */
+.lang-switch { display: flex; justify-content: flex-end; gap: 4px; margin: 0 12px 4px; }
+.lang-switch button { min-height: 28px; padding: 0 10px; border: 1px solid transparent; border-radius: var(--radius-pill); background: none; color: var(--on-accent); font: inherit; font-size: var(--fs-small); cursor: pointer; }
+.lang-switch button:hover { background: var(--accent-dark); color: var(--on-accent); }
+.lang-switch button[aria-pressed="true"] { border-color: var(--on-accent); background: var(--surface); color: var(--text); font-weight: 600; }
+.lang-switch :focus-visible { outline-color: var(--on-accent); }
 .lead { font-size: var(--fs-body); margin-bottom: 12px; }
+/* text outside a card never sits on the wash: a note right under the title row (the Documents hint) is a
+   small white note; the filter row under it is a white bar (.list-toolbar below) */
+.canvas > .hint, .canvas > .lead { width: fit-content; max-width: 100%; padding: 8px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.canvas > .empty { background: var(--surface); }   /* the Search page with no result: its dashed box is white, not on the wash */
 
-/* ---------- panels and the 12-column grid ---------- */
+/* ---------- panels and the 12-column grid ----------
+   A card (spec 4.3): white, a 1px --border edge, --radius-card corners and the soft --shadow; a bold ink
+   title, a grey sub line, ink foot links. An empty list keeps its frame (.empty below). */
 .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--gap); }
 .span-3 { grid-column: span 3; } .span-4 { grid-column: span 4; } .span-5 { grid-column: span 5; }
 .span-6 { grid-column: span 6; } .span-7 { grid-column: span 7; } .span-12 { grid-column: 1 / -1; }
-.panel { display: flex; flex-direction: column; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--card-pad); }
+.panel { display: flex; flex-direction: column; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow); padding: var(--card-pad); }
 .panel > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-.panel h2 { font-size: var(--fs-body); line-height: 24px; font-weight: 600; }
+.panel h2 { font-size: var(--fs-body); line-height: 24px; font-weight: 700; }
 .panel .meta { display: block; color: var(--muted); font-size: var(--fs-meta); line-height: 20px; }
 .panel .count { color: var(--text); font-weight: 600; white-space: nowrap; }
 .panel > footer { margin-top: auto; padding-top: 12px; display: flex; flex-wrap: wrap; gap: 8px 20px; }
 .panel.narrow { max-width: 640px; }
 .panel p + p, .panel p + .form, .panel .form + p { margin-top: 12px; }
 .card-link { font-size: var(--fs-meta); font-weight: 600; color: var(--text); }
-.card-link::after { content: " ›"; }
+.card-link::after { content: "\00a0›"; }   /* a no-break space: the sign never sits alone on a line */
+header .card-link { white-space: nowrap; }   /* in a card head (Money): the title wraps, the link stays whole */
 
 /* list rows: a rule between rows, none above the first; one line each */
 .rows { list-style: none; padding: 0; display: grid; }
@@ -101,40 +154,56 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .row + .row { border-top: 1px solid var(--rule); }
 .row .what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .row .side { flex: 0 1 auto; max-width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--fs-meta); }
-.row .day { flex: none; width: 92px; font-size: var(--fs-meta); }
+.row .day { flex: none; width: 112px; font-size: var(--fs-meta); }   /* "Chúa Nhật 15/11" is wider than 92px */
 .row .time { flex: none; width: 44px; color: var(--muted); font-size: var(--fs-meta); }
 .row .figure { flex: none; width: 96px; text-align: right; font-size: var(--fs-meta); }
 .row .sub { display: block; color: var(--muted); font-size: var(--fs-meta); font-weight: 400; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.list-head { display: flex; gap: 12px; padding-bottom: 4px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.list-head { display: flex; gap: 12px; padding-bottom: 4px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: var(--fs-small); line-height: 16px; font-weight: 600; }
 .list-head span:first-child { flex: 1; }
 .list-head span:last-child { width: 96px; text-align: right; }
-.empty { padding: 12px 16px; border: 1px dashed var(--control); border-radius: var(--radius-control); color: var(--muted); }
+/* an empty list keeps its frame: one sentence in a dashed box (spec 4.3) */
+.empty { padding: 12px 16px; border: 1px dashed var(--control); border-radius: var(--radius); color: var(--muted); }
 .kpis + .empty, .kpi + .rows, .kpi + .empty { margin-top: 12px; }
 
-/* KPIs are type: a grey label above an ink value, split by 1px rules */
+/* KPIs are type: a grey label above an ink value (24px, tabular figures), split by 1px rules. The
+   Balance (the strong value) is green when it is 0 or more and red below 0 (.neg): green and red are on
+   money amounts only (spec 4.4). */
 .kpis { display: grid; }
 .kpi { display: flex; flex-direction: column; padding: 8px 0; }
 .kpi + .kpi { border-top: 1px solid var(--rule); }
 .kpi-label { color: var(--muted); font-size: var(--fs-meta); line-height: 20px; }
 .kpi-value { font-size: var(--fs-title); line-height: 32px; font-weight: 500; white-space: nowrap; }
 .kpi-value.strong { font-weight: 700; }
+.kpi-value.strong:not(.neg) { color: var(--positive); }
 .neg { color: var(--negative); }
 
-/* Services: one series, faint grid, the line in the plain accent, its last value in --accent-text. One
-   height at every width (B17: the height attribute, CHART_HEIGHT in dashboard.py): x places are
-   percentages of the plot, the y ticks and the last value sit in the side padding, the line's stroke does
-   not scale. */
+/* Services: one series, faint grid, the line in the plain accent (2.5px, round joins), its last value
+   bold in --accent-text. One height at every width (B17: the height attribute, CHART_HEIGHT in
+   dashboard.py): x places are percentages of the plot, the y ticks and the last value sit in the side
+   padding, the line's stroke does not scale. The trend word is not money: Up in --accent-text, Down in
+   grey, both bold; the word carries the meaning, not a green or a red (spec D5). */
 .chart { display: block; width: 100%; margin: 4px 0 8px; padding: 0 32px 0 40px; overflow: visible; }
 .chart .plot { overflow: visible; }
-.chart .gridline { stroke: #ececec; stroke-width: 1; }
-.chart .gridline.base { stroke: #cfcfcf; }
+.chart .gridline { stroke: var(--grid); stroke-width: 1; }
+.chart .gridline.base { stroke: var(--grid-base); }
 .chart .tick { fill: var(--muted); font-size: 12px; font-family: var(--font); }
-.chart .line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-.chart .end { fill: var(--accent-text); font-size: 12px; font-weight: 600; font-family: var(--font); }
+.chart .line { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.chart .end { fill: var(--accent-text); font-size: 12px; font-weight: 700; font-family: var(--font); }
 .trend { font-size: var(--fs-meta); line-height: 20px; color: var(--muted); }
-.trend strong { color: var(--text); }
-.trend .trend-up { color: var(--positive); }
-.trend .trend-down { color: var(--negative); }
+.trend strong { color: var(--text); font-weight: 700; }
+.trend .trend-up { color: var(--accent-text); }
+.trend .trend-down { color: var(--muted); }
+
+/* ---------- the one dark card: Dashboard, Money this month (spec 4.3, D2) ----------
+   No other card is dark. It sets its own tokens, so every rule inside (the title, the month, the KPI
+   labels and values, the lines between them, the Balance, the foot links, the empty box, the text of a
+   panel that failed to load and the focus ring, which is --accent-text) reads on the dark fill. It keeps
+   its 1px edge, in transparent, so it is as high as its neighbours; align-self: start (B11) stays. */
+.dashboard > [data-panel="money-month"] {
+  --text: var(--highlight-ink); --muted: var(--highlight-muted); --faint: var(--highlight-muted);
+  --rule: var(--highlight-rule); --border: var(--highlight-rule); --control: var(--highlight-rule);
+  --positive: var(--positive-on-dark); --negative: var(--negative-on-dark); --accent-text: var(--highlight-focus);
+  background: var(--highlight-fill); border-color: transparent; box-shadow: var(--shadow-raised); color: var(--text); }
 
 /* ---------- search in the title row; live results float under it ---------- */
 .title-search { position: relative; }
@@ -142,7 +211,7 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .search-form label { font-size: var(--fs-meta); font-weight: 500; line-height: 20px; }
 .search-line { display: flex; gap: 8px; }
 .title-search .input { width: clamp(180px, 22vw, 300px); }
-.results { position: absolute; z-index: 10; top: calc(100% + 4px); left: 0; right: 0; list-style: none; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08); max-height: 360px; overflow: auto; }
+.results { position: absolute; z-index: 10; top: calc(100% + 4px); left: 0; right: 0; list-style: none; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-raised); max-height: 360px; overflow: auto; }
 .results li a, .results li span.none { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: var(--radius-control); }
 .results li a:hover, .results li a:focus-visible { background: var(--raised); text-decoration: none; }
 .results .status { color: var(--muted); font-size: var(--fs-meta); }
@@ -150,49 +219,90 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 form.panel.search-form { max-width: 640px; margin-bottom: var(--gap); }
 form.panel.search-form .input { flex: 1; }
 
-/* ---------- forms: label above the field, one Save per form ---------- */
+/* ---------- forms and buttons: label above the field, one Save per form (spec 4.6) ----------
+   A field is --control-height high (44px under 861px), white, a 1px --control edge, 12px corners; a
+   search field is a pill. A button is a pill of the same height: secondary white with a --control edge,
+   primary in the gradient of the app color, danger with a red word and edge (red is a state, D4).
+   Disabled: a --raised fill, a --border edge and --faint text, still readable. Every control keeps the
+   one focus ring of :focus-visible above (2px --accent-text, 2px away); no rule takes it away. */
 .form { display: grid; gap: 16px; max-width: 560px; }
 .field { display: grid; gap: 8px; }
 .field label { font-size: var(--fs-meta); font-weight: 500; line-height: 20px; }
 .hint { color: var(--muted); font-size: var(--fs-meta); line-height: 20px; }
-.error { color: var(--negative); font-size: var(--fs-meta); line-height: 20px; }
+.error { color: var(--negative); font-size: var(--fs-meta); line-height: 20px; font-weight: 500; }
 .input { height: var(--control-height); padding: 0 12px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); font: inherit; color: inherit; min-width: 0; }
+select.input { padding: 0 8px; cursor: pointer; }   /* the browser adds 4px inside: its text lines up with the other fields */
 textarea.input { height: auto; padding: 8px 12px; resize: vertical; }
+input[type="color"].input { width: 72px; padding: 4px 6px; cursor: pointer; }
+.toolbar .input, .search-line .input { border-radius: var(--radius-pill); padding: 0 18px; }
+/* a date or time field: Tab also stops on its own calendar button inside it; the field keeps the ring then */
+input[type="date"].input:focus-within, input[type="datetime-local"].input:focus-within,
+input[type="month"].input:focus-within { outline: 2px solid var(--accent-text); outline-offset: 2px; }
 .input::placeholder { color: var(--faint); }
+:where(.input):hover { border-color: var(--muted); }   /* one class weight: the wash field and an error keep their edge */
 .input[aria-invalid="true"] { border-color: var(--negative); }
-.btn { display: inline-flex; align-items: center; justify-content: center; height: var(--control-height); padding: 0 16px; border-radius: var(--radius-control); border: 1px solid var(--control); background: var(--surface); color: var(--text); font: inherit; font-size: var(--fs-meta); font-weight: 600; cursor: pointer; white-space: nowrap; justify-self: start; }
+input[type="checkbox"] { width: 20px; height: 20px; margin: 0; accent-color: var(--accent-text); cursor: pointer; }
+.btn { display: inline-flex; align-items: center; justify-content: center; height: var(--control-height); padding: 0 20px; border-radius: var(--radius-pill); border: 1px solid var(--control); background: var(--surface); color: var(--text); font: inherit; font-size: var(--fs-meta); font-weight: 600; cursor: pointer; white-space: nowrap; justify-self: start; }
 .btn:hover { background: var(--raised); text-decoration: none; }
 .btn.primary { background: var(--gradient); color: var(--on-accent); border-color: var(--accent-dark); }
 .btn.primary:hover { background: var(--accent-dark); }
 .btn.danger { color: var(--negative); border-color: currentColor; background: var(--surface); }
+.btn.danger:hover { background: var(--raised); }
+.btn:disabled, .btn:disabled:hover, .btn[aria-disabled="true"], .btn[aria-disabled="true"]:hover, .input:disabled {
+  background: var(--raised); border-color: var(--border); color: var(--faint); cursor: not-allowed; }
 
-/* ---------- tables (for the pages of cards C1-C3) ---------- */
-.table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; }
-th { height: 36px; padding: 0 12px; text-align: left; font-weight: 400; font-size: var(--fs-small); color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap; }
-td { padding: 10px 12px; border-bottom: 1px solid var(--rule); vertical-align: baseline; }
-tbody tr:last-child td { border-bottom: 0; }
+/* ---------- tables (spec 4.5) ----------
+   A small bold grey header over one --border line; a --rule line between rows (no zebra), none under the
+   last; the row under the pointer turns --raised with round ends. Only a data row (data-row) does: never
+   a total row. Figures stay right-aligned in tabular figures, in ink. A wide table scrolls inside its card
+   (.table-wrap), never the page. Separate borders (spacing 0): a collapsed table cannot round a cell.
+   :where() keeps the header and the cells at the weight of one tag, so print.css (later) still wins.
+   The wrap is positioned: the hidden header word of an Edit column (.sr-only, absolute) stays inside its
+   scroll box; it pushed the Money page sideways from 1250px to 1340px (STYLE-FIX-1). */
+.table-wrap { position: relative; overflow-x: auto; max-width: 100%; scrollbar-width: thin; scrollbar-color: var(--control) transparent; }
+table { width: 100%; border-collapse: separate; border-spacing: 0; }
+th { padding: 0 12px; text-align: left; font-weight: 600; }
+:where(thead) th { height: 36px; font-size: var(--fs-small); line-height: 16px; color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap; }
+td, :where(tbody) th { padding: 10px 12px; border-bottom: 1px solid var(--rule); vertical-align: baseline; }
+tbody tr:last-child > * { border-bottom: 0; }
+@media screen { tbody tr:has(+ tr.total) > * { border-bottom: 0; } }   /* a total row draws its own line (paper: collapsed borders) */
 th.n, td.n { text-align: right; }
+td .num { white-space: nowrap; }   /* a phone number, a date or an amount never breaks inside */
+@media (hover: hover) and (min-width: 641px) {
+  tbody tr[data-row]:hover > * { background: var(--raised); }
+  tbody tr[data-row]:hover > :first-child { border-radius: var(--radius) 0 0 var(--radius); }
+  tbody tr[data-row]:hover > :last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+}
 
 /* ---------- laptop: still 2 rows; tablet and phone: one column, the nav becomes a top bar ---------- */
 @media (max-width: 1180px) {
   .span-3, .span-4 { grid-column: span 6; }
-  .dashboard > [data-panel="this-week"], .dashboard > [data-panel="needs-visit"] { grid-column: span 6; }
+  /* the two list cards take the full row here: at half the canvas a name or a title of This week was
+     squeezed to a few characters a line beside the day, the time and the kind */
+  .dashboard > [data-panel="this-week"], .dashboard > [data-panel="needs-visit"] { grid-column: 1 / -1; }
   .dashboard > [data-panel="services"] { grid-column: 1 / -1; }
 }
 @media (max-width: 860px) {
-  .app { grid-template-columns: minmax(0, 1fr); }
+  /* the top bar keeps its own height and the canvas takes the rest: on a short page the bar never grows
+     an empty band under the menu */
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
   .sidebar { position: static; height: auto; flex-direction: column; gap: 8px; padding: 12px 16px 8px; border-bottom: 1px solid var(--border); }
   .brand { padding: 0; }
-  .nav { flex-direction: row; overflow-x: auto; gap: 4px; padding-bottom: 4px; }
+  /* the menu is one row that scrolls sideways: a thin bar in the line color (not the browser's grey one),
+     and the current page's pill is scrolled into view when the page opens */
+  .nav { flex-direction: row; overflow-x: auto; gap: 4px; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: var(--control) transparent; }
   .nav-item { flex: none; min-height: 44px; }
+  .nav-item[aria-current="page"] { scroll-initial-target: nearest; }
   .canvas { padding: 16px; }
+  .canvas::before { left: 8px; right: 8px; height: var(--wash-h-narrow); background-size: 100% var(--wash-fade-narrow), 100% 100%; }   /* the title row stacks */
   .grid > * { grid-column: 1 / -1 !important; }
   .title-row { flex-direction: column; align-items: stretch; }
+  .title-row > :first-child { flex: none; }   /* a column: no 240px basis in height */
   .title-row .actions { flex-direction: column; align-items: stretch; }
   .title-search .input { width: auto; flex: 1; }
   .btn { height: 44px; }
   .input { height: 44px; }
+  details.change > summary { min-height: 44px; }
   .row { flex-wrap: wrap; }
   .row .what { flex-basis: 100%; order: -1; white-space: normal; }
   .row .side { max-width: none; }
@@ -202,20 +312,21 @@ th.n, td.n { text-align: right; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
 
 /* ---------- card C1: People, Families, Chi phái and Care pages ----------
-   Grid sum at 1440px: canvas 1160 = 8 columns (main) + 4 columns (side), 16px gutter (Care: 7 + 5).
+   Grid sum at 1440px: canvas 1160 = 8 columns (main) + 4 columns (side), 20px gutter (--gap) (Care: 7 + 5).
    Below 1024px every column takes the full width. */
 .span-8 { grid-column: span 8; }
 .side-4 { grid-column: span 4; }
 .stack { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
 .grid.person, .grid.family, .grid.chi-phai, .grid.care { align-items: start; }
-.panel .table-wrap { margin: 0 -12px; }          /* cell text lines up with the panel title */
+.panel .table-wrap { margin: 0 -12px; max-width: none; }   /* cell text lines up with the panel title: 24px wider than the panel's inside */
 .table-wrap + .hint, .empty + .hint, .kv + .table-wrap, .kv + .empty { margin-top: 12px; }
-table.list td { font-size: var(--fs-meta); line-height: 20px; padding: 8px 12px; }
+table.list td, table.list :where(tbody) th { font-size: var(--fs-meta); line-height: 20px; padding: 8px 12px; }
 table.list td:first-child { font-weight: 500; }
 table.list td.n, table.list th.n { white-space: nowrap; }
-table.history th.n, table.history td.n { width: 112px; }   /* From / To sit together at the right */
+table.history th.n, table.history td.n { width: 1%; white-space: nowrap; }   /* From / To sit together at the right, as wide as a date: the name gets the rest (a narrow side card too) */
 table.story td:first-child { width: 104px; white-space: nowrap; font-weight: 400; color: var(--muted); }
 .list-panel { padding-top: 8px; padding-bottom: 8px; }
+.list-panel > .empty { margin: 16px 0; }   /* the same air above and below as at its sides */
 
 /* key-value rows (Details, the current Family) */
 .kv { display: grid; margin: 0; }
@@ -224,9 +335,9 @@ table.story td:first-child { width: 104px; white-space: nowrap; font-weight: 400
 .kv dt { color: var(--muted); }
 .kv dd { margin: 0; overflow-wrap: anywhere; }
 
-/* a change form folded under one click; it opens by itself when it shows an error */
+/* a change form folded under one click (a pill like .btn); it opens by itself when it shows an error */
 details.change { margin-top: 12px; }
-details.change > summary { display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); font-size: var(--fs-meta); font-weight: 600; cursor: pointer; list-style: none; }
+details.change > summary { display: inline-flex; align-items: center; min-height: var(--control-height); padding: 0 20px; border: 1px solid var(--control); border-radius: var(--radius-pill); background: var(--surface); font-size: var(--fs-meta); font-weight: 600; cursor: pointer; list-style: none; }
 details.change > summary::-webkit-details-marker { display: none; }
 details.change > summary::after { content: "+"; margin-left: 8px; color: var(--muted); }
 details.change[open] > summary::after { content: "−"; }
@@ -234,17 +345,22 @@ details.change > summary:hover { background: var(--raised); }
 details.change[open] > summary { margin-bottom: 16px; }
 details.change .form { max-width: none; }
 
-/* Status filter and the quick search above the People list, on one row */
-.list-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; margin-bottom: 16px; }
+/* Status filter and the quick search above the People list, on one row: a white bar, so its labels never
+   sit on the wash */
+.list-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; margin-bottom: 16px; padding: 10px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow); }
+/* the chips (Status filter, week / month, Money month): pills on the white bar; the current one is the
+   tint of the app color with an --accent-text edge and --accent-deep bold text (spec 4.7) */
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.chip { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); color: var(--muted); font-size: var(--fs-meta); }
+.chip { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 16px; border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--surface); color: var(--muted); font-size: var(--fs-meta); }
 .chip:hover { background: var(--raised); color: var(--text); text-decoration: none; }
-.chip[aria-current="true"] { background: var(--gradient); border-color: var(--accent-dark); color: var(--on-accent); font-weight: 600; }
-.toolbar { flex: 0 1 440px; }
+.chip[aria-current="true"] { background: var(--active); border-color: var(--accent-text); color: var(--accent-deep); font-weight: 600; }
+/* the People search: it may shrink in the bar (its field, Search and Clear buttons never push the page) */
+.toolbar { flex: 0 1 440px; min-width: 0; grid-template-columns: minmax(0, 1fr); }
 .toolbar .input { flex: 1; }
 
-/* the Private note box: a tone step, no border; print.css hides .no-print */
-.panel.private { background: var(--raised); border-color: var(--raised); }
+/* the Private note box: not like the other cards at a glance (spec 4.10): the --raised tint, a dashed
+   --control edge and no shadow; print.css hides .no-print */
+.panel.private { background: var(--raised); border: 1px dashed var(--control); box-shadow: none; }
 .notes { list-style: none; padding: 0; margin-bottom: 16px; display: grid; }
 .note { padding: 8px 0; }
 .note + .note { border-top: 1px solid var(--border); }
@@ -275,18 +391,21 @@ details.change .form { max-width: none; }
   table.list, table.list tbody { display: block; }
   table.list tr { display: flex; flex-wrap: wrap; gap: 2px 12px; padding: 8px 12px; border-bottom: 1px solid var(--rule); }
   table.list tbody tr:last-child { border-bottom: 0; }
-  table.list td { display: block; padding: 0; border: 0; color: var(--muted); }
-  table.list td:first-child { flex-basis: 100%; color: var(--text); }
+  table.list td, table.list tr[data-row] > th { display: block; padding: 0; border: 0; color: var(--muted); }
+  table.list td:first-child, table.list tr[data-row] > th:first-child { flex-basis: 100%; color: var(--text); }
   table.list td.n { text-align: left; }
+  table.history th.n, table.history td.n { width: auto; }   /* a row of the phone list: the dates take their own width */
   table.list td.n + td.n::before { content: "– "; }
   table.story td:first-child { width: auto; }
   .inline-fields { grid-template-columns: minmax(0, 1fr); }
   .kv > div { grid-template-columns: 96px minmax(0, 1fr); }
   .chip, details.change > summary { min-height: 44px; }
+  .toolbar .search-line { flex-wrap: wrap; }
+  .toolbar .input { flex-basis: 100%; }   /* a phone: the field on its own line, the buttons under it */
 }
 
 /* ---------- card C2: Calendar and Money pages ----------
-   Grid sum at 1440px: canvas 1160 = 8 columns (agenda, item page) + 4 columns (side), 16px gutter;
+   Grid sum at 1440px: canvas 1160 = 8 columns (agenda, item page) + 4 columns (side), 20px gutter (--gap);
    Money: 6 columns (Offerings) + 6 columns (Expenses, Giving statement). Below 1024px one column. */
 .grid.calendar, .grid.calendar-item, .grid.money-month { align-items: start; }
 .span-5.stack, .span-7.stack { min-width: 0; }
@@ -302,7 +421,9 @@ details.change .form { max-width: none; }
 .cal-day { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px; padding: 4px 0; }
 .cal-day + .cal-day { border-top: 1px solid var(--rule); }
 .cal-date { padding-top: 10px; font-size: var(--fs-meta); line-height: 24px; font-weight: 600; }
-.today-tag { display: block; color: var(--accent-text); font-size: var(--fs-small); line-height: 16px; font-weight: 600; }
+/* Today: a small pill under the date, outlined in --accent-text (bold --accent-text on white reads for any
+   app color; on the --active tint it does not for some colors) */
+.today-tag { display: block; width: fit-content; margin-top: 2px; padding: 0 8px; border: 1px solid currentColor; border-radius: var(--radius-pill); color: var(--accent-text); font-size: var(--fs-small); line-height: 18px; font-weight: 700; }
 .cal-none { padding: 10px 0; color: var(--faint); font-size: var(--fs-meta); line-height: 24px; }
 .cal-day .cal-none { margin-top: 0; }      /* not the panel's p + p gap: it sits level with the date */
 .cal-row { align-items: flex-start; }
@@ -327,15 +448,19 @@ fieldset.group legend { padding: 0; margin-bottom: 8px; font-size: var(--fs-meta
 .confirm-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; }
 .confirm-actions .form { display: block; }
 
-/* Money: the totals are type in one container split by 1px rules; Balance is the bold figure */
-.kpi-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: var(--gap); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
-.kpi-strip .kpi { padding: 14px 20px; }
+/* Money: the totals are type in one light card split by 1px rules (not dark: only the Dashboard card
+   is); Balance is the bold figure, green or red (spec 4.4) */
+.kpi-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: var(--gap); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow); }
+.kpi-strip .kpi { padding: 18px 24px; }
 .kpi-strip .kpi + .kpi { border-top: 0; border-left: 1px solid var(--rule); }
 .kpi-sub { color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
 table.money td.n { white-space: nowrap; }
 table.money tr.total > * { border-top: 1px solid var(--border); border-bottom: 0; padding: 10px 12px; font-size: var(--fs-meta); line-height: 20px; color: var(--text); font-weight: 600; height: auto; }
 table.money tr.total th { text-align: left; }
 table.money.expenses td:nth-child(3) { color: var(--muted); }
+/* the Year report chart: each bar and its legend key take their color from a token (a fill prints) */
+.bar-offerings { fill: var(--bar-offerings); color: var(--bar-offerings); }
+.bar-expenses { fill: var(--bar-expenses); color: var(--bar-expenses); }
 
 /* the Giving statement sheet (print.css turns it into ink on white A4) */
 .statement { max-width: 840px; }
@@ -343,6 +468,9 @@ table.money.expenses td:nth-child(3) { color: var(--muted); }
 .statement-church { font-weight: 600; }
 .statement-head h2 { margin: 2px 0 12px; font-size: var(--fs-title); line-height: 32px; font-weight: 600; }
 .statement .table-wrap + .hint { margin-top: 12px; }
+/* the Year report: some air between its chart, its legend and its tables */
+.year-report .year-chart + .hint { margin: 4px 0 12px; }
+.year-report h3 { margin: 28px 0 4px; font-size: var(--fs-body); line-height: 24px; font-weight: 600; }
 
 @media (max-width: 1023px) {
   .grid.calendar > *, .grid.calendar-item > *, .grid.money-month > * { grid-column: 1 / -1; }
@@ -358,6 +486,7 @@ table.money.expenses td:nth-child(3) { color: var(--muted); }
   .kpi-strip { grid-template-columns: minmax(0, 1fr); }
   .kpi-strip .kpi + .kpi { border-left: 0; border-top: 1px solid var(--rule); }
   table.money td.n { margin-left: auto; color: var(--text); }
+  table.money td.n + td.n::before { content: none; }   /* a dash before an amount would read as a minus */
   table.money tr.total { justify-content: space-between; }
   table.money tr.total > * { display: block; padding: 0; border: 0; }
   .link-btn { min-height: 44px; }
@@ -365,7 +494,7 @@ table.money.expenses td:nth-child(3) { color: var(--muted); }
 
 /* ---------- card C3: Documents, Sent documents, Lists, Copies and Settings ----------
    Grid sum at 1440px: canvas 1160 = 8 + 4 columns (Sent documents), 7 + 5 (Copies, Settings) and
-   6 + 6 (Lists: two sections a row), 16px gutter. Below 1024px every column takes the full width. */
+   6 + 6 (Lists: two sections a row), 20px gutter (--gap). Below 1024px every column takes the full width. */
 .grid.sent, .grid.lists, .grid.copies, .grid.settings { align-items: start; }
 .lists > .span-6 { min-width: 0; }
 .list-foot { margin-top: 12px; }
@@ -375,8 +504,8 @@ table.money.expenses td:nth-child(3) { color: var(--muted); }
 .kv.wide > div { grid-template-columns: 128px minmax(0, 1fr); }
 .next-number { padding-top: 0; }
 
-/* a small grey word inside a row: Hidden, Open now */
-.tag { display: inline-flex; align-items: center; flex: none; height: 20px; margin-left: 8px; padding: 0 8px; border-radius: 4px; background: var(--active); color: var(--muted); font-size: var(--fs-small); font-weight: 500; white-space: nowrap; vertical-align: 1px; }
+/* a small grey word inside a row: Hidden, Open now (a pill, spec 4.7) */
+.tag { display: inline-flex; align-items: center; flex: none; height: 20px; margin-left: 8px; padding: 0 8px; border-radius: var(--radius-pill); background: var(--active); color: var(--muted); font-size: var(--fs-small); font-weight: 500; white-space: nowrap; vertical-align: 1px; }
 .list-item.is-hidden .what { color: var(--muted); }
 
 /* a name field with its button on one line (Add, Rename) */
@@ -386,6 +515,7 @@ table.money.expenses td:nth-child(3) { color: var(--muted); }
 
 /* each list item: name, what uses it, Hide/Show, Rename (the form opens on its own line) */
 .list-item { flex-wrap: wrap; }
+.list-item .side { max-width: none; }   /* "6 người đang phục vụ" is never cut while the row has room */
 details.rename > summary { display: inline-flex; align-items: center; min-height: 36px; padding: 0 4px; font-size: var(--fs-meta); font-weight: 600; cursor: pointer; list-style: none; }
 details.rename > summary::-webkit-details-marker { display: none; }
 details.rename > summary:hover { text-decoration: underline; text-underline-offset: 3px; }
@@ -393,11 +523,11 @@ details.rename[open] { flex-basis: 100%; padding-bottom: 4px; }
 details.rename[open] > summary { margin-bottom: 8px; }
 details.rename .form { max-width: none; }
 
-/* Handover: the result is a tone step; a refusal is the pale negative pair */
-.result, .refusal { margin-bottom: 16px; padding: 12px 16px; border-radius: var(--radius-control); font-size: var(--fs-meta); line-height: 20px; }
+/* Handover: the result is a tone step; a refusal is the pale negative pair (red is a state, D4) */
+.result, .refusal { margin-bottom: 16px; padding: 12px 16px; border-radius: var(--radius); font-size: var(--fs-meta); line-height: 20px; }
 .result { background: var(--raised); }
-.refusal { background: #ffedea; }
-.refusal strong { color: #831c1e; }
+.refusal { background: var(--refusal-bg); }
+.refusal strong { color: var(--refusal-ink); }
 .result p + p, .refusal p + p, .refusal .places + p, .refusal p + .places { margin-top: 8px; }
 .places { padding-left: 20px; }
 .places li + li { margin-top: 4px; }
@@ -415,7 +545,7 @@ details.rename .form { max-width: none; }
 table.sent td:nth-child(-n+4) { white-space: nowrap; }
 table.sent td:last-child { width: 50%; }
 input[type="file"].input { height: auto; min-height: var(--control-height); padding: 5px 6px; font-size: var(--fs-meta); line-height: 28px; }
-input[type="file"].input::file-selector-button { height: 28px; margin-right: 12px; padding: 0 12px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+input[type="file"].input::file-selector-button { height: 28px; margin-right: 12px; padding: 0 14px; border: 1px solid var(--control); border-radius: var(--radius-pill); background: var(--surface); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
 input[type="file"].input::file-selector-button:hover { background: var(--raised); }
 .next-number .kpi-value { font-weight: 600; }
 @media (max-width: 640px) {
@@ -429,10 +559,12 @@ input[type="file"].input::file-selector-button:hover { background: var(--raised)
 table.money .edit { width: 1%; white-space: nowrap; text-align: right; }
 table.money td.edit a { color: var(--text); font-weight: 600; }
 @media (max-width: 640px) {
-  /* line 1: the Date and its Edit link; line 2: the other fields, the amount at the right edge */
-  table.money tr[data-row] > td:first-child { flex: 1 0 calc(100% - 48px); }
+  /* line 1: the Date and its Edit link; line 2: the other fields, the amount at the right edge. The Edit
+     link takes its own width ("Chỉnh sửa" is wider than "Edit"); an empty item after it ends line 1 */
+  table.money tr[data-row] > td:first-child { flex: 1 1 0; min-width: 0; }
   table.money tr[data-row] > td:not(:first-child):not(.edit) { order: 2; }
-  table.money td.edit { flex: 0 0 36px; order: 1; }
+  table.money td.edit { flex: none; width: auto; order: 1; }
+  table.money tr[data-row]::after { content: ""; flex-basis: 100%; order: 1; }
   table.money tr.total td.edit { display: none; }
   table.money td.edit a { display: inline-block; padding: 12px 0 12px 8px; margin: -12px 0 -12px -8px; }   /* a 44px tap */
 }
@@ -504,3 +636,84 @@ table.documents td:last-child a { color: var(--text); font-weight: 600; }
    the Calendar agenda); times, dates and numbers stay on one line. */
 .row:has(> .what.wrap) { align-items: baseline; }
 .row .day, .row .time { white-space: nowrap; }
+
+/* ---------- STYLE-2: a short window, and the Dashboard on one screen ----------
+   From 861px wide and up to 720px high the menu is one notch tighter, on every page: all 13 items stay in
+   view. From 1181px wide the Dashboard page itself never scrolls: the canvas is one window high (at least
+   640px), the grid fills what is left under the title row, and a long list scrolls inside its own card
+   (the card title and its foot link stay in place). Row 1 takes what is left, but never less than its 2 cards
+   with one whole row in each list; row 2 is --dash-row2 high.
+   From 861px to 1180px the grid has 3 rows and the page may scroll; under 861px it is the top bar. Screen
+   only: on paper every list prints whole. */
+@media (min-width: 861px) and (max-height: 720px) {
+  .sidebar { padding: 14px 16px; gap: 12px; }
+  .nav-item { min-height: 34px; }
+}
+@media screen and (min-width: 1181px) {
+  .canvas:has(> .dashboard) { height: 100vh; min-height: 640px; padding-bottom: 12px; display: flex; flex-direction: column; }
+  .canvas:has(> .dashboard) > .lang-switch { position: absolute; top: 12px; right: 40px; margin: 0; z-index: 1; }
+  /* a flash comes first at the canvas top: then the language switch goes back in the flow above it, as on
+     every other page, so it never sits on the pale flash (STYLE-FIX-1) */
+  .canvas:has(> .dashboard):has(> .flash) > .lang-switch { position: static; flex: none; margin: 0 12px 4px; }
+  .canvas:has(> .dashboard) > .title-row { flex: none; margin-bottom: 12px; padding-top: 6px; padding-bottom: 8px; }
+  .canvas:has(> .dashboard) > .flash { flex: none; margin-bottom: 8px; }
+  .dashboard { flex: 1 1 0; min-height: 0; gap: 14px; grid-template-rows: minmax(min-content, 1fr) auto; }
+  .dashboard > .panel { min-height: 0; padding: 14px 20px 12px; }
+  .dashboard .panel > header { margin-bottom: 4px; }
+  .dashboard .panel > header > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; }
+  .dashboard .panel > footer { padding-top: 8px; }
+  .dashboard .row { min-height: 40px; padding: 4px 0; }
+  /* a list scrolls inside its card: its height is fixed, so each row takes its content height (a title on
+     2 lines is 48px) and never its min-height only, or the 2nd line sits on the next row (STYLE-FIX-2) */
+  .dashboard > [data-panel="this-week"] .rows, .dashboard > [data-panel="needs-visit"] .rows,
+  .dashboard > [data-panel="sent-documents"] .rows {
+    flex: 1 1 0; min-height: 0; overflow-y: auto; align-content: start; overscroll-behavior: contain;
+    grid-auto-rows: max-content;
+    scrollbar-width: thin; scrollbar-color: var(--control) transparent; scrollbar-gutter: stable;
+    margin-right: -14px; padding-right: 6px; }
+  /* This week and Needs a visit always show one whole row: the list is at least as high as one row at its
+     tallest (a title on 2 lines: 2 x 24px + 8px padding) and row 1 grows to fit its cards (min-content). A
+     fixed 150px floor left Needs a visit 1px high, no row, at 1181x640 (STYLE-FIX-3) */
+  .dashboard > [data-panel="this-week"] .rows, .dashboard > [data-panel="needs-visit"] .rows { min-height: 56px; }
+  /* row 2 keeps its own height (B11), at least --dash-row2. Sent documents and Money this month are never
+     taller: the Sent rows scroll; the Money amounts sit 4px closer, and in an empty month (its dashed box
+     under them) the 3 zero amounts sit side by side, as on the Money page, so every word still shows
+     (STYLE-FIX-1: the empty card was 372-392px, and the page scrolled) */
+  .dashboard > [data-panel="services"], .dashboard > [data-panel="money-month"],
+  .dashboard > [data-panel="sent-documents"] { min-height: var(--dash-row2); }
+  .dashboard > [data-panel="money-month"], .dashboard > [data-panel="sent-documents"] { max-height: var(--dash-row2); }
+  .dashboard > [data-panel="money-month"] .kpi { padding: 4px 0; }
+  .dashboard > [data-panel="money-month"]:has(> .empty) .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dashboard > [data-panel="money-month"]:has(> .empty) .kpi + .kpi { border-top: 0; border-left: 1px solid var(--rule); padding-left: 12px; }
+}
+@media screen and (min-width: 1181px) and (max-height: 720px) {
+  .dashboard .row { min-height: 34px; padding: 2px 0; }
+  .dashboard > [data-panel="services"], .dashboard > [data-panel="money-month"],
+  .dashboard > [data-panel="sent-documents"] { padding-top: 10px; padding-bottom: 8px; }
+  /* one row at its tallest is 52px here (2 x 24px + 4px). The height for it comes from the space around the
+     row 1 cards and the title row, never from the text, and the Needs a visit hint takes the whole header
+     width (one line, the count stays on the title line), so the page stays one screen down to 640px high
+     (STYLE-FIX-3) */
+  .dashboard > [data-panel="this-week"] .rows, .dashboard > [data-panel="needs-visit"] .rows { min-height: 52px; }
+  .dashboard > [data-panel="needs-visit"] > header { flex-wrap: wrap; row-gap: 0; }
+  .dashboard > [data-panel="needs-visit"] > header > div { display: contents; }
+  .dashboard > [data-panel="needs-visit"] > header > div > .meta { order: 1; flex-basis: 100%; }
+  .canvas:has(> .dashboard) > .title-row { padding-top: 0; padding-bottom: 4px; margin-bottom: 8px; }
+  .dashboard { row-gap: 10px; }
+  .dashboard > [data-panel="this-week"], .dashboard > [data-panel="needs-visit"] { padding-top: 10px; padding-bottom: 8px; }
+  .dashboard > [data-panel="this-week"] > header, .dashboard > [data-panel="needs-visit"] > header { margin-bottom: 2px; }
+  .dashboard > [data-panel="this-week"] > footer, .dashboard > [data-panel="needs-visit"] > footer { padding-top: 4px; }
+}
+
+/* ---------- STYLE-FIX-1: the wash grows with the head ----------
+   The head above the cards (the language switch, a flash, the title row) can be as tall as its text: a
+   long name, a finding line on 2 lines, the buttons wrapped under the title (861px to 1180px). The wash
+   ends --wash-fade + 8px under the title row (its anchor), so every text on it sits on the solid part;
+   it is never shorter than before (--wash-h, --wash-h-narrow), so a short head looks the same. A browser
+   with no anchors keeps the fixed height above. */
+@supports (anchor-name: --a) {
+  .canvas::before { height: auto; min-height: var(--wash-h); bottom: calc(anchor(--title-row bottom) - var(--wash-fade) - 8px); }
+  @media (max-width: 860px) {
+    .canvas::before { min-height: var(--wash-h-narrow); bottom: calc(anchor(--title-row bottom) - var(--wash-fade-narrow) - 8px); }
+  }
+}

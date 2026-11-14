@@ -11,15 +11,33 @@
   .list-toolbar, details.change, details.rename, .card-link, .row-action, .note-edit, .form-actions,
   td.edit, th.edit, td.act, th.act, .list-head .spacer { display: none !important; }
   html, body { background: #fff; color: #000; }
+  /* Paper is ink on white whatever the app color: here the color tokens of style.css turn ink, grey or
+     white, and the shadows none, so no rule brings the app color, a tint, green or red or a shadow to
+     paper (a grey word, a tag, the Today pill, the Service word, the Services line, a Handover box, a
+     card). The Year report bars keep their two colors (spec 3.3). This comes after the app color of the
+     page head, so it wins. */
+  :root { --text: #000; --muted: #333; --faint: #333; --accent: #000; --accent-text: #000; --accent-deep: #000;
+    --accent-dark: #000; --on-accent: #000; --surface: #fff; --ground: #fff; --raised: #fff; --active: #fff;
+    --border: #888; --rule: #bbb; --control: #888; --positive: #000; --negative: #000; --grid: #ddd;
+    --grid-base: #888; --refusal-bg: #fff; --refusal-ink: #000; --highlight-focus: #000; --shadow: none;
+    --shadow-raised: none; }
   body { font: 11pt/1.4 "Segoe UI", Arial, sans-serif; }
   .app { display: block; }
   .canvas { padding: 0; }
+  .canvas::before { display: none !important; }   /* no wash of the app color on paper */
+  .canvas > .hint, .canvas > .lead { padding: 0; background: none; border: 0; }   /* the white note: plain text */
   .panel { border: 0; padding: 0; }
   .panel .table-wrap { margin: 0; overflow: visible; }   /* the screen's -12px bleed would pass the sheet edge */
   /* paper never gets the gradient: the header band and the active filter print as plain ink on white */
-  .title-row { margin-bottom: 6mm; padding: 0; background: none; color: #000; }
+  .title-row { margin-bottom: 6mm; padding: 0; background: none; box-shadow: none; color: #000; }
   .title-row .sub { color: #333; }
   .chip[aria-current="true"] { background: none; border-color: #000; color: #000; }
+  /* cards print flat: no shadow; the one dark card (Dashboard, Money this month) prints as ink on white
+     like the others, and a Balance prints in ink, not in green or red (spec D6) */
+  .panel, .kpi-strip { box-shadow: none; background: none; border-radius: 0; }
+  .dashboard > [data-panel="money-month"] { background: none; box-shadow: none; --highlight-ink: #000;
+    --highlight-muted: #333; --highlight-rule: #888; --positive-on-dark: #000; --negative-on-dark: #000; }
+  .kpi-value.strong, .kpi-value.strong:not(.neg) { color: #000; }
   h1, h2 { break-after: avoid; }
   a { color: inherit; text-decoration: none; }
   table { width: 100%; border-collapse: collapse; }
