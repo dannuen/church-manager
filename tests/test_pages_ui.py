@@ -19,6 +19,8 @@ STYLE-FIX-3 (class StyleFix3Test): Dashboard row 1 always shows one whole row in
 visit (no fixed 150px floor); up to 720px high the space around row 1 is tighter and the hint is one line.
 CRIT-1 (class CritOneTest): links in the app color, row actions at weight 400, a whole table row opens its
 page, and every small action is a 44px tap under 861px.
+CRIT-2 (class CritTwoTest): under 861px the menu is 5 items and a More fold (no sideways scroll); a skip link
+is the first stop of every page.
 """
 
 import datetime as dt
@@ -636,7 +638,7 @@ class FormControlsTest(PagesTestBase):
     style.css paints red."""
 
     STYLED = {".input", ".btn", ".link-btn", ".lang-switch button", 'input[type="checkbox"]',
-              "details.change > summary", "details.rename > summary"}
+              "details.change > summary", "details.rename > summary", ".nav-more > summary"}
 
     def test_every_form_control_carries_a_class_style_css_styles(self):
         conn = self.db()
@@ -661,7 +663,7 @@ class FormControlsTest(PagesTestBase):
                 self.assertTrue(cls and {"input", "btn", "link-btn"} & set(cls.group(1).split()),
                                 (path, tag, attrs))
             for attrs in re.findall(r"<details\b([^>]*)>", page):  # its summary is a pill or a text action
-                self.assertRegex(attrs, r'class="(change|rename)"', path)
+                self.assertRegex(attrs, r'class="(change|rename|nav-more)"', path)  # nav-more: the menu (CRIT-2)
         for selector in self.STYLED:
             self.assertTrue(declarations(selector), selector)
 
@@ -860,10 +862,12 @@ class PrintAndFinalWalkTest(PagesTestBase):
         # under 861px a short page (Chi phái, Documents): the top bar kept growing an empty band of up to
         # 200px under the menu; it keeps its own height now and the canvas takes the rest
         self.assertIn("grid-template-rows: auto 1fr", media_props("(max-width: 860px)", ".app"))
-        # the menu row: a thin bar in the line color, not the browser's grey one; the current page's pill
-        # is in view when the page opens (Money, Settings sat off screen to the right)
-        self.assertIn("scrollbar-width: thin", media_props("(max-width: 860px)", ".nav"))
-        self.assertIn("scroll-initial-target: nearest", media_props("(max-width: 860px)", '.nav-item[aria-current="page"]'))
+        # the menu: it was one row that scrolled sideways (a thin bar, the current pill scrolled into view);
+        # now it is a grid of 5 items and the More fold, with no sideways scroll and no bar (CRIT-2)
+        menu = media_props("(max-width: 860px)", ".nav")
+        self.assertIn("display: grid", menu)
+        self.assertNotRegex(menu, r"overflow|scrollbar")
+        self.assertFalse([sel for sel, body in css_rules() if "scroll-initial-target" in body], "no strip to scroll")
         # the Dashboard day column: "Chúa Nhật 15/11" ran into the time at 92px under 1181px
         self.assertIn("width: 112px", declarations(".row .day"))
         # the Search page with no result: its dashed box sat on the wash (1.05:1); it is white now
@@ -956,7 +960,7 @@ class StyleFix1Test(PagesTestBase):
         # one title row a page, in the canvas next to the wash: the anchor is that page's own
         page = self.page("/people")
         self.assertEqual(page.count('class="title-row"'), 1)
-        self.assertRegex(page, r'<main class="canvas">.*<header class="title-row">')
+        self.assertRegex(page, r'<main class="canvas" id="main" tabindex="-1">.*<header class="title-row">')
 
     def test_bug1_with_a_flash_the_dashboard_language_switch_is_in_the_flow(self):
         # no flash: as before, the switch sits at the top right of the canvas
@@ -967,7 +971,7 @@ class StyleFix1Test(PagesTestBase):
         self.assertIn("margin: 0 12px 4px", declarations(".lang-switch"))
         # the real page: the switch, then the flash, both children of the canvas; the grid too
         page = self.page("/?msg=" + urllib.parse.quote("Đã lưu."))
-        self.assertRegex(page, r'<main class="canvas"><form class="lang-switch"[^>]*>.*?</form><p class="flash" role="status">')
+        self.assertRegex(page, r'<main class="canvas" id="main" tabindex="-1"><form class="lang-switch"[^>]*>.*?</form><p class="flash" role="status">')
         self.assertIn('</header><div class="grid dashboard">', page)
 
     def test_bug3_a_table_scrolls_inside_its_own_box(self):
@@ -1231,6 +1235,118 @@ class CritOneTest(PagesTestBase):
             self.assertEqual(whole_rule(top, selector)["min-height"], height, selector)
         for selector in (".card-link", ".row .row-action", "table.money td.edit a"):
             self.assertNotIn("min-height", whole_rule(top, selector), selector)
+
+
+class CritTwoTest(PagesTestBase):
+    """CRIT-2, the design critique of 2026-11-14 (rows 2, 11). Row 2: under 861px the menu shows 5 items
+    (Dashboard, People, Calendar, Money, Care) and a "More" fold (``<details>``, it works with no JS) with
+    the other 8 in NAV order: a grid, no row that scrolls sideways. The 8 menu items hide there and the fold
+    hides from 861px (display: none), so a screen reader meets each item once; from 861px the sidebar is as
+    before. The fold's summary takes the current-page look when the page is one of the 8, and its link there
+    has aria-current. Each item and the summary is a 44px tap. Row 11: a skip link is the first thing in
+    ``<body>`` of both page shells; it goes to ``main#main`` (tabindex -1) and shows only with the focus."""
+
+    FIVE = ("/", "/people", "/calendar", "/money", "/care")
+    EIGHT = ("/families", "/chi-phai", "/documents", "/sent", "/lists", "/copies", "/settings", "/search")
+    SKIP = '<a class="skip-link no-print" href="#main">{}</a><div class="app">'
+
+    @staticmethod
+    def menu(page):
+        """``(the 13 menu items, the More fold)`` of the page's one nav."""
+        nav = re.findall(r'<nav class="nav" aria-label="[^"]*">(.*?)</nav>', page, re.S)
+        assert len(nav) == 1, "one menu a page"
+        items, _sep, fold = nav[0].partition('<details class="nav-more">')
+        return items, fold
+
+    @staticmethod
+    def lang(page):
+        return re.search(r'<html lang="(\w+)">', page).group(1)
+
+    def test_the_menu_holds_the_13_items_then_the_more_fold_with_the_8(self):
+        self.assertEqual(tuple(key for key, _label, _href in ui.NAV if key in ui.NAV_MORE), ui.NAV_MORE)  # NAV order
+        page = self.page("/people")
+        items, fold = self.menu(page)
+        links = re.findall(r'<a class="([^"]+)" href="([^"]+)"', items)
+        self.assertEqual([href for _c, href in links], [href for _k, _l, href in ui.NAV])  # the 13 as before
+        self.assertEqual(tuple(href for cls, href in links if cls == "nav-item"), self.FIVE)
+        self.assertEqual(tuple(href for cls, href in links if cls == "nav-item in-more"), self.EIGHT)
+        more = ui.t("core.nav_more", self.lang(page))
+        self.assertTrue(fold.startswith(f'<summary class="nav-item">{more}</summary><div class="nav-more-list">'), fold[:120])
+        self.assertTrue(fold.endswith("</div></details>"))
+        self.assertEqual(tuple(re.findall(r'<a class="nav-item" href="([^"]+)"', fold)), self.EIGHT)
+        # a page of the 5: current in the menu only
+        self.assertEqual(re.findall(r'href="([^"]+)" aria-current="page"', items), ["/people"])
+        self.assertNotIn("aria-current", fold)
+        # a page of the 8: current in the menu (from 861px) and in the fold (under 861px)
+        for path in ("/families", "/settings"):
+            items, fold = self.menu(self.page(path))
+            self.assertEqual(re.findall(r'href="([^"]+)" aria-current="page"', items), [path])
+            self.assertEqual(re.findall(r'href="([^"]+)" aria-current="page"', fold), [path])
+
+    def test_the_words_more_and_skip_to_content(self):
+        self.assertEqual((ui.t("core.nav_more", "vi"), ui.t("core.nav_more", "en")), ("Mục khác", "More"))
+        self.assertEqual((ui.t("core.skip_to_content", "vi"), ui.t("core.skip_to_content", "en")),
+                         ("Chuyển đến nội dung", "Skip to content"))
+
+    def test_under_861px_5_items_and_the_fold_and_from_861px_the_sidebar_as_before(self):
+        top = top_level_rules()
+        self.assertEqual(whole_rule(top, ".nav-more")["display"], "none")  # from 861px: no fold
+        self.assertEqual(whole_rule(top, ".nav")["flex-direction"], "column")  # the sidebar as before
+        self.assertFalse([sel for sel, _b in top if "in-more" in sel])  # ... with all 13 items
+        self.assertEqual(media_wins(PHONE, ".nav .in-more")["display"], "none")
+        self.assertEqual(media_wins(PHONE, ".nav-more")["display"], "block")
+        nav = media_wins(PHONE, ".nav")
+        self.assertEqual((nav["position"], nav["display"], nav["grid-template-columns"]),
+                         ("relative", "grid", "repeat(6, minmax(0, 1fr))"))  # a tablet: one row of 6
+        self.assertFalse([prop for prop in nav if prop.startswith(("overflow", "scrollbar"))])
+        phone = media_wins("(max-width: 640px)", ".nav")
+        self.assertEqual(phone["grid-template-columns"], "repeat(3, minmax(0, 1fr))")  # a phone: 2 rows of 3
+        self.assertEqual(media_wins(PHONE, ".nav-item")["min-height"], "44px")  # the summary is a .nav-item too
+        summary = media_wins(PHONE, ".nav-more > summary")
+        self.assertEqual((summary["cursor"], summary["list-style"]), ("pointer", "none"))
+        self.assertEqual(media_wins(PHONE, ".nav-more > summary::-webkit-details-marker")["display"], "none")
+        # the open fold: a white card under the menu, over the page; the top bar does not cut it
+        card = media_wins(PHONE, ".nav-more-list")
+        self.assertEqual((card["position"], card["top"], card["left"], card["right"], card["background"]),
+                         ("absolute", "calc(100% + 4px)", "0", "0", "var(--surface)"))
+        self.assertEqual(media_wins("(max-width: 640px)", ".nav-more-list")["grid-template-columns"],
+                         "repeat(2, minmax(0, 1fr))")
+        self.assertEqual(media_wins(PHONE, ".sidebar")["overflow"], "visible")
+        # the summary of a fold that holds the current page has the current-page look
+        for selector in ('.nav-item[aria-current="page"]', '.nav-more:has([aria-current="page"]) > summary'):
+            rule = rule_props(selector)
+            self.assertEqual((rule["background"], rule["color"], rule["font-weight"]),
+                             ("var(--gradient)", "var(--on-accent)", "600"), selector)
+            self.assertEqual(rule_props(selector + ":hover")["background"], "var(--accent-dark)", selector)
+        # paper: print.css hides the menu, so the fold too, and the skip link (.no-print)
+        hidden = {selector for selector, _parts in print_hide_selectors()}
+        self.assertLessEqual({".sidebar", "nav", ".no-print"}, hidden)
+
+    def test_a_skip_link_is_the_first_stop_of_both_page_shells(self):
+        for path, status in (("/people", 200), ("/families", 200), ("/no-such-page", 404)):
+            page = self.page(path, expect=status)
+            body = page.split("<body>\n", 1)[1]
+            skip = self.SKIP.format(ui.t("core.skip_to_content", self.lang(page)))
+            self.assertTrue(body.startswith(skip), (path, body[:160]))
+            self.assertEqual(page.count('id="main"'), 1, path)
+            self.assertEqual(page.count('href="#main"'), 1, path)
+            self.assertIn('<main class="canvas" id="main" tabindex="-1">', page, path)
+        bare = ui.bare_page("X", "")  # the page for a church copy that cannot be read (no request: Vietnamese)
+        self.assertTrue(bare.split("<body>\n", 1)[1].startswith(self.SKIP.format("Chuyển đến nội dung")))
+        self.assertIn('<main class="canvas" id="main" tabindex="-1">', bare)
+        # out of sight until it has the focus; then top left, above everything, with the one ring
+        link = rule_props(".skip-link")
+        self.assertEqual((link["position"], link["top"], link["left"], link["transform"], link["min-height"]),
+                         ("fixed", "8px", "8px", "translateY(-200%)", "44px"))
+        self.assertEqual((link["background"], link["color"]), ("var(--surface)", "var(--accent-text)"))
+        self.assertNotIn("outline", link)
+        self.assertNotIn("box-shadow", link)  # no shadow peeks into the window while it is out of sight
+        focus = rule_props(".skip-link:focus")
+        self.assertEqual((focus["transform"], focus["box-shadow"]), ("none", "var(--shadow-raised)"))
+        self.assertIn("outline: 2px solid var(--accent-text)", declarations(":focus-visible"))
+        z_index = int(link["z-index"])
+        self.assertGreater(z_index, int(media_wins(PHONE, ".nav-more-list")["z-index"]))
+        self.assertGreater(z_index, int(rule_props(".results")["z-index"]))
 
 
 if __name__ == "__main__":

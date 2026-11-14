@@ -94,8 +94,15 @@ a:hover, :where(td) a:focus-visible, :where(.row .what) a:focus-visible, .card-l
 .nav { display: flex; flex-direction: column; gap: 2px; }
 .nav-item { display: flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: var(--radius-pill); color: var(--muted); font-size: var(--fs-meta); }
 .nav-item:hover { background: var(--raised); color: var(--text); text-decoration: none; }
-.nav-item[aria-current="page"] { background: var(--gradient); color: var(--on-accent); font-weight: 600; }
-.nav-item[aria-current="page"]:hover { background: var(--accent-dark); }
+.nav-item[aria-current="page"], .nav-more:has([aria-current="page"]) > summary { background: var(--gradient); color: var(--on-accent); font-weight: 600; }
+.nav-item[aria-current="page"]:hover, .nav-more:has([aria-current="page"]) > summary:hover { background: var(--accent-dark); }
+/* the "More" fold of the top bar (under 861px, below); from 861px the sidebar shows all 13 items. Its
+   summary takes the current-page look when the page is one of its 8 (CRIT-2) */
+.nav-more { display: none; }
+/* the skip link: the first stop of Tab on every page, out of sight until it has the focus; then a white
+   pill at the top left above everything, with the one focus ring. print.css hides it (.no-print) (CRIT-2) */
+.skip-link { position: fixed; z-index: 100; top: 8px; left: 8px; display: inline-flex; align-items: center; min-height: 44px; padding: 0 20px; border-radius: var(--radius-pill); background: var(--surface); color: var(--accent-text); font-size: var(--fs-meta); font-weight: 600; transform: translateY(-200%); }
+.skip-link:focus { transform: none; box-shadow: var(--shadow-raised); }
 /* The wash: one layer of the app color behind the top of the canvas (the language switch, the title row
    and the top of the first cards). It is not a card. The sidebar stays on the plain ground. */
 .canvas { position: relative; isolation: isolate; min-width: 0; padding: 14px var(--pad) var(--pad); }
@@ -290,13 +297,20 @@ td .num { white-space: nowrap; }   /* a phone number, a date or an amount never 
   /* the top bar keeps its own height and the canvas takes the rest: on a short page the bar never grows
      an empty band under the menu */
   .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
-  .sidebar { position: static; height: auto; flex-direction: column; gap: 8px; padding: 12px 16px 8px; border-bottom: 1px solid var(--border); }
+  .sidebar { position: static; height: auto; overflow: visible; flex-direction: column; gap: 8px; padding: 12px 16px 8px; border-bottom: 1px solid var(--border); }
   .brand { padding: 0; }
-  /* the menu is one row that scrolls sideways: a thin bar in the line color (not the browser's grey one),
-     and the current page's pill is scrolled into view when the page opens */
-  .nav { flex-direction: row; overflow-x: auto; gap: 4px; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: var(--control) transparent; }
-  .nav-item { flex: none; min-height: 44px; }
-  .nav-item[aria-current="page"] { scroll-initial-target: nearest; }
+  /* the menu: 5 items and the "More" fold that holds the other 8 (CRIT-2), with no row that scrolls
+     sideways: one row of 6 on a tablet, 2 rows of 3 on a phone (640px, below). Each is a 44px tap. The
+     fold opens a white card under the menu, over the page; it works with no JS */
+  .nav { position: relative; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+  .nav-item { min-height: 44px; justify-content: center; padding: 0 8px; text-align: center; }
+  .nav .in-more { display: none; }
+  .nav-more { display: block; }
+  .nav-more > summary { gap: 8px; cursor: pointer; list-style: none; }
+  .nav-more > summary::-webkit-details-marker { display: none; }
+  .nav-more > summary::after { content: ""; flex: none; width: 6px; height: 6px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: translateY(-2px) rotate(45deg); }
+  .nav-more[open] > summary::after { transform: translateY(2px) rotate(-135deg); }
+  .nav-more-list { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow-raised); }
   .canvas { padding: 16px; }
   .canvas::before { left: 8px; right: 8px; height: var(--wash-h-narrow); background-size: 100% var(--wash-fade-narrow), 100% 100%; }   /* the title row stacks */
   .grid > * { grid-column: 1 / -1 !important; }
@@ -312,6 +326,10 @@ td .num { white-space: nowrap; }   /* a phone number, a date or an amount never 
   .row .side { max-width: none; }
   .row .figure { margin-left: auto; }
   .list-head { display: none; }
+}
+@media (max-width: 640px) {   /* a phone: the menu is 2 rows of 3, the More card 2 columns of 4 (CRIT-2) */
+  .nav { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .nav-more-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
 

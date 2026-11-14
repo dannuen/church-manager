@@ -21,6 +21,8 @@ SECTIONS = ("core", "dashboard", "people", "families", "chi_phai", "calendar", "
 TEXT = {
     "vi": {
         # --- core
+        "core.nav_more": "Mục khác",
+        "core.skip_to_content": "Chuyển đến nội dung",
         "core.language": "Ngôn ngữ",
         "core.nav_label": "Menu chính",
         "core.months_one": "{n} tháng",
@@ -1089,6 +1091,8 @@ TEXT = {
     },
     "en": {
         # --- core
+        "core.nav_more": "More",
+        "core.skip_to_content": "Skip to content",
         "core.language": "Language",
         "core.nav_label": "Main",
         "core.months_one": "{n} month",

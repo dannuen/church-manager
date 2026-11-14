@@ -34,6 +34,9 @@ NAV = (  # (key, TEXT key of the label, href)
     ("settings", "core.nav_settings", "/settings"),
     ("search", "core.nav_search", "/search"),
 )
+# Under 861px the top bar shows the other 5 items and a "More" fold that holds these 8, in NAV order. The
+# 8 stay in the menu too (class in-more): style.css shows one place or the other, never both (CRIT-2).
+NAV_MORE = ("families", "chi-phai", "documents", "sent", "lists", "copies", "settings", "search")
 LANG_NAMES = (("vi", "Tiếng Việt"), ("en", "English"))  # never translated: each name in its own language
 DASH = '<span class="dash">—</span>'  # a missing value
 
@@ -333,18 +336,27 @@ def lang_switch():
 
 
 def _sidebar(church, active):
-    current = ' aria-current="page"'
-    links = "".join(
-        f'<a class="nav-item" href="{href}"{current if key == active else ""}>{h(t(label))}</a>'
-        for key, label, href in NAV
-    )
+    def item(key, label, href, cls):
+        current = ' aria-current="page"' if key == active else ""
+        return f'<a class="{cls}" href="{href}"{current}>{h(t(label))}</a>'
+
+    links = "".join(item(key, label, href, "nav-item in-more" if key in NAV_MORE else "nav-item")
+                    for key, label, href in NAV)
+    more = "".join(item(key, label, href, "nav-item") for key, label, href in NAV if key in NAV_MORE)
+    fold = (f'<details class="nav-more"><summary class="nav-item">{h(t("core.nav_more"))}</summary>'
+            f'<div class="nav-more-list">{more}</div></details>')
     return (
         '<aside class="sidebar">'
         f'<a class="brand" href="/"><span class="brand-app">Church Manager</span>'
         f'<span class="brand-church" lang="vi">{h(church)}</span></a>'
-        f'<nav class="nav" aria-label="{h(t("core.nav_label"))}">{links}</nav>'
+        f'<nav class="nav" aria-label="{h(t("core.nav_label"))}">{links}{fold}</nav>'
         '</aside>'
     )
+
+
+def _skip_link():
+    """The first thing Tab reaches on every page: it jumps over the menu to ``main#main`` (CRIT-2)."""
+    return f'<a class="skip-link no-print" href="#main">{h(t("core.skip_to_content"))}</a>'
 
 
 def title_row(title, sub=None, actions="", lang=None):
@@ -363,7 +375,8 @@ def page(title, body_html, active=None, sub=None, actions="", lang=None):
     ``active``: the NAV key to mark (``"people"``, ``"money"``, ...). ``sub`` is trusted HTML
     (escape its values) for the one line under the h1; ``actions`` is trusted HTML for buttons
     on the right of the title. ``lang="vi"`` when the h1 holds a Vietnamese name.
-    With no church copy open (first run) there is no navigation. The language switch comes first.
+    With no church copy open (first run) there is no navigation. The language switch comes first in ``main``;
+    a skip link to ``main#main`` is the first thing in ``<body>``.
     """
     req = current_request()
     church = req.church_name if req is not None else None
@@ -375,7 +388,7 @@ def page(title, body_html, active=None, sub=None, actions="", lang=None):
     )
     return (
         _head(full_title)
-        + f'<body>\n<div class="app">{side}<main class="canvas">'
+        + f'<body>\n{_skip_link()}<div class="app">{side}<main class="canvas" id="main" tabindex="-1">'
         + lang_switch() + flash + title_row(title, sub, actions, lang) + body_html
         + "</main></div>\n</body>\n</html>\n"
     )
@@ -385,7 +398,7 @@ def bare_page(title, body_html):
     """A page with no data at all (used for errors when the church copy cannot be read)."""
     return (
         _head(f"{title} · Church Manager")
-        + '<body>\n<div class="app"><aside class="sidebar"><a class="brand" href="/">'
-        + '<span class="brand-app">Church Manager</span></a></aside><main class="canvas">'
+        + '<body>\n' + _skip_link() + '<div class="app"><aside class="sidebar"><a class="brand" href="/">'
+        + '<span class="brand-app">Church Manager</span></a></aside><main class="canvas" id="main" tabindex="-1">'
         + lang_switch() + title_row(title) + body_html + "</main></div>\n</body>\n</html>\n"
     )

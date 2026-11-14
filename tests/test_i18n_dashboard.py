@@ -134,7 +134,8 @@ class _Screens(LiveServer, unittest.TestCase):
     def test_search_nav_item_is_current_on_the_search_page(self):
         page = self.page("/search?q=a")
         nav = re.search(r'<nav class="nav"[^>]*>(.*?)</nav>', page, re.S).group(1)
-        self.assertEqual(re.findall(r'href="([^"]+)" aria-current="page"', nav), ["/search"])
+        # once in the menu, once in the phone's More fold (CRIT-2): style.css shows one of them
+        self.assertEqual(re.findall(r'href="([^"]+)" aria-current="page"', nav), ["/search", "/search"])
         self.assertIn(f'aria-current="page">{t("core.nav_search", self.LANG)}</a>', nav)
 
     def test_live_search_words_are_in_data_attributes(self):
