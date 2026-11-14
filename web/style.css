@@ -73,7 +73,11 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body { margin: 0; background: var(--ground); color: var(--text); font: var(--fs-body)/24px var(--font); }
 h1, h2, h3, p, ul, ol { margin: 0; }
 a { color: inherit; text-decoration: none; }
-a:hover { text-decoration: underline; text-underline-offset: 3px; }
+/* a link in a table cell or in a row title is in the app color, so a name shows it can be clicked (a card
+   foot link too, .card-link); it is underlined under the pointer and on keyboard focus, with the one ring.
+   One tag weight (:where): print.css (later) keeps it ink on paper (CRIT-1) */
+:where(td) a, :where(.row .what) a { color: var(--accent-text); }
+a:hover, :where(td) a:focus-visible, :where(.row .what) a:focus-visible, .card-link:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
 :focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; border-radius: 4px; }
 .num, table, .kpi-value, input, select { font-variant-numeric: tabular-nums; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -132,7 +136,7 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 /* ---------- panels and the 12-column grid ----------
    A card (spec 4.3): white, a 1px --border edge, --radius-card corners and the soft --shadow; a bold ink
-   title, a grey sub line, ink foot links. An empty list keeps its frame (.empty below). */
+   title, a grey sub line, foot links in the app color. An empty list keeps its frame (.empty below). */
 .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--gap); }
 .span-3 { grid-column: span 3; } .span-4 { grid-column: span 4; } .span-5 { grid-column: span 5; }
 .span-6 { grid-column: span 6; } .span-7 { grid-column: span 7; } .span-12 { grid-column: 1 / -1; }
@@ -144,7 +148,7 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .panel > footer { margin-top: auto; padding-top: 12px; display: flex; flex-wrap: wrap; gap: 8px 20px; }
 .panel.narrow { max-width: 640px; }
 .panel p + p, .panel p + .form, .panel .form + p { margin-top: 12px; }
-.card-link { font-size: var(--fs-meta); font-weight: 600; color: var(--text); }
+.card-link { font-size: var(--fs-meta); font-weight: 600; color: var(--accent-text); }   /* white on the dark card (its own --accent-text) */
 .card-link::after { content: "\00a0›"; }   /* a no-break space: the sign never sits alone on a line */
 header .card-link { white-space: nowrap; }   /* in a card head (Money): the title wraps, the link stays whole */
 
@@ -367,8 +371,10 @@ details.change .form { max-width: none; }
 .note .when { display: block; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
 .note p { font-size: var(--fs-meta); line-height: 20px; white-space: pre-wrap; overflow-wrap: anywhere; }
 
-/* Care: Needs a visit rows end with "Plan"; each planned Visit holds its "Mark Visit done" form */
-.row .row-action { flex: none; width: 48px; text-align: right; font-size: var(--fs-meta); font-weight: 600; }
+/* Care: Needs a visit rows end with "Plan"; each planned Visit holds its "Mark Visit done" form. A row
+   action (Plan, Record, Edit, Delete, Rename, Hide/Show) is a plain word in the app color, weight 400: the
+   name and the amount of the row stay the strong parts (CRIT-1) */
+.row .row-action { flex: none; width: 48px; text-align: right; font-size: var(--fs-meta); font-weight: 400; color: var(--accent-text); }
 .care .list-head span:nth-child(2) { width: 96px; text-align: right; }
 .care .list-head .spacer { width: 48px; }
 .visits { list-style: none; padding: 0; display: grid; }
@@ -386,10 +392,11 @@ details.change .form { max-width: none; }
   .grid.person > *, .grid.family > *, .grid.chi-phai > *, .grid.care > * { grid-column: 1 / -1; }
 }
 @media (max-width: 640px) {
-  /* tables become two-line rows: the name on line 1, the other fields on line 2 */
+  /* tables become two-line rows: the name on line 1, the other fields on line 2; the parts of a line sit on
+     one baseline (a 44px link beside a plain field, CRIT-1) */
   table.list thead { display: none; }
   table.list, table.list tbody { display: block; }
-  table.list tr { display: flex; flex-wrap: wrap; gap: 2px 12px; padding: 8px 12px; border-bottom: 1px solid var(--rule); }
+  table.list tr { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; padding: 8px 12px; border-bottom: 1px solid var(--rule); }
   table.list tbody tr:last-child { border-bottom: 0; }
   table.list td, table.list tr[data-row] > th { display: block; padding: 0; border: 0; color: var(--muted); }
   table.list td:first-child, table.list tr[data-row] > th:first-child { flex-basis: 100%; color: var(--text); }
@@ -440,7 +447,7 @@ fieldset.group legend { padding: 0; margin-bottom: 8px; font-size: var(--fs-meta
 .add-form .form { max-width: none; }
 .add-person { display: grid; grid-template-columns: minmax(0, 1fr) 136px auto; gap: 12px; align-items: end; }
 .row-form { flex: none; margin: 0; }
-.link-btn { min-height: 36px; padding: 0 4px; border: 0; background: none; color: var(--text); font: inherit; font-size: var(--fs-meta); font-weight: 600; cursor: pointer; }
+.link-btn { min-height: 36px; padding: 0 4px; border: 0; background: none; color: var(--accent-text); font: inherit; font-size: var(--fs-meta); font-weight: 400; cursor: pointer; }
 .link-btn:hover { text-decoration: underline; text-underline-offset: 3px; }
 .series-links { font-size: var(--fs-meta); }
 .absent { margin-top: 4px; font-size: var(--fs-meta); line-height: 20px; color: var(--muted); white-space: pre-wrap; }
@@ -489,7 +496,6 @@ table.money.expenses td:nth-child(3) { color: var(--muted); }
   table.money td.n + td.n::before { content: none; }   /* a dash before an amount would read as a minus */
   table.money tr.total { justify-content: space-between; }
   table.money tr.total > * { display: block; padding: 0; border: 0; }
-  .link-btn { min-height: 44px; }
 }
 
 /* ---------- card C3: Documents, Sent documents, Lists, Copies and Settings ----------
@@ -516,7 +522,7 @@ table.money.expenses td:nth-child(3) { color: var(--muted); }
 /* each list item: name, what uses it, Hide/Show, Rename (the form opens on its own line) */
 .list-item { flex-wrap: wrap; }
 .list-item .side { max-width: none; }   /* "6 người đang phục vụ" is never cut while the row has room */
-details.rename > summary { display: inline-flex; align-items: center; min-height: 36px; padding: 0 4px; font-size: var(--fs-meta); font-weight: 600; cursor: pointer; list-style: none; }
+details.rename > summary { display: inline-flex; align-items: center; min-height: 36px; padding: 0 4px; color: var(--accent-text); font-size: var(--fs-meta); font-weight: 400; cursor: pointer; list-style: none; }
 details.rename > summary::-webkit-details-marker { display: none; }
 details.rename > summary:hover { text-decoration: underline; text-underline-offset: 3px; }
 details.rename[open] { flex-basis: 100%; padding-bottom: 4px; }
@@ -535,13 +541,9 @@ details.rename .form { max-width: none; }
 @media (max-width: 1023px) {
   .grid.sent > *, .grid.lists > *, .grid.copies > *, .grid.settings > * { grid-column: 1 / -1; }
 }
-@media (max-width: 640px) {
-  details.rename > summary { min-height: 44px; }
-}
 
 /* C3 round 2: the file of a Sent document under its subject; a file field that looks like the others */
 .cell-sub { display: block; color: var(--muted); font-size: var(--fs-small); line-height: 16px; font-weight: 400; }
-.cell-sub a { color: var(--text); }
 table.sent td:nth-child(-n+4) { white-space: nowrap; }
 table.sent td:last-child { width: 50%; }
 input[type="file"].input { height: auto; min-height: var(--control-height); padding: 5px 6px; font-size: var(--fs-meta); line-height: 28px; }
@@ -557,7 +559,7 @@ input[type="file"].input::file-selector-button:hover { background: var(--raised)
 
 /* Money: each Offering and Expense row ends with its Edit link (print.css hides .no-print) */
 table.money .edit { width: 1%; white-space: nowrap; text-align: right; }
-table.money td.edit a { color: var(--text); font-weight: 600; }
+table.money td.edit a { color: var(--accent-text); font-weight: 400; }
 @media (max-width: 640px) {
   /* line 1: the Date and its Edit link; line 2: the other fields, the amount at the right edge. The Edit
      link takes its own width ("Chỉnh sửa" is wider than "Edit"); an empty item after it ends line 1 */
@@ -614,11 +616,12 @@ table.money th.category { white-space: normal; line-height: 16px; }
 .row .what .file-name { overflow-wrap: anywhere; }
 
 /* ---------- FIX-T 3b ----------
-   B22: each row of the Documents list ends with its Delete text action, in ink like the Money Edit link
-   (not a button); it opens the one question. On a phone it sits at the right of line 1, beside the name.
+   B22: each row of the Documents list ends with its Delete text action, in the app color at weight 400 like
+   the Money Edit link (not a button; CRIT-1); it opens the one question. On a phone it sits at the right of
+   line 1, beside the name.
    The one question names the Document whole: a long name wraps, and may break inside the name. */
 table.documents td:last-child { width: 1%; white-space: nowrap; text-align: right; }
-table.documents td:last-child a { color: var(--text); font-weight: 600; }
+table.documents td:last-child a { color: var(--accent-text); font-weight: 400; }
 .confirm-name { overflow-wrap: anywhere; }
 [data-panel="confirm"] .kv + .hint { margin-top: 12px; }
 @media (max-width: 640px) {
@@ -716,4 +719,25 @@ table.documents td:last-child a { color: var(--text); font-weight: 600; }
   @media (max-width: 860px) {
     .canvas::before { min-height: var(--wash-h-narrow); bottom: calc(anchor(--title-row bottom) - var(--wash-fade-narrow) - 8px); }
   }
+}
+
+/* ---------- CRIT-1: a whole row opens its page; every small action is a 44px tap on a phone ----------
+   In a table.list row whose first cell holds a link (People, Families, Chi phái, a history table,
+   Documents) that link covers the whole row: an empty ::after, the row is its box. Every other link, button
+   or form of that row stays on top and opens its own page. Screen only: on paper a row is text. A table in
+   its own scroll box (.table-wrap) keeps it: the row is inside the box.
+   Under 861px (a phone, a tablet) each small action is at least 44px high and all of it is the tap: the
+   language switch, a card foot link, a row action (Plan, Record, Rename, Hide/Show), a link in a table (a
+   Money table is a table.list too: its Edit; the Documents Delete). The name link of a row keeps its line
+   height (its tap is the whole row already). From 861px each keeps its own size. */
+@media screen {
+  table.list tbody tr { position: relative; }
+  table.list td:first-child > a::after { content: ""; position: absolute; inset: 0; }
+  table.list tr:has(> td:first-child > a) > td:not(:first-child) :is(a, button, form) { position: relative; z-index: 1; }
+}
+@media (max-width: 860px) {
+  .lang-switch button, .card-link, .row .row-action, details.rename > summary, .link-btn,
+  table.list td a { display: inline-flex; align-items: center; min-height: 44px; }
+  .row .row-action { justify-content: flex-end; }
+  table.list td:first-child > a { margin-block: -12px; }
 }

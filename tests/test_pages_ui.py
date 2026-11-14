@@ -17,6 +17,8 @@ a table's own scroll box; Money this month fits row 2 in an empty month.
 STYLE-FIX-2 (class StyleFix2Test): a Dashboard list row is as tall as its 2-line title (no overlap).
 STYLE-FIX-3 (class StyleFix3Test): Dashboard row 1 always shows one whole row in This week and Needs a
 visit (no fixed 150px floor); up to 720px high the space around row 1 is tighter and the hint is one line.
+CRIT-1 (class CritOneTest): links in the app color, row actions at weight 400, a whole table row opens its
+page, and every small action is a 44px tap under 861px.
 """
 
 import datetime as dt
@@ -442,6 +444,8 @@ TEXT_PAIRS = (  # (text, what it sits on): at least 4.5:1
     # STYLE-5: the one dark card (Money this month): each text on each of its 3 stops
     *((fg, s) for fg in ("--highlight-ink", "--highlight-muted", "--positive-on-dark", "--negative-on-dark")
       for s in HIGHLIGHT_STOPS),
+    # CRIT-1: a foot link on the dark card is its --accent-text (--highlight-focus)
+    *(("--highlight-focus", s) for s in HIGHLIGHT_STOPS),
 )
 PART_PAIRS = (  # a field border or the focus ring: at least 3:1
     ("--control", "--surface"), ("--control", "--ground"), ("--control", "--raised"),
@@ -704,7 +708,7 @@ class CardsAndChartsTest(PagesTestBase):
                              ("var(--surface)", "1px solid var(--border)", "var(--radius-card)", "var(--shadow)"),
                              selector)
         self.assertEqual(rule_props(".panel h2")["font-weight"], "700")
-        self.assertEqual(rule_props(".card-link")["color"], "var(--text)")
+        self.assertEqual(rule_props(".card-link")["color"], "var(--accent-text)")   # CRIT-1: a link shows it is one
         self.assertEqual(rule_props(".panel .meta")["color"], "var(--muted)")
         # the Private note panel: a tint, a dashed edge, no shadow (it stays .no-print)
         private = rule_props(".panel.private")
@@ -1101,6 +1105,132 @@ class StyleFix3Test(PagesTestBase):
         # screen only: on paper every list prints whole
         for query in (WIDE, SHORT):
             self.assertTrue(query.startswith("screen and "))
+
+
+PHONE = "(max-width: 860px)"  # a phone or a tablet: the top bar
+
+
+def whole_rule(rules, selector_list):
+    """``{property: value}`` of the rules whose whole selector list (spaces squeezed) is ``selector_list``."""
+    found = {}
+    for sel, body in rules:
+        if " ".join(sel.split()) == selector_list:
+            found.update((p.strip(), v.strip()) for p, v in (d.split(":", 1) for d in body.split(";") if d.strip()))
+    assert found, f"no rule {selector_list!r}"
+    return found
+
+
+def top_level_rules():
+    """``[(selector, declarations)]`` of ``web/style.css`` outside every ``@media`` block (the sizes from 861px)."""
+    top = re.sub(r"@media[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}", "", style_css())
+    return [(sel.strip(), body) for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", top)]
+
+
+class CritOneTest(PagesTestBase):
+    """CRIT-1, the design critique of 2026-11-14 (rows 1, 3, 7). Row 3: a link in a table cell, in a row title
+    and a card foot link is in the app color (--accent-text), underlined under the pointer and on keyboard
+    focus, one tag weight so paper keeps it ink; the dark card keeps its own light color. Row 7: a row action
+    (Money Edit, Documents Delete, Plan, Rename, Hide/Show) is a plain word in the app color at weight 400;
+    the pills keep their weight. Row 1: in a table.list row whose first cell holds a link, that link covers the
+    whole row (screen only) and every other link, button or form of the row stays on top; under 861px every
+    small action is at least 44px high, all of it a tap; from 861px each keeps its own size."""
+
+    TAPS = (".lang-switch button", ".card-link", ".row .row-action", "details.rename > summary", ".link-btn",
+            "table.list td a")
+    ROW_ACTIONS = ("table.money td.edit a", ".row .row-action", "details.rename > summary", ".link-btn",
+                   "table.documents td:last-child a")
+
+    def add_offering(self):
+        conn = self.db()
+        money.add_offering(conn, TODAY.isoformat(), 100_000, lists.find_item(conn, "fund", name="General")["id"])
+
+    def test_links_in_cells_rows_and_card_feet_are_in_the_app_color(self):
+        for selector in (":where(td) a", ":where(.row .what) a", ".card-link"):
+            self.assertEqual(rule_props(selector)["color"], "var(--accent-text)", selector)
+        self.assertEqual(rule_props("a")["text-decoration"], "none")  # no underline at rest
+        for selector in ("a:hover", ":where(td) a:focus-visible", ":where(.row .what) a:focus-visible",
+                         ".card-link:focus-visible"):
+            self.assertEqual(rule_props(selector)["text-decoration"], "underline", selector)
+        self.assertIn("outline: 2px solid var(--accent-text)", declarations(":focus-visible"))  # the one ring
+        # no rule paints a link of a cell back to ink (the Sent document file link was .cell-sub a)
+        self.assertFalse([sel for sel, _b in css_rules() if sel == ".cell-sub a"])
+        # one tag weight: the later "a" rule of print.css keeps a data link ink on paper
+        self.assertEqual(rule_props("a", "print.css")["color"], "inherit")
+        # the dark card: its own --accent-text is --highlight-focus, white (StyleTokensTest: 4.5:1 on its stops)
+        self.assertEqual(rule_props(CARD)["--accent-text"], "var(--highlight-focus)")
+        self.assertEqual(root_tokens()["--highlight-focus"], "#ffffff")
+        self.assertIn(("--accent-text", "--surface"), TEXT_PAIRS)  # a link on a card: 4.5:1 for any app color
+        self.assertIn(("--highlight-focus", "--highlight"), TEXT_PAIRS)  # a foot link on the dark card
+        # the real pages: names in a table cell and in a row title are links
+        self.assertRegex(self.page("/people"), r'<tr data-row><td><a href="/people/\d+">')
+        self.assertRegex(section(self.page("/care"), "needs-visit"), r'<span class="what[^"]*">.*?<a href="/people/\d+"')
+
+    def test_row_actions_are_plain_words_in_the_app_color(self):
+        for selector in self.ROW_ACTIONS:
+            rule = rule_props(selector)
+            self.assertEqual((rule["font-weight"], rule["color"]), ("400", "var(--accent-text)"), selector)
+        # the pills keep their weight (header buttons, the "+" folding pills); bold stays for data and titles
+        self.assertEqual(rule_props(".btn")["font-weight"], "600")
+        self.assertEqual(rule_props("details.change > summary")["font-weight"], "600")
+        self.assertEqual(rule_props("table.list td:first-child")["font-weight"], "500")  # the name of a row
+        # each row action is on a real page
+        self.add_offering()
+        self.assertIn('<a class="row-action" href="', self.page("/care"))
+        self.assertIn('<td class="edit no-print"><a href="/money/', self.page("/money"))
+        lists_page = self.page("/lists")
+        self.assertIn('<details class="rename">', lists_page)
+        self.assertIn('<button class="link-btn" type="submit"', lists_page)
+
+    def test_a_whole_table_row_opens_its_page(self):
+        screen = media_rules("screen")
+        self.assertEqual(whole_rule(screen, "table.list tbody tr")["position"], "relative")
+        cover = whole_rule(screen, "table.list td:first-child > a::after")
+        self.assertEqual((cover["content"], cover["position"], cover["inset"]), ('""', "absolute", "0"))
+        on_top = whole_rule(screen, "table.list tr:has(> td:first-child > a) > td:not(:first-child) :is(a, button, form)")
+        self.assertEqual((on_top["position"], on_top["z-index"]), ("relative", "1"))
+        # screen only: no rule outside @media screen sets the cover, and print.css does not know it
+        self.assertFalse([sel for sel, _b in top_level_rules() if "::after" in sel and "table.list" in sel])
+        self.assertNotIn("table.list", (ROOT / "web" / "print.css").read_text(encoding="utf-8"))
+        # the scroll box of a table (STYLE-FIX-1) stays positioned: the row is inside it
+        self.assertEqual(rule_props(".table-wrap")["position"], "relative")
+        # the real lists: the first cell of every row is the link; the other links sit in later cells
+        for path, href in (("/people", "/people/"), ("/families", "/families/"), ("/chi-phai", "/chi-phai/")):
+            body = re.search(r"<tbody>(.*?)</tbody>", self.page(path), re.S).group(1)
+            rows = re.findall(r"<tr data-row>(.*?)</tr>", body, re.S)
+            self.assertTrue(rows, path)
+            for row in rows:
+                self.assertTrue(row.startswith(f'<td><a href="{href}'), (path, row[:120]))
+
+    def test_every_small_action_is_a_44px_tap_under_861px(self):
+        for selector in self.TAPS:
+            rule = media_wins(PHONE, selector)
+            self.assertEqual((rule.get("display"), rule.get("align-items"), rule.get("min-height")),
+                             ("inline-flex", "center", "44px"), selector)
+        self.assertEqual(media_wins(PHONE, ".row .row-action")["justify-content"], "flex-end")
+        # the name link keeps its line height: the whole row is its tap already
+        self.assertEqual(media_wins(PHONE, "table.list td:first-child > a")["margin-block"], "-12px")
+        # the rule comes after the base rule of each (one weight: the later rule wins)
+        css = style_css()
+        last = css.rindex("table.list td a { display: inline-flex")
+        for base in (".lang-switch button {", ".card-link {", ".row .row-action {", "details.rename > summary {",
+                     ".link-btn {"):
+            self.assertLess(css.index(base), last, base)
+        # a Money table is a table.list too, so its links (Edit, the Giver) get the 44px tap
+        self.add_offering()
+        self.assertIn('<table class="list money offerings">', self.page("/money"))
+        # a phone row: a 44px link and a plain field sit on one baseline
+        self.assertIn("align-items: baseline", media_props("(max-width: 640px)", "table.list tr"))
+        # one place for these taps: the old phone-only rules are gone
+        for selector in (".link-btn", "details.rename > summary"):
+            self.assertFalse([s for s, _b in media_rules("(max-width: 640px)")
+                              if selector in (x.strip() for x in s.split(","))], selector)
+        # from 861px each keeps its own size
+        top = top_level_rules()
+        for selector, height in ((".lang-switch button", "28px"), (".link-btn", "36px"),
+                                 ("details.rename > summary", "36px")):
+            self.assertEqual(whole_rule(top, selector)["min-height"], height, selector)
+        for selector in (".card-link", ".row .row-action", "table.money td.edit a"):
+            self.assertNotIn("min-height", whole_rule(top, selector), selector)
 
 
 if __name__ == "__main__":
