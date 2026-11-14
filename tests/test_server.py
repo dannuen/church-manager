@@ -423,7 +423,7 @@ class FirstRunTest(LiveServer, unittest.TestCase):
         self.assertEqual(set(parsed.rows), PANELS)
         self.assertIn("Hội Thánh Thử Nghiệm", page)
         self.assertIn("New church setup is done", page)  # the flash message
-        for sentence in ("Nothing this week.", "No one needs a visit now.", "No Head count recorded yet.",
+        for sentence in ("Nothing in the next 7 days.", "No one needs a visit now.", "No Head count recorded yet.",
                          "No Offering or Expense recorded this month.", "No Sent document yet."):
             self.assertIn(sentence, page)
         self.assertIn("0 ₫", page)  # a real zero prints 0

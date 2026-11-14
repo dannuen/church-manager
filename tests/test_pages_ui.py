@@ -19,6 +19,8 @@ STYLE-FIX-3 (class StyleFix3Test): Dashboard row 1 always shows one whole row in
 visit (no fixed 150px floor); up to 720px high the space around row 1 is tighter and the hint is one line.
 CRIT-1 (class CritOneTest): links in the app color, row actions at weight 400, a whole table row opens its
 page, and every small action is a 44px tap under 861px.
+CRIT-4 (class CritFourTest): the Dashboard card of today and the 6 days after is "Next 7 days"; the DASH RULE:
+no Dashboard list scrolls inside its card, each shows a fixed number of rows and names the full count.
 CRIT-2 (class CritTwoTest): under 861px the menu is 5 items and a More fold (no sideways scroll); a skip link
 is the first stop of every page.
 CRIT-3 (class CritThreeTest): under 861px the title-row actions sit side by side, the primary first; no number
@@ -209,7 +211,7 @@ class UiMinorsRound2Test(PagesTestBase):
         self.assertNotIn("FIX-T B17 Báo cáo 0", listing)
         count = len(sent.list_sent_documents(conn, TODAY.year))
         self.assertIn(f'<span class="meta">{count} Sent documents in {TODAY.year}</span>', listing)
-        self.assertIn('<footer><a class="card-link" href="/sent">Open Sent documents</a></footer>', listing)
+        self.assertIn(f'<footer><a class="card-link" href="/sent">View all {count}</a></footer>', listing)  # CRIT-4
         services = section(page, "services")
         self.assertIn(f'<svg class="chart" width="100%" height="{dashboard.CHART_HEIGHT}" role="img"', services)
         self.assertIn('<footer><a class="card-link" href="/calendar">Calendar</a></footer>', services)
@@ -1005,20 +1007,19 @@ class StyleFix1Test(PagesTestBase):
                                                                  TODAY, "span-4"))
 
 
-DASH_LISTS = ("this-week", "needs-visit", "sent-documents")  # the Dashboard lists that scroll in their card
+DASH_LISTS = ("this-week", "needs-visit", "sent-documents")  # the Dashboard lists (CRIT-4: none scrolls in its card)
 
 
 class StyleFix2Test(PagesTestBase):
     """STYLE-FIX-2, BUG-5 of TEST-STYLE-FIX-1. From 1181px a Dashboard list has a short fixed height (it scrolls
     inside its card), so its grid rows shrank to the row min-height (40px, 34px up to 720px high) and a title on
     2 lines (48px) was drawn over the next row. Each row now takes its content height (grid-auto-rows:
-    max-content); the row min-heights and the 2-line clamp stay as they were."""
+    max-content); the row min-heights and the 2-line clamp stay as they were. CRIT-4: a list has no height of
+    its own any more (no scroll in the card), so each row takes its content height without that rule."""
 
     def test_bug5_a_dashboard_list_row_is_as_tall_as_its_2_line_title(self):
-        for panel in DASH_LISTS:
-            rows = media_props(WIDE, f'.dashboard > [data-panel="{panel}"] .rows')
-            self.assertIn("grid-auto-rows: max-content", rows, panel)
-            self.assertIn("overflow-y: auto", rows, panel)  # the list still scrolls inside its card
+        for panel in DASH_LISTS:  # CRIT-4: no rule gives a Dashboard list a height or a scroll
+            self.assertFalse([sel for sel, _body in css_rules() if f'[data-panel="{panel}"] .rows' in sel], panel)
         # unchanged: the row min-heights and the clamp of a title to 2 lines
         self.assertIn("min-height: 40px", media_props(WIDE, ".dashboard .row"))
         self.assertIn("min-height: 34px", media_props(WIDE + " and (max-height: 720px)", ".dashboard .row"))
@@ -1052,32 +1053,28 @@ class StyleFix3Test(PagesTestBase):
     than its 2 cards with one whole row in each list: the list is at least as high as one row at its tallest (a
     title clamped to 2 lines) and row 1 is min-content. Up to 720px high that height comes from the space around
     the row 1 cards and the title row, and the Needs a visit hint takes the whole header width (one line); it
-    never comes from the text. Row 2 stays as it was."""
+    never comes from the text. Row 2 stays as it was. CRIT-4: the lists no longer scroll; each shows a fixed
+    number of whole rows, so the floor and the min-content row are gone; the tight title row is now from 1181px
+    at every height."""
 
     def test_bug6_row_1_always_shows_one_whole_row_in_each_list(self):
         grid = media_wins(WIDE, ".dashboard")
-        self.assertEqual(grid["grid-template-rows"], "minmax(min-content, 1fr) auto")
+        self.assertNotIn("grid-template-rows", grid)  # CRIT-4: each row of cards is as high as its cards
         self.assertNotIn("minmax(150px", style_css())  # no fixed floor is left
-        for panel in ROW1:
-            rows = f'.dashboard > [data-panel="{panel}"] .rows'
-            # one row at its tallest: a title on 2 lines of 24px plus the row padding (8px; 4px up to 720px high)
-            self.assertEqual(media_wins(WIDE, rows)["min-height"], "56px", panel)
-            self.assertEqual(media_wins(SHORT, rows)["min-height"], "52px", panel)
-            self.assertEqual(media_wins(WIDE, rows)["overflow-y"], "auto", panel)  # the rest scrolls in the card
+        for panel in ROW1:  # CRIT-4: no floor and no scroll: the list shows its rows whole (at most a fixed number)
+            self.assertFalse([sel for sel, _body in css_rules() if f'[data-panel="{panel}"] .rows' in sel], panel)
         self.assertEqual(media_wins(WIDE, ".dashboard .row")["min-height"], "40px")  # the row min-heights as before
         self.assertEqual(media_wins(SHORT, ".dashboard .row")["min-height"], "34px")
         self.assertEqual(media_wins(WIDE, ".dashboard .row")["padding"], "4px 0")
         self.assertEqual(media_wins(SHORT, ".dashboard .row")["padding"], "2px 0")
         self.assertIn("font: var(--fs-body)/24px", declarations("body"))  # a title line is 24px high
-        # the Sent documents list (row 2) keeps no floor of its own
-        self.assertEqual(media_wins(WIDE, '.dashboard > [data-panel="sent-documents"] .rows')["min-height"], "0")
         # the real page: the Needs a visit rows are a <ul class="rows"> inside its card, under the list head
         visit = section(self.page("/"), "needs-visit")
         self.assertRegex(visit, r'<div class="list-head" aria-hidden="true">.*</div><ul class="rows">'
                                 r'<li class="row" data-row>')
 
     def test_bug6_up_to_720px_high_the_space_around_row_1_is_tighter(self):
-        title_row = media_wins(SHORT, ".canvas:has(> .dashboard) > .title-row")
+        title_row = media_wins(WIDE, ".canvas:has(> .dashboard) > .title-row")  # CRIT-4: at every height
         self.assertEqual((title_row["padding-top"], title_row["padding-bottom"], title_row["margin-bottom"]),
                          ("0", "4px", "8px"))
         self.assertEqual(media_wins(SHORT, ".dashboard")["row-gap"], "10px")
@@ -1509,6 +1506,80 @@ class CritFixOneTest(PagesTestBase):
                     "money.state_down", "money.finding"):
             for lang in ("vi", "en"):
                 self.assertNotIn(key, i18n.TEXT[lang], (key, lang))
+
+
+
+class CritFourTest(PagesTestBase):
+    """CRIT-4, critique rows 4 and 5. Row 4: the Dashboard card of today and the 6 days after is "Next 7 days"
+    ("7 ngày tới"); its foot link opens the Calendar 7-day view, with the same count. The Calendar chip
+    "This week" (Monday to Sunday) keeps its words. Row 5, the DASH RULE: 1. no Dashboard list scrolls inside
+    its card; 2. every row shown is whole; 3. each list shows at most a fixed number of rows and its foot link
+    then names the full count; 4. from 1181px the page fits 1440x900 and 1280x800 with titles on 2 lines (rule
+    4 is measured in a browser: see the card)."""
+
+    def test_row_4_next_7_days_is_today_and_the_6_days_after(self):
+        from churchmgr.i18n import t
+        page = self.page("/")
+        week = section(page, "this-week")
+        last = TODAY + dt.timedelta(days=6)
+        self.assertIn(f'<h2 id="p-this-week">Next 7 days</h2><span class="meta">{TODAY:%d/%m} – {last:%d/%m/%Y}</span>',
+                      week)
+        self.assertIn(f'<a class="card-link" href="/calendar?from={TODAY.isoformat()}">', week)
+        self.assertRegex(page, r'<p class="sub">[^<]* · \d+ Calendar items? in the next 7 days</p>')
+        self.assertEqual([t("dashboard.this_week", lang) for lang in ("vi", "en")], ["7 ngày tới", "Next 7 days"])
+        self.assertEqual(t("dashboard.nothing_week", "vi"), "7 ngày tới không có gì trong Lịch.")
+        # the Monday-to-Sunday chip of the Calendar keeps "This week"
+        self.assertEqual([t("calendar.this_week", lang) for lang in ("vi", "en")], ["Tuần này", "This week"])
+        self.assertIn(">This week</a>", self.page("/calendar"))
+
+    def test_dash_rule_1_no_dashboard_list_scrolls_in_its_card(self):
+        for sel, body in css_rules():
+            if ".dashboard" in sel:
+                self.assertNotRegex(body, r"overflow|scrollbar|overscroll", sel)
+        for panel in DASH_LISTS:  # no rule gives a list a height: it is as high as its rows
+            self.assertFalse([sel for sel, _body in css_rules() if f'[data-panel="{panel}"] .rows' in sel], panel)
+        # the canvas is not one window high any more: the cards are as high as their rows; a short window scrolls
+        # the page, never a card
+        self.assertEqual(media_wins(WIDE, ".canvas:has(> .dashboard)"), {"padding-bottom": "12px"})
+        self.assertNotIn("max-height", media_wins(WIDE, '.dashboard > [data-panel="sent-documents"]'))  # 2 whole rows
+        self.assertIn("max-height: var(--dash-row2)", media_props(WIDE, CARD))  # Money this month as before
+
+    def test_dash_rule_3_each_list_shows_a_fixed_number_of_rows_and_names_the_full_count(self):
+        # at most 5 / 5 / 2 by the rule; lower so the page fits 1280x800 with titles on 2 lines (rule 4)
+        self.assertEqual((dashboard.WEEK_ROWS, dashboard.VISIT_ROWS, dashboard.SENT_ROWS), (4, 3, 2))
+        conn = self.db()
+        for i in range(6):
+            cal.add_calendar_item(conn, "Meeting", f"CRIT-4 Họp {i}", f"{TODAY + dt.timedelta(days=i):%Y-%m-%d} 20:00")
+        recipient = lists.find_item(conn, "recipient", name="Giáo hội")["id"]
+        purpose = lists.find_item(conn, "purpose", name="Report")["id"]
+        for i in range(3):
+            sent.add_sent_document(conn, TODAY.isoformat(), recipient, purpose, f"CRIT-4 Báo cáo {i}")
+        week_n = len(cal.items_between(conn, TODAY, TODAY + dt.timedelta(days=6)))
+        visit_n = len(care.needs_visit(conn, TODAY))
+        sent_n = len(sent.list_sent_documents(conn, TODAY.year))
+        page = self.page("/")
+        for name, cap, n, words in (("this-week", dashboard.WEEK_ROWS, week_n, f"View all {week_n} in Calendar"),
+                                    ("needs-visit", dashboard.VISIT_ROWS, visit_n, f"View all {visit_n} in Care"),
+                                    ("sent-documents", dashboard.SENT_ROWS, sent_n, f"View all {sent_n}")):
+            box = section(page, name)
+            self.assertGreater(n, cap, name)
+            self.assertEqual(box.count('<li class="row" data-row>'), cap, name)
+            self.assertRegex(box, rf'<footer><a class="card-link" href="[^"]+">{re.escape(words)}</a></footer>$', name)
+
+    def test_dash_rule_3_the_sent_documents_link_names_the_count_only_when_there_are_more(self):
+        from churchmgr.i18n import t
+        row = {"date": TODAY.isoformat(), "recipient_name": "Giáo hội", "purpose_name": "Report",
+               "number": f"01/{TODAY.year}", "subject": "CRIT-4"}
+        self.assertEqual([t("dashboard.view_all_sent", lang, n=3) for lang in ("vi", "en")],
+                         ["Xem tất cả 3", "View all 3"])
+        opened = t("dashboard.open_sent")  # outside a request: the default language
+        for count, words in ((0, opened), (2, opened), (3, t("dashboard.view_all_sent", n=3)),
+                             (40, t("dashboard.view_all_sent", n=40))):
+            box = dashboard._sent_documents("05/2026", (count, [row] * min(count, 2)), TODAY.year, "span-4")
+            self.assertIn(f'<footer><a class="card-link" href="/sent">{words}</a></footer>', box, count)
+        # 1 this year and last year's newest under it: /sent lists this year only (1), so no count is named
+        box = dashboard._sent_documents("02/2026", (1, [row, row]), TODAY.year, "span-4")
+        self.assertIn(f">{opened}</a>", box)
 
 
 if __name__ == "__main__":

@@ -15,8 +15,12 @@ from ..i18n import t, tn
 from ..server import Response
 from ..ui import clamp2, h, vi
 
-WEEK_ROWS = 6  # Calendar items shown before "View all"
-VISIT_ROWS = 6  # Persons shown in Needs a visit (the card allows up to 10; the design rule caps lists at 4-6)
+# DASH RULE (CRIT-4): a Dashboard list never scrolls inside its card. It shows at most this many rows; when
+# there are more, its foot link names the full count ("View all N ..."). The numbers are below the 5/5/2 of
+# the rule so the page fits 1280x800 with every title on 2 lines (rule 4). Needs a visit has one row less than
+# the Next 7 days: its head is 41px taller (the hint line and the list head), so the 2 cards of row 1 end level.
+WEEK_ROWS = 4  # Calendar items of the Next 7 days
+VISIT_ROWS = 3  # Persons in Needs a visit
 HEAD_COUNTS = 8
 SENT_ROWS = 2  # B17: 2 recent rows keep Sent documents level with Services and Money this month
 CHART_HEIGHT = 154  # px, the Services chart at every width
@@ -163,7 +167,7 @@ def _this_week(items, today, span):
     body = f'<ul class="rows">{"".join(rows)}</ul>' if rows else _empty(t("dashboard.nothing_week"))
     more = (t("dashboard.view_all_calendar", n=len(items)) if len(items) > WEEK_ROWS
             else t("dashboard.open_calendar"))
-    # the same 7 days on the Calendar (not its Monday-to-Sunday week), so the count matches
+    # the same 7 days on the Calendar (its 7-day view, not its Monday-to-Sunday week), so the count matches
     href = ui.url("/calendar", **{"from": today.isoformat()})
     return _panel(name, title, body, meta=meta, foot=_link(more, href), span=span)
 
@@ -260,7 +264,9 @@ def _sent_documents(next_number, recent, year, span):
         rows.append(f'<li class="row" data-row><span class="what wrap">{subject}'
                     f'{clamp2(sub, sub_text, cls="sub")}</span></li>')
     body += f'<ul class="rows">{"".join(rows)}</ul>' if rows else _empty(t("dashboard.no_sent"))
-    return _panel(name, title, body, meta=h(meta), foot=_link(t("dashboard.open_sent"), "/sent"), span=span)
+    # /sent lists this year: more than SENT_ROWS this year means the rows shown are this year's newest
+    more = t("dashboard.view_all_sent", n=count) if count > SENT_ROWS else t("dashboard.open_sent")
+    return _panel(name, title, body, meta=h(meta), foot=_link(more, "/sent"), span=span)
 
 
 def _search_panel():

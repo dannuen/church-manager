@@ -690,66 +690,53 @@ table.documents td:last-child a { color: var(--accent-text); font-weight: 400; }
 
 /* ---------- STYLE-2: a short window, and the Dashboard on one screen ----------
    From 861px wide and up to 720px high the menu is one notch tighter, on every page: all 13 items stay in
-   view. From 1181px wide the Dashboard page itself never scrolls: the canvas is one window high (at least
-   640px), the grid fills what is left under the title row, and a long list scrolls inside its own card
-   (the card title and its foot link stay in place). Row 1 takes what is left, but never less than its 2 cards
-   with one whole row in each list; row 2 is --dash-row2 high.
-   From 861px to 1180px the grid has 3 rows and the page may scroll; under 861px it is the top bar. Screen
-   only: on paper every list prints whole. */
+   view. From 1181px wide the Dashboard is 2 rows of cards under a tight title row.
+   The DASH RULE (CRIT-4), in this order: 1. no Dashboard list scrolls inside its card (the mouse wheel never
+   sticks in a card: no overflow, no fixed height on a list); 2. every row shown is whole; 3. each list shows
+   at most a fixed number of rows (dashboard.py: WEEK_ROWS, VISIT_ROWS, SENT_ROWS) and, when there are more,
+   its foot link names the full count; 4. from 1181px wide the page fits one screen at 1440x900 and 1280x800,
+   with titles on 2 lines. Each card is as high as its rows (no window-high canvas): below 800px high, and
+   from 861px to 1180px wide, the page itself may scroll. Under 861px it is the top bar. */
 @media (min-width: 861px) and (max-height: 720px) {
   .sidebar { padding: 14px 16px; gap: 12px; }
   .nav-item { min-height: 34px; }
 }
 @media screen and (min-width: 1181px) {
-  .canvas:has(> .dashboard) { height: 100vh; min-height: 640px; padding-bottom: 12px; display: flex; flex-direction: column; }
+  .canvas:has(> .dashboard) { padding-bottom: 12px; }
   .canvas:has(> .dashboard) > .lang-switch { position: absolute; top: 12px; right: 40px; margin: 0; z-index: 1; }
   /* a flash comes first at the canvas top: then the language switch goes back in the flow above it, as on
      every other page, so it never sits on the pale flash (STYLE-FIX-1) */
-  .canvas:has(> .dashboard):has(> .flash) > .lang-switch { position: static; flex: none; margin: 0 12px 4px; }
-  .canvas:has(> .dashboard) > .title-row { flex: none; margin-bottom: 12px; padding-top: 6px; padding-bottom: 8px; }
-  .canvas:has(> .dashboard) > .flash { flex: none; margin-bottom: 8px; }
-  .dashboard { flex: 1 1 0; min-height: 0; gap: 14px; grid-template-rows: minmax(min-content, 1fr) auto; }
-  .dashboard > .panel { min-height: 0; padding: 14px 20px 12px; }
+  .canvas:has(> .dashboard):has(> .flash) > .lang-switch { position: static; margin: 0 12px 4px; }
+  /* the title row is tight (the 14px canvas padding is its top): 14px more for the cards (rule 4) */
+  .canvas:has(> .dashboard) > .title-row { padding-top: 0; padding-bottom: 4px; margin-bottom: 8px; }
+  .canvas:has(> .dashboard) > .flash { margin-bottom: 8px; }
+  .dashboard { gap: 14px; }
+  .dashboard > .panel { padding: 14px 20px 12px; }
   .dashboard .panel > header { margin-bottom: 4px; }
   .dashboard .panel > header > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; }
   .dashboard .panel > footer { padding-top: 8px; }
+  /* a row is as high as its content: one line 40px, a title on 2 lines 56px (2 x 24px + 8px) */
   .dashboard .row { min-height: 40px; padding: 4px 0; }
-  /* a list scrolls inside its card: its height is fixed, so each row takes its content height (a title on
-     2 lines is 48px) and never its min-height only, or the 2nd line sits on the next row (STYLE-FIX-2) */
-  .dashboard > [data-panel="this-week"] .rows, .dashboard > [data-panel="needs-visit"] .rows,
-  .dashboard > [data-panel="sent-documents"] .rows {
-    flex: 1 1 0; min-height: 0; overflow-y: auto; align-content: start; overscroll-behavior: contain;
-    grid-auto-rows: max-content;
-    scrollbar-width: thin; scrollbar-color: var(--control) transparent; scrollbar-gutter: stable;
-    margin-right: -14px; padding-right: 6px; }
-  /* This week and Needs a visit always show one whole row: the list is at least as high as one row at its
-     tallest (a title on 2 lines: 2 x 24px + 8px padding) and row 1 grows to fit its cards (min-content). A
-     fixed 150px floor left Needs a visit 1px high, no row, at 1181x640 (STYLE-FIX-3) */
-  .dashboard > [data-panel="this-week"] .rows, .dashboard > [data-panel="needs-visit"] .rows { min-height: 56px; }
-  /* row 2 keeps its own height (B11), at least --dash-row2. Sent documents and Money this month are never
-     taller: the Sent rows scroll; the Money amounts sit 4px closer, and in an empty month (its dashed box
-     under them) the 3 zero amounts sit side by side, as on the Money page, so every word still shows
-     (STYLE-FIX-1: the empty card was 372-392px, and the page scrolled) */
+  /* row 2 keeps its own height (B11), at least --dash-row2. Money this month is never taller: its amounts
+     sit 4px closer, and in an empty month (its dashed box under them) the 3 zero amounts sit side by side,
+     as on the Money page, so every word still shows (STYLE-FIX-1: the empty card was 372-392px). Sent
+     documents has no cap: its 2 rows are whole, a long subject on 2 lines too (DASH RULE 2) */
   .dashboard > [data-panel="services"], .dashboard > [data-panel="money-month"],
   .dashboard > [data-panel="sent-documents"] { min-height: var(--dash-row2); }
-  .dashboard > [data-panel="money-month"], .dashboard > [data-panel="sent-documents"] { max-height: var(--dash-row2); }
+  .dashboard > [data-panel="money-month"] { max-height: var(--dash-row2); }
   .dashboard > [data-panel="money-month"] .kpi { padding: 4px 0; }
   .dashboard > [data-panel="money-month"]:has(> .empty) .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .dashboard > [data-panel="money-month"]:has(> .empty) .kpi + .kpi { border-top: 0; border-left: 1px solid var(--rule); padding-left: 12px; }
 }
 @media screen and (min-width: 1181px) and (max-height: 720px) {
+  /* a short window: the space between and in the cards is tighter, never the text (STYLE-FIX-3); the
+     Needs a visit hint takes the whole header width (one line, the count stays on the title line) */
   .dashboard .row { min-height: 34px; padding: 2px 0; }
   .dashboard > [data-panel="services"], .dashboard > [data-panel="money-month"],
   .dashboard > [data-panel="sent-documents"] { padding-top: 10px; padding-bottom: 8px; }
-  /* one row at its tallest is 52px here (2 x 24px + 4px). The height for it comes from the space around the
-     row 1 cards and the title row, never from the text, and the Needs a visit hint takes the whole header
-     width (one line, the count stays on the title line), so the page stays one screen down to 640px high
-     (STYLE-FIX-3) */
-  .dashboard > [data-panel="this-week"] .rows, .dashboard > [data-panel="needs-visit"] .rows { min-height: 52px; }
   .dashboard > [data-panel="needs-visit"] > header { flex-wrap: wrap; row-gap: 0; }
   .dashboard > [data-panel="needs-visit"] > header > div { display: contents; }
   .dashboard > [data-panel="needs-visit"] > header > div > .meta { order: 1; flex-basis: 100%; }
-  .canvas:has(> .dashboard) > .title-row { padding-top: 0; padding-bottom: 4px; margin-bottom: 8px; }
   .dashboard { row-gap: 10px; }
   .dashboard > [data-panel="this-week"], .dashboard > [data-panel="needs-visit"] { padding-top: 10px; padding-bottom: 8px; }
   .dashboard > [data-panel="this-week"] > header, .dashboard > [data-panel="needs-visit"] > header { margin-bottom: 2px; }
