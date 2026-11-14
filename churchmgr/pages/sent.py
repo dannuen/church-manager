@@ -125,7 +125,7 @@ def list_page(req):
                + f'<div class="grid sent"><div class="span-8 stack">{main}</div>'
                f'<div class="side-4 stack">{_next_panel(conn, year, rows)}</div></div>')
     # the Next number is on its card beside the list (and on the /sent/new form), not in this line (CRIT-3)
-    sub = h(f'{year} · {tn("sent.count", len(rows))}')
+    sub = h(t("sent.sub", year=year, count=tn("sent.count", len(rows))))
     actions = ui.link_button(t("sent.add"), "/sent/new", "primary")
     return Response.html(ui.page(t("sent.title"), content, "sent", sub=sub, actions=actions))
 

@@ -320,11 +320,14 @@ td .num { white-space: nowrap; }   /* a phone number, a date or an amount never 
   .title-row { flex-direction: column; align-items: stretch; }
   .title-row > :first-child { flex: none; }   /* a column: no 240px basis in height */
   /* the actions side by side at their own width, the next ones wrap under them; the main (primary)
-     button first. The Dashboard search keeps its own whole row above the button (CRIT-3) */
+     button first. The Dashboard search keeps its own whole row above the button (CRIT-3). Money: Record
+     Offering, Record Expense, then Year report (CRIT-FIX-1). The search field takes what its button leaves:
+     width 0, so its own width (about 20 characters) never pushes the page sideways (360px in vi, CRIT-FIX-1) */
   .title-row .actions { flex-wrap: wrap; gap: 8px; }
   .title-row .actions > .primary { order: -1; }
+  .title-row .actions > [href^="/money/year"] { order: 1; }
   .title-row .title-search { order: -2; flex: 1 1 100%; }
-  .title-search .input { width: auto; flex: 1; }
+  .title-search .input { width: 0; flex: 1; }
   .btn { height: 44px; }
   .input { height: 44px; }
   details.change > summary { min-height: 44px; }
@@ -333,6 +336,19 @@ td .num { white-space: nowrap; }   /* a phone number, a date or an amount never 
   .row .side { max-width: none; }
   .row .figure { margin-left: auto; }
   .list-head { display: none; }
+}
+/* the language switch under 861px has no row of its own: it sits at the top right of the canvas, level with
+   the first line of the h1 (the h1 comes 4px down, so the 44px switch ends where that line ends and never
+   sits on the line under it). That line keeps 160px free at its right (the switch is about 146px wide, its
+   current word bold), on that line only: a long name wraps beside the switch, then takes the whole width. A
+   flash comes first at the canvas top: then the switch goes back in the flow above it, so it never sits on
+   the flash (as the Dashboard from 1181px, STYLE-FIX-1). Screen only: on paper the switch is hidden and the
+   h1 keeps its whole line (CRIT-FIX-1) */
+@media screen and (max-width: 860px) {
+  .lang-switch { position: absolute; z-index: 1; top: 12px; right: 28px; margin: 0; }
+  .canvas:has(> .flash) > .lang-switch { position: static; margin: 0 12px 4px; }
+  .lang-switch + .title-row h1 { padding-top: 4px; }
+  .lang-switch + .title-row h1::before { content: ""; float: right; width: 160px; height: 1px; }
 }
 @media (max-width: 640px) {   /* a phone: the menu is 2 rows of 3, the More card 2 columns of 4 (CRIT-2) */
   .nav { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -432,8 +448,15 @@ details.change .form { max-width: none; }
   .inline-fields { grid-template-columns: minmax(0, 1fr); }
   .kv > div { grid-template-columns: 96px minmax(0, 1fr); }
   .chip, details.change > summary { min-height: 44px; }
+  /* the People search: its label is for screen readers only (the .sr-only look; it stays the field's
+     label), the field and Search on one line; Clear also, while the field keeps at least 80px, else Clear
+     wraps under them. The bar and its chips are one notch tighter; every chip stays in view, wrapping
+     (CRIT-FIX-1) */
+  .list-toolbar { gap: 8px; margin-bottom: 12px; padding: 8px 12px; }
+  .chip { padding: 0 12px; }
+  .toolbar label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .toolbar .search-line { flex-wrap: wrap; }
-  .toolbar .input { flex-basis: 100%; }   /* a phone: the field on its own line, the buttons under it */
+  .toolbar .input { flex-basis: 80px; }
 }
 
 /* ---------- card C2: Calendar and Money pages ----------

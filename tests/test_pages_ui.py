@@ -876,7 +876,7 @@ class PrintAndFinalWalkTest(PagesTestBase):
         self.assertIn("background: var(--surface)", declarations(".canvas > .empty"))
         # the People search with a query (a field and 2 buttons) pushed the page 72px sideways at 390px
         self.assertIn("min-width: 0", declarations(".toolbar"))
-        self.assertIn("flex-basis: 100%", media_props("(max-width: 640px)", ".toolbar .input"))
+        self.assertIn("flex-basis: 80px", media_props("(max-width: 640px)", ".toolbar .input"))  # CRIT-FIX-1: one line
         # a phone: "Chỉnh sửa" was wider than the 36px kept for Edit, so each Money list scrolled 20px
         self.assertIn("width: auto", media_props("(max-width: 640px)", "table.money td.edit"))
         self.assertIn("flex-basis: 100%", media_props("(max-width: 640px)", "table.money tr[data-row]::after"))
@@ -1408,7 +1408,7 @@ class CritThreeTest(PagesTestBase):
             page = self.page(f"/sent?year={year}")
             head = title_head(page)
             self.assertNotIn(next_no, head, year)
-            self.assertRegex(head, rf'<p class="sub">{year} · \d+ Sent documents?</p>')
+            self.assertRegex(head, rf'<p class="sub">{year} · \d+ Sent documents? · newest first</p>')
             self.assertEqual(page.count(f">{next_no}<"), 1, year)  # a date like 07/04/2026 does not count
             self.assertIn(next_no, section(page, "next-number"), year)
         self.assertIn(sent.next_number(conn, TODAY.year), self.page("/sent/new"))  # where the next one is made
@@ -1417,6 +1417,98 @@ class CritThreeTest(PagesTestBase):
         page = self.page("/")
         self.assertNotIn("visit", title_head(page).split('<div class="actions">')[0])
         self.assertIn('<span class="count num">', section(page, "needs-visit"))
+
+
+CRIT_FIX = "screen and (max-width: 860px)"  # the language switch on the h1 line (CRIT-FIX-1)
+SMALL = "(max-width: 640px)"  # a phone
+
+
+class CritFixOneTest(PagesTestBase):
+    """CRIT-FIX-1, fix round 1 of the design critique (row 8: CRIT-3 Major M1 and Minors m1-m3). Under 861px the
+    language switch has no row of its own: it sits at the top right of the canvas, level with the first line of
+    the h1, which keeps 160px free at its right on that line only; with a flash it goes back in the flow above
+    the flash. Under 641px the People search label is for screen readers only (still the label of the field),
+    the field and Search sit on one line, and the bar and its chips are one notch tighter, every chip in view.
+    The Money head reads Record Offering, Record Expense, Year report; the Dashboard search field never pushes
+    the page sideways; the Sent documents line says "newest first" again; 5 keys no code used are gone. From
+    861px nothing moves."""
+
+    def test_under_861px_the_language_switch_sits_on_the_first_h1_line(self):
+        self.assertEqual(media_wins(CRIT_FIX, ".lang-switch"),
+                         {"position": "absolute", "z-index": "1", "top": "12px", "right": "28px", "margin": "0"})
+        self.assertIn("position: relative", declarations(".canvas"))  # the box the switch is placed in
+        # 12px + a 44px tap = 56px = the 16px canvas padding + 4px + one 36px h1 line: the switch ends where
+        # the first h1 line ends, so the line under it (the next h1 line or the sub line) is never under it
+        self.assertIn("padding: 16px", media_props(PHONE, ".canvas"))
+        self.assertIn("min-height: 44px", media_props(PHONE, ".lang-switch button"))
+        self.assertEqual(rule_props(".title-row h1")["line-height"], "36px")
+        self.assertEqual(media_wins(CRIT_FIX, ".lang-switch + .title-row h1"), {"padding-top": "4px"})
+        # the first h1 line keeps the switch width free (a 1px float: that line only)
+        self.assertEqual(media_wins(CRIT_FIX, ".lang-switch + .title-row h1::before"),
+                         {"content": '""', "float": "right", "width": "160px", "height": "1px"})
+        # a flash comes first: the switch goes back in the flow above it, as on every page from 861px
+        self.assertEqual(media_wins(CRIT_FIX, ".canvas:has(> .flash) > .lang-switch"),
+                         {"position": "static", "margin": "0 12px 4px"})
+        self.assertIn("margin: 0 12px 4px", declarations(".lang-switch"))
+        # the page order these rules use: the switch, the flash (when there is one), then the title row
+        main = re.escape('<main class="canvas" id="main" tabindex="-1">')
+        self.assertRegex(self.page("/people"), main + r'<form class="lang-switch"[^>]*>.*?</form><header class="title-row">')
+        self.assertRegex(self.page("/people?msg=Saved"), main + r'<form class="lang-switch"[^>]*>.*?</form>'
+                                                         r'<p class="flash" role="status">Saved</p><header class="title-row">')
+        # screen only: on paper the h1 keeps its whole line; from 861px no rule moves the switch
+        self.assertTrue(CRIT_FIX.startswith("screen and "))
+        self.assertNotIn("position", whole_rule(top_level_rules(), ".lang-switch"))
+
+    def test_under_641px_the_people_search_is_one_line_with_a_label_for_screen_readers(self):
+        self.assertEqual(media_wins(SMALL, ".toolbar label"), rule_props(".sr-only"))  # the .sr-only look, by CSS
+        page = self.page("/people?q=Nguyen")
+        self.assertIn('<label for="people-q">Find in this list</label>', page)  # still the label of the field
+        self.assertIn('<input class="input" id="people-q"', page)
+        # the field grows (flex 1, min-width 0) beside Search; Clear wraps only when the field would get under 80px
+        self.assertEqual(media_wins(SMALL, ".toolbar .input"), {"flex-basis": "80px"})
+        self.assertIn("flex: 1", declarations(".toolbar .input"))
+        self.assertIn("min-width: 0", declarations(".input"))
+        self.assertEqual(media_wins(SMALL, ".toolbar .search-line"), {"flex-wrap": "wrap"})
+
+    def test_under_641px_the_bar_is_tighter_and_every_chip_stays_in_view(self):
+        self.assertEqual(media_wins(SMALL, ".list-toolbar"), {"gap": "8px", "margin-bottom": "12px", "padding": "8px 12px"})
+        chip = media_wins(SMALL, ".chip")
+        self.assertEqual((chip["padding"], chip["min-height"]), ("0 12px", "44px"))
+        self.assertIn("flex-wrap: wrap", declarations(".chips"))  # the chips wrap: no strip that scrolls sideways
+        self.assertNotRegex(" ".join(body for sel, body in css_rules() if "chip" in sel), r"overflow|nowrap|scroll")
+
+    def test_under_861px_the_money_head_reads_record_offering_record_expense_year_report(self):
+        self.assertEqual(media_wins(PHONE, ".title-row .actions > .primary"), {"order": "-1"})
+        self.assertEqual(media_wins(PHONE, '.title-row .actions > [href^="/money/year"]'), {"order": "1"})
+        links = re.findall(r'<a class="btn (\w+)" href="([^"]+)">([^<]+)</a>', title_head(self.page("/money")))
+        self.assertEqual([text for _kind, _href, text in links], ["Year report", "Record Expense", "Record Offering"])
+
+        def order(link):  # the CSS order under 861px; one order keeps the page order
+            kind, href, _text = link
+            return -1 if kind == "primary" else 1 if href.startswith("/money/year") else 0
+        self.assertEqual([text for _kind, _href, text in sorted(links, key=order)],
+                         ["Record Offering", "Record Expense", "Year report"])
+        # from 861px the head keeps the page order
+        self.assertFalse([sel for sel, body in top_level_rules() if ".title-row" in sel and re.search(r"(^|;)\s*order:", body)])
+
+    def test_under_861px_the_dashboard_search_field_never_pushes_the_page_sideways(self):
+        # its own width (about 20 characters) and Search were wider than a 360px phone in vi (361px); width 0,
+        # the field takes what the button leaves
+        self.assertEqual(media_wins(PHONE, ".title-search .input"), {"width": "0", "flex": "1"})
+        self.assertEqual(whole_rule(top_level_rules(), ".title-search .input"), {"width": "clamp(180px, 22vw, 300px)"})
+
+    def test_the_sent_documents_line_says_newest_first_and_unused_words_are_gone(self):
+        from churchmgr import i18n
+        year = TODAY.year
+        n = len(sent.list_sent_documents(self.db(), year))
+        head = title_head(self.page(f"/sent?year={year}"))
+        self.assertRegex(head, rf'<p class="sub">{year} · {n} Sent documents? · newest first</p>')
+        self.assertEqual(i18n.t("sent.sub", "vi", year=year, count=i18n.tn("sent.count", 3, "vi")),
+                         f"{year} · 3 Công văn đi · mới nhất trước")
+        for key in ("dashboard.finding_needs_one", "dashboard.finding_needs_many", "money.state_up",
+                    "money.state_down", "money.finding"):
+            for lang in ("vi", "en"):
+                self.assertNotIn(key, i18n.TEXT[lang], (key, lang))
 
 
 if __name__ == "__main__":
