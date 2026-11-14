@@ -14,6 +14,7 @@ STYLE-5 (class CardsAndChartsTest): cards, the one dark card, green and red on m
 STYLE-6 (class PrintAndFinalWalkTest): paper is ink on white; the faults of the final walk stay fixed.
 STYLE-FIX-1 (class StyleFix1Test): the wash grows with the head; the Dashboard language switch and a flash;
 a table's own scroll box; Money this month fits row 2 in an empty month.
+STYLE-FIX-2 (class StyleFix2Test): a Dashboard list row is as tall as its 2-line title (no overlap).
 """
 
 import datetime as dt
@@ -990,6 +991,32 @@ class StyleFix1Test(PagesTestBase):
         self.assertIn('</div></div><p class="empty">', html)
         self.assertNotIn('class="empty"', dashboard._money_month({"offerings": 5, "expenses": 2, "balance": 3},
                                                                  TODAY, "span-4"))
+
+
+DASH_LISTS = ("this-week", "needs-visit", "sent-documents")  # the Dashboard lists that scroll in their card
+
+
+class StyleFix2Test(PagesTestBase):
+    """STYLE-FIX-2, BUG-5 of TEST-STYLE-FIX-1. From 1181px a Dashboard list has a short fixed height (it scrolls
+    inside its card), so its grid rows shrank to the row min-height (40px, 34px up to 720px high) and a title on
+    2 lines (48px) was drawn over the next row. Each row now takes its content height (grid-auto-rows:
+    max-content); the row min-heights and the 2-line clamp stay as they were."""
+
+    def test_bug5_a_dashboard_list_row_is_as_tall_as_its_2_line_title(self):
+        for panel in DASH_LISTS:
+            rows = media_props(WIDE, f'.dashboard > [data-panel="{panel}"] .rows')
+            self.assertIn("grid-auto-rows: max-content", rows, panel)
+            self.assertIn("overflow-y: auto", rows, panel)  # the list still scrolls inside its card
+        # unchanged: the row min-heights and the clamp of a title to 2 lines
+        self.assertIn("min-height: 40px", media_props(WIDE, ".dashboard .row"))
+        self.assertIn("min-height: 34px", media_props(WIDE + " and (max-height: 720px)", ".dashboard .row"))
+        self.assertIn("-webkit-line-clamp: 2", declarations(".clamp-2"))
+        # the real page: a long title of This week (about 110 characters, 2 lines) is a row of its <ul class="rows">
+        title = "Buổi nhóm cầu nguyện đặc biệt của Ban Thanh Niên và Ban Phụ Nữ tại Nhà thờ chính"
+        cal.add_calendar_item(self.db(), "Meeting", title, f"{TODAY.isoformat()} 19:00")
+        week = section(self.page("/"), "this-week")
+        self.assertRegex(week, r'<ul class="rows"><li class="row" data-row>.*<span class="what wrap">'
+                               rf'<span class="clamp-2" lang="vi" title="{title}">')
 
 
 if __name__ == "__main__":
