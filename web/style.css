@@ -115,6 +115,9 @@ a:hover, :where(td) a:focus-visible, :where(.row .what) a:focus-visible, .card-l
 .title-row > :first-child { flex: 1 1 240px; min-width: 0; }
 .title-row h1 { font-size: var(--fs-display); line-height: 36px; font-weight: 700; }
 .title-row .sub { margin-top: 2px; color: var(--on-accent); }
+/* a line for paper only: People without a search, whose counts are on the Status chips on screen (print.css
+   hides the chips) (CRIT-3) */
+@media screen { .title-row .sub:has(> .on-paper) { display: none; } }
 .title-row .actions { display: flex; align-items: flex-end; gap: 12px; flex: none; }
 /* On the wash every text is --on-accent at full strength. The main action is a pill filled with
    --on-accent and --accent-dark text; the other buttons are pills outlined in --on-accent. The search
@@ -316,7 +319,11 @@ td .num { white-space: nowrap; }   /* a phone number, a date or an amount never 
   .grid > * { grid-column: 1 / -1 !important; }
   .title-row { flex-direction: column; align-items: stretch; }
   .title-row > :first-child { flex: none; }   /* a column: no 240px basis in height */
-  .title-row .actions { flex-direction: column; align-items: stretch; }
+  /* the actions side by side at their own width, the next ones wrap under them; the main (primary)
+     button first. The Dashboard search keeps its own whole row above the button (CRIT-3) */
+  .title-row .actions { flex-wrap: wrap; gap: 8px; }
+  .title-row .actions > .primary { order: -1; }
+  .title-row .title-search { order: -2; flex: 1 1 100%; }
   .title-search .input { width: auto; flex: 1; }
   .btn { height: 44px; }
   .input { height: 44px; }

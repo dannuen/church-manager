@@ -303,9 +303,8 @@ def dashboard(req):
     next_number = _load(sent.next_number, conn, today.year)
     recent = _load(_recent_sent, conn, today.year)
 
+    # how many need a visit is the count on the Needs a visit card: not again in this line (CRIT-3)
     finding = [f"{ui.fmt_weekday(today)} {ui.fmt_date(today)}"]
-    if needs is not _FAILED:
-        finding.append(tn("dashboard.finding_needs", len(needs)))
     if week is not _FAILED:
         finding.append(tn("dashboard.finding_week", len(week)))
     body = (

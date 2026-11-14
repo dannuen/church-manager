@@ -271,7 +271,9 @@ class BlankVietnameseCopyTest(CopyServer, unittest.TestCase):
             self.assertEqual(html_lang(page), "vi")
             self.assertNotIn("[[", page)
             self.assertEqual(english_left(page), [], path)
-        self.assertIn('<p class="sub">0 người</p>', self.page("/people"))
+        page = self.page("/people")  # CRIT-3: on screen the count is on the All chip; under the h1 for paper only
+        self.assertIn('aria-current="true">Tất cả <span class="num">0</span></a>', page)
+        self.assertIn('<p class="sub"><span class="on-paper">0 người</span></p>', page)
 
 
 class EnglishPagesTest(CopyServer, unittest.TestCase):

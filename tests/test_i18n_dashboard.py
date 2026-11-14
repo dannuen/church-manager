@@ -181,8 +181,8 @@ class VietnameseScreensTest(_Screens):
                       'aria-label="Số người nhóm của ', "<span>Thăm gần nhất</span>"):
             self.assertIn(words, page)
         weekday = t(f"core.weekday_{TODAY.weekday()}", "vi")
-        self.assertRegex(page, rf'<p class="sub">{weekday} {TODAY:%d/%m/%Y} · \d+ người cần thăm viếng · '
-                               r'\d+ Lịch trong tuần này</p>')
+        self.assertRegex(page, rf'<p class="sub">{weekday} {TODAY:%d/%m/%Y} · '  # CRIT-3: Needs a visit has its
+                               r'\d+ Lịch trong tuần này</p>')  # count on its card, not again here
         count = len(sent.list_sent_documents(self.db(), TODAY.year))
         self.assertIn(f'<span class="meta">{count} Công văn đi trong năm {TODAY.year}</span>', page)
         self.assertRegex(page, r'<strong class="trend-(up|down|same)">(Tăng|Giảm|Không đổi)</strong> · '

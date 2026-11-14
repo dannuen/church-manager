@@ -289,7 +289,10 @@ def list_page(req):
                f"{search}</div>")
     content = toolbar + list_panel("people", t("people.list"), body)
     shown = tn("people.count", len(everyone))
-    sub = h(shown) if len(rows) == len(everyone) else h(t("people.count_of", n=len(rows), total=shown))
+    count = shown if len(rows) == len(everyone) and not q else t("people.count_of", n=len(rows), total=shown)
+    # CRIT-3: on screen the Status chips hold the counts ("All 50"), so the line under the h1 shows only how
+    # many a search found (no chip shows that). Without a search it is on paper only: print.css hides the chips
+    sub = h(count) if q else f'<span class="on-paper">{h(count)}</span>'
     actions = (ui.link_button(t("people.add"), "/people/new", "primary")
                + ui.link_button(t("people.file_add"), "/people/file"))  # the People file (spec 001)
     return Response.html(ui.page(t("people.title"), content, "people", sub=sub, actions=actions))

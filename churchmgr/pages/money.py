@@ -23,7 +23,7 @@ from ..i18n import TEXT, TextError, t, tn
 from ..server import Response
 from ..ui import h, vi
 from .calendar import FIRST_MONTH, LAST_MONTH, month_chip, month_step, month_text, parse_month
-from .people import card_link, empty, family_link, field_errors, form_error, num, panel, person_link, today_text
+from .people import empty, family_link, field_errors, form_error, num, panel, person_link, today_text
 
 NO_NAME = TEXT["en"]["money.no_name"]  # the English words of t("money.no_name"); old tests read them
 MIN_DATE = "1900-01-01"  # an Offering or Expense date has a year from 1900 (money._money_date)
@@ -165,9 +165,8 @@ def _offerings_panel(rows, total, scope):
                (t("money.amount"), True)]
     body = (_table("offerings", headers, lines, t("money.total_offerings"), total, edits)
             if rows else empty(t("money.no_offering_in", month=scope)))
-    link = card_link(t("money.record_offering"), "/money/offerings/new")
     meta = t("money.count_in", count=tn("money.offering_count", len(rows)), month=scope)
-    return panel("offerings", t("money.offerings"), body, meta=h(meta), head_right=link)
+    return panel("offerings", t("money.offerings"), body, meta=h(meta))  # Record Offering: in the title row
 
 
 def _expenses_panel(rows, total, scope):
@@ -180,9 +179,8 @@ def _expenses_panel(rows, total, scope):
                (t("money.note"), False, "note"), (t("money.amount"), True)]
     body = (_table("expenses", headers, lines, t("money.total_expenses"), total, edits)
             if rows else empty(t("money.no_expense_in", month=scope)))
-    link = card_link(t("money.record_expense"), "/money/expenses/new")
     meta = t("money.count_in", count=tn("money.expense_count", len(rows)), month=scope)
-    return panel("expenses", t("money.expenses"), body, meta=h(meta), head_right=link)
+    return panel("expenses", t("money.expenses"), body, meta=h(meta))  # Record Expense: in the title row
 
 
 def _statement_picker(conn, year, values=None, error=None):
@@ -215,8 +213,6 @@ def money_page(req):
     totals = money_data.month_totals(conn, year, month)
     offerings = money_data.list_offerings(conn, first, last)
     expenses = money_data.list_expenses(conn, first, last)
-    state = t("money.state_up") if totals["balance"] >= 0 else t("money.state_down")
-    finding = h(t("money.finding", month=scope, balance=money_data.format_vnd(totals["balance"]), state=state))
     body = (
         _month_toolbar(year, month, today)
         + _kpis(totals, len(offerings), len(expenses))
@@ -228,7 +224,9 @@ def money_page(req):
     actions = (ui.link_button(t("money.year_report"), ui.url("/money/year", year=year))
                + ui.link_button(t("money.record_expense"), "/money/expenses/new")
                + ui.link_button(t("money.record_offering"), "/money/offerings/new", "primary"))
-    return Response.html(ui.page(t("money.title"), body, "money", sub=finding, actions=actions))
+    # the line under the h1 names the month; the Balance is on its card only, and the Record buttons are
+    # only here, not again on the Offerings and Expenses cards (CRIT-3)
+    return Response.html(ui.page(t("money.title"), body, "money", sub=h(scope), actions=actions))
 
 
 # ---------------------------------------------------------------- Record, Edit and Delete an Offering or Expense

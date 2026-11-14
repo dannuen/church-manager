@@ -21,6 +21,8 @@ CRIT-1 (class CritOneTest): links in the app color, row actions at weight 400, a
 page, and every small action is a 44px tap under 861px.
 CRIT-2 (class CritTwoTest): under 861px the menu is 5 items and a More fold (no sideways scroll); a skip link
 is the first stop of every page.
+CRIT-3 (class CritThreeTest): under 861px the title-row actions sit side by side, the primary first; no number
+or button twice in the head of People, Money, Sent documents and the Dashboard.
 """
 
 import datetime as dt
@@ -1347,6 +1349,74 @@ class CritTwoTest(PagesTestBase):
         z_index = int(link["z-index"])
         self.assertGreater(z_index, int(media_wins(PHONE, ".nav-more-list")["z-index"]))
         self.assertGreater(z_index, int(rule_props(".results")["z-index"]))
+
+
+def title_head(page):
+    """The ``<header class="title-row">`` of a page: the h1, the line under it and the actions."""
+    return re.search(r'<header class="title-row">.*?</header>', page, re.S).group(0)
+
+
+class CritThreeTest(PagesTestBase):
+    """CRIT-3, the design critique of 2026-11-14 (row 8). Under 861px the title-row actions sit side by side at
+    their own width and wrap (gap 8px), the primary button first; the Dashboard search keeps a whole row above
+    its button. From 861px the actions are as before. No number or button twice: the line under the h1 leaves
+    the counts to the People chips (it shows only how many a search found), the Balance to its Money card, the
+    Next number to its Sent documents card (and the /sent/new form) and how many need a visit to the Dashboard
+    card; the Record buttons of Money are in the title row only, not again on the Offerings and Expenses cards."""
+
+    def test_under_861px_the_actions_sit_side_by_side_the_primary_first(self):
+        self.assertEqual(media_wins(PHONE, ".title-row .actions"), {"flex-wrap": "wrap", "gap": "8px"})  # a row
+        self.assertEqual(media_wins(PHONE, ".title-row .actions > .primary"), {"order": "-1"})
+        self.assertEqual(media_wins(PHONE, ".title-row .title-search"), {"order": "-2", "flex": "1 1 100%"})
+        self.assertFalse([sel for sel, body in media_rules(PHONE) if ".title-row" in sel and "width: 100%" in body])
+        self.assertEqual(whole_rule(top_level_rules(), ".title-row .actions"),
+                         {"display": "flex", "align-items": "flex-end", "gap": "12px", "flex": "none"})  # from 861px
+
+    def test_people_counts_are_on_the_chips_and_a_search_says_how_many_it_found(self):
+        everyone = people.list_persons(self.db())
+        page = self.page("/people")
+        self.assertIn(f'aria-current="true">All <span class="num">{len(everyone)}</span></a>', page)
+        # the line under the h1 is for paper only (print.css hides the chips): no screen rule shows it
+        self.assertIn(f'<p class="sub"><span class="on-paper">{len(everyone)} People</span></p>', title_head(page))
+        self.assertEqual(media_wins("screen", ".title-row .sub:has(> .on-paper)"), {"display": "none"})
+        self.assertNotIn("on-paper", (ROOT / "web" / "print.css").read_text(encoding="utf-8"))
+        member = lists.find_item(self.db(), "status", code="member")["id"]
+        members = sum(1 for r in everyone if r["status_id"] == member)
+        self.assertIn(f'<span class="on-paper">{members} of {len(everyone)} People</span>',
+                      self.page(f"/people?status={member}"))
+        found = self.page("/people?q=Nguyen")
+        n = parse_panels(found).rows["people"]
+        self.assertGreater(n, 0)
+        self.assertIn(f'<p class="sub">{n} of {len(everyone)} People</p>', title_head(found))
+
+    def test_money_shows_the_balance_on_its_card_and_each_record_button_once(self):
+        for path in ("/money", "/money?month=1950-01"):  # a month with data and an empty one
+            page = self.page(path)
+            head = title_head(page)
+            self.assertRegex(head, r'<p class="sub">[^<·₫]+</p>', path)  # the month only
+            self.assertNotIn("₫", head, path)
+            self.assertRegex(page, r'<span class="kpi-label">Balance</span><span class="kpi-value num strong[^"]*">'
+                                   r'-?[\d.]+ ₫</span>')
+            for href in ("/money/offerings/new", "/money/expenses/new"):
+                self.assertEqual(page.count(f'href="{href}"'), 1, (path, href))
+                self.assertIn(f'href="{href}"', head, (path, href))
+
+    def test_sent_documents_show_the_next_number_on_its_card_only(self):
+        conn = self.db()
+        for year in (TODAY.year, 1950):  # a year with Sent documents and an empty one
+            next_no = sent.next_number(conn, year)
+            page = self.page(f"/sent?year={year}")
+            head = title_head(page)
+            self.assertNotIn(next_no, head, year)
+            self.assertRegex(head, rf'<p class="sub">{year} · \d+ Sent documents?</p>')
+            self.assertEqual(page.count(f">{next_no}<"), 1, year)  # a date like 07/04/2026 does not count
+            self.assertIn(next_no, section(page, "next-number"), year)
+        self.assertIn(sent.next_number(conn, TODAY.year), self.page("/sent/new"))  # where the next one is made
+
+    def test_the_dashboard_says_how_many_need_a_visit_on_the_card_only(self):
+        page = self.page("/")
+        self.assertNotIn("visit", title_head(page).split('<div class="actions">')[0])
+        self.assertIn('<span class="count num">', section(page, "needs-visit"))
 
 
 if __name__ == "__main__":
