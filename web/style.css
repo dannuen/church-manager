@@ -720,9 +720,12 @@ table.documents td:last-child a { color: var(--accent-text); font-weight: 400; }
   /* row 2 keeps its own height (B11), at least --dash-row2. Money this month is never taller: its amounts
      sit 4px closer, and in an empty month (its dashed box under them) the 3 zero amounts sit side by side,
      as on the Money page, so every word still shows (STYLE-FIX-1: the empty card was 372-392px). Sent
-     documents has no cap: its 2 rows are whole, a long subject on 2 lines too (DASH RULE 2) */
+     documents has no cap: its 2 rows are whole, a long subject on 2 lines too (DASH RULE 2). Its date line
+     (date · Recipient · Purpose) is one line, the whole of it in its title, so a long Recipient name never
+     pushes the page past one screen (rule 4; on paper and under 1181px it may take 2 lines) */
   .dashboard > [data-panel="services"], .dashboard > [data-panel="money-month"],
   .dashboard > [data-panel="sent-documents"] { min-height: var(--dash-row2); }
+  .dashboard > [data-panel="sent-documents"] .row .what .sub { -webkit-line-clamp: 1; line-clamp: 1; }
   .dashboard > [data-panel="money-month"] { max-height: var(--dash-row2); }
   .dashboard > [data-panel="money-month"] .kpi { padding: 4px 0; }
   .dashboard > [data-panel="money-month"]:has(> .empty) .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }

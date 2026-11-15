@@ -1544,6 +1544,15 @@ class CritFourTest(PagesTestBase):
         self.assertNotIn("max-height", media_wins(WIDE, '.dashboard > [data-panel="sent-documents"]'))  # 2 whole rows
         self.assertIn("max-height: var(--dash-row2)", media_props(WIDE, CARD))  # Money this month as before
 
+    def test_dash_rule_4_the_sent_date_line_is_one_line_from_1181px(self):
+        # a long Recipient name (date · Recipient · Purpose on 2 lines) made the page 814px high at 1280x800 en:
+        # from 1181px that line is one line; the whole of it stays in its title, and every other list keeps 2
+        sub = '.dashboard > [data-panel="sent-documents"] .row .what .sub'
+        self.assertEqual(media_wins(WIDE, sub), {"-webkit-line-clamp": "1", "line-clamp": "1"})
+        self.assertIn("-webkit-line-clamp: 2", declarations(".row .what .clamp-2"))
+        self.assertEqual(sum(sub in sel for sel, _body in css_rules()), 1)  # only there: on paper and under 1181px 2
+        self.assertRegex(section(self.page("/"), "sent-documents"), r'<span class="clamp-2 sub" title="[^"]+">')
+
     def test_dash_rule_3_each_list_shows_a_fixed_number_of_rows_and_names_the_full_count(self):
         # at most 5 / 5 / 2 by the rule; lower so the page fits 1280x800 with titles on 2 lines (rule 4)
         self.assertEqual((dashboard.WEEK_ROWS, dashboard.VISIT_ROWS, dashboard.SENT_ROWS), (4, 3, 2))
