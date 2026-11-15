@@ -1913,5 +1913,32 @@ class CritNineTest(PagesTestBase):
                           '<td class="edit no-print"></td></tr></tbody>', table)
 
 
+class CritFixF1Test(PagesTestBase):
+    """CRIT-FIXF1, BUG-1 of TEST-CRIT (row 8): on a vi church copy with the screen in English, at 360px the 2
+    People head buttons took 2 lines (20px at the sides), so the list started 52px lower (600px, limit 560).
+    Under 641px the title-row pills keep 14px at the sides (never under 12px): both share one line. The gap
+    between them stays 8px, every pill stays 44px high, the words are the same. From 641px a pill keeps 20px."""
+
+    def test_under_641px_the_title_row_pills_keep_14px_at_the_sides(self):
+        self.assertEqual(media_wins(SMALL, ".title-row .btn"), {"padding": "0 14px"})
+        side = int(re.fullmatch(r"0 (\d+)px", media_wins(SMALL, ".title-row .btn")["padding"]).group(1))
+        self.assertGreaterEqual(side, 12)  # a pill keeps room around its words
+        # the one rule that sets it: no other rule gives the title-row pills a padding
+        pads = [sel for sel, body in css_rules()
+                if ".title-row .btn" in (s.strip() for s in sel.split(",")) and "padding" in body]
+        self.assertEqual(pads, [".title-row .btn"])
+        # from 641px a pill keeps 20px at the sides; under 861px it is 44px high; the gap between the actions
+        # stays 8px under 861px (no phone rule changes it)
+        self.assertEqual(rule_props(".btn")["padding"], "0 20px")
+        self.assertNotIn("padding", whole_rule(top_level_rules(), ".title-row .btn"))
+        self.assertIn("height: 44px", media_props(PHONE, ".btn"))
+        self.assertEqual(media_wins(PHONE, ".title-row .actions")["gap"], "8px")
+        self.assertFalse([sel for sel, _body in media_rules(SMALL) if ".title-row .actions" in sel])
+        # the 2 People head buttons, with their words as before
+        head = title_head(self.page("/people"))
+        for words in ("Add a Person", "Add from .xlsx file"):
+            self.assertRegex(head, rf'<a class="btn[^"]*" href="[^"]+">{re.escape(words)}</a>')
+
+
 if __name__ == "__main__":
     unittest.main()
