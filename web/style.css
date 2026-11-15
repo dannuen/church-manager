@@ -41,11 +41,13 @@
      colors stay as they were, on screen and on paper (green is money) */
   --bar-offerings: #2f6f4f; --bar-expenses: #999999;
   /* the wash at the top of the canvas: the app color from dark (left) to light (right). Its first layer is
-     the fade into the ground, drawn over its last --wash-fade only (.canvas::before): 40% of --wash-h, so a
-     wash of --wash-h looks as before, and a taller wash (a tall head) keeps the same fade under its text */
+     the fade into the ground, drawn over its last --wash-fade only (.canvas::before), so a taller wash (a tall
+     head) keeps the same fade under its text. From 861px the fade is short, 48px: a long one (136px) showed
+     a muddy grey-blue band in the gutter and the gaps between the cards (CRIT-9). Under 861px the cards
+     leave only 8px at the sides: the fade stays 40% of --wash-h-narrow there */
   --wash: linear-gradient(180deg, transparent, var(--ground)),
           linear-gradient(112deg, var(--accent-dark) 0%, var(--accent-base) 48%, var(--accent-light) 100%);
-  --wash-h: 340px; --wash-h-narrow: 600px; --wash-fade: 136px; --wash-fade-narrow: 240px; --wash-radius: 28px;
+  --wash-h: 340px; --wash-h-narrow: 600px; --wash-fade: 48px; --wash-fade-narrow: 240px; --wash-radius: 28px;
   /* the one dark card (Dashboard, Needs a visit, CRIT-7): the app color as text (--accent-text, dark
      enough to read on white) taken darker, from the top left (darkest) to the bottom right (softer). It is
      dark for every app color, so its text is white and its grey words a white with a touch of the app
@@ -489,16 +491,20 @@ details.change .form { max-width: none; }
 .month-picker .input { width: 184px; }
 .year-form .input { width: 112px; }
 
-/* the agenda: one block per day, the date on the left, the Calendar items on the right */
+/* the agenda: one block per day, the date on the left, the Calendar items on the right. The date is weight
+   400, lighter than the titles of its items (500, .row .what): the items lead (CRIT-9) */
 .list-panel.agenda { padding-top: 4px; padding-bottom: 4px; }
 .cal-day { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px; padding: 4px 0; }
 .cal-day + .cal-day { border-top: 1px solid var(--rule); }
-.cal-date { padding-top: 10px; font-size: var(--fs-meta); line-height: 24px; font-weight: 600; }
+.cal-date { padding-top: 10px; font-size: var(--fs-meta); line-height: 24px; font-weight: 400; }
 /* Today: a small pill under the date, outlined in --accent-text (bold --accent-text on white reads for any
    app color; on the --active tint it does not for some colors) */
 .today-tag { display: block; width: fit-content; margin-top: 2px; padding: 0 8px; border: 1px solid currentColor; border-radius: var(--radius-pill); color: var(--accent-text); font-size: var(--fs-small); line-height: 18px; font-weight: 700; }
-.cal-none { padding: 10px 0; color: var(--faint); font-size: var(--fs-meta); line-height: 24px; }
+/* an empty day (a week shows every day) is one short line, 32px: its date in grey and a faint dash where the
+   items would be; "Nothing on the Calendar" is for screen readers only (.sr-only) (CRIT-9) */
+.cal-none { color: var(--faint); font-size: var(--fs-meta); line-height: 24px; }
 .cal-day .cal-none { margin-top: 0; }      /* not the panel's p + p gap: it sits level with the date */
+.cal-day:has(> .cal-none) > .cal-date { padding-top: 0; color: var(--muted); }
 .cal-row { align-items: flex-start; }
 .cal-row .time { width: 104px; padding-top: 2px; }
 .kind { color: var(--muted); }
@@ -550,6 +556,7 @@ table.money.expenses td:nth-child(3) { color: var(--muted); }
 }
 @media (max-width: 640px) {
   .cal-day { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .cal-day:has(> .cal-none) { grid-template-columns: 112px minmax(0, 1fr); gap: 12px; }   /* an empty day: one line, the dashes in one column */
   .cal-date { padding-top: 8px; }
   .today-tag { display: inline; margin-left: 8px; }
   .cal-row .time { width: 100%; order: 1; padding-top: 0; }

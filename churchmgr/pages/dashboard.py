@@ -27,8 +27,6 @@ CHART_HEIGHT = 154  # px, the Services chart at every width
 # Row 2 of the 12 columns: Services, Money this month, Sent documents (4 + 4 + 4)
 ROW2_SPANS = ("span-4", "span-4", "span-4")
 _FAILED = object()
-# Round chart steps: 1, 2, 5, 10, 20, 25, 50, ... (integers only).
-_STEPS = tuple(sorted({m * 10 ** e for e in range(9) for m in (1, 2, 5)} | {25 * 10 ** e for e in range(8)}))
 TREND_WORDS = {"Up": "dashboard.trend_up", "Down": "dashboard.trend_down", "Same": "dashboard.trend_same"}
 
 
@@ -49,13 +47,14 @@ def trend(counts):
     return word, (2 * total + k) // (2 * k)
 
 
-def nice_scale(max_value):
-    """Y axis for counts: ``(top, step)`` with round steps, ``top > max_value``, at most 4 steps."""
-    for step in _STEPS:
-        top = (max_value // step + 1) * step
-        if top // step <= 4:
-            return top, step
-    return max_value + 1, max_value + 1
+def fit_scale(low_value, high_value):
+    """Y axis that fits the Head counts (CRIT-9): ``(low, high)``, the lowest count rounded down to 10 and
+    the highest rounded up to 10. They stay at least 20 apart: 10 apart, the top grows by 10; 0 apart, the
+    top and the bottom grow by 10 each (the bottom never under 0, then the top takes it). Integers only."""
+    low, high = low_value // 10 * 10, -(-high_value // 10) * 10
+    short = max(0, 20 - (high - low))
+    down = min(low, short // 20 * 10)
+    return low - down, high + short - down
 
 
 def services_svg(rows):
@@ -65,11 +64,14 @@ def services_svg(rows):
     percentages, and the line sits in an inner SVG stretched across the plot (its stroke does not
     scale). So the 12px text keeps its size and the Services card keeps its height when the window
     changes. The y ticks and the last value sit in the side padding of ``.chart`` (style.css).
+    The y scale fits the counts (``fit_scale``), not 0 to a round top, so a change from 91 to 74 shows;
+    its two lines, the low and the high one, carry their numbers, so the scale is honest. The low line is
+    the darker base line only when it is 0.
     With more than 5 Services every second date is labelled, counted back from the last one.
     """
     counts = [r["count"] for r in rows]
     n = len(counts)
-    top, step = nice_scale(max(counts))
+    low, high = fit_scale(min(counts), max(counts))
     height, pad_top, bottom = CHART_HEIGHT, 10, 28
     plot_h = height - pad_top - bottom
 
@@ -77,10 +79,10 @@ def services_svg(rows):
         return 100 * i / (n - 1) if n > 1 else 50
 
     def y(c):
-        return pad_top + plot_h - plot_h * c / top
+        return pad_top + plot_h - plot_h * (c - low) / (high - low)
 
     parts = []
-    for v in range(0, top + 1, step):
+    for v in (low, high):
         yy = y(v)
         cls = "gridline base" if v == 0 else "gridline"
         parts.append(f'<line class="{cls}" x1="0" x2="100%" y1="{yy:.1f}" y2="{yy:.1f}"/>')

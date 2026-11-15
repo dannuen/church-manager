@@ -31,6 +31,8 @@ CRIT-7 (class CritSevenTest): the one dark card is Needs a visit (the pastor cho
 white card; a name on the dark card is underlined to show it is a link.
 CRIT-8 (class CritEightTest): the Calendar and Money period bar: Prev / This / Next on one line, the month
 chips say MM/YYYY, the month picker opens a month on change with app.js (Show stays without it).
+CRIT-9 (class CritNineTest): in the Calendar an empty day is its date and a faint dash (the sentence for screen
+readers only); a date is lighter than the titles of its items.
 """
 
 import datetime as dt
@@ -944,9 +946,9 @@ class StyleFix1Test(PagesTestBase):
 
     def test_bug2_the_wash_grows_with_the_head(self):
         tokens = root_tokens()
-        # the fade is a fixed length at the bottom of the wash: 40% of the old fixed heights, so a wash of
-        # the old height looks the same
-        self.assertEqual((tokens["--wash-h"], tokens["--wash-fade"]), ("340px", "136px"))
+        # the fade is a fixed length at the bottom of the wash: from 861px a short 48px (CRIT-9: a long fade was a
+        # grey-blue band in the gutters); under 861px 40% of the old fixed height, so a wash of it looks the same
+        self.assertEqual((tokens["--wash-h"], tokens["--wash-fade"]), ("340px", "48px"))
         self.assertEqual((tokens["--wash-h-narrow"], tokens["--wash-fade-narrow"]), ("600px", "240px"))
         self.assertTrue(tokens["--wash"].startswith("linear-gradient(180deg, transparent, var(--ground)),"))
         self.assertEqual(rule_props(".title-row")["anchor-name"], "--title-row")
@@ -1852,6 +1854,63 @@ class CritEightTest(PagesTestBase):
         for sel, body in css_rules():
             if "period" in sel:
                 self.assertNotRegex(body, r"overflow|nowrap|scroll|flex-wrap", sel)  # no strip that scrolls
+
+
+class CritNineTest(PagesTestBase):
+    """CRIT-9, the polish rows of the design critique. Row 13: in the Calendar an empty day is one short line,
+    its date in grey and a faint dash; "Nothing on the Calendar" stays for screen readers only (.sr-only); a
+    date is weight 400, lighter than the titles of its items (500). Row 14, the 48px fade of the wash: see
+    StyleFix1Test. Row 15, Needs a visit ties by given name: tests/test_care.py. The Services chart scale that
+    fits the counts: tests/test_server.py. The Offerings table ends with a total row as the Expenses table (it
+    had one already). The heights, weights and looks are measured in a browser: see the card."""
+
+    NONE = ('<p class="cal-none"><span class="dash" aria-hidden="true">—</span>'
+            '<span class="sr-only">Nothing on the Calendar.</span></p>')
+
+    def test_an_empty_day_is_its_date_and_a_faint_dash(self):
+        empty = self.page(f"/calendar?week={TODAY.year + 4}-01-07")  # a week with nothing on the Calendar
+        days = re.findall(r'<div class="cal-day[^"]*">(.*?)</div>', empty, re.S)
+        self.assertEqual(len(days), 7)
+        for day in days:
+            self.assertRegex(day, r'^<p class="cal-date"><span class="num">[^<]+</span></p>' + re.escape(self.NONE) + "$")
+        self.assertNotIn('<p class="cal-none">Nothing', empty)  # never the whole sentence on screen
+        this_week = self.page("/calendar")  # a day with items keeps its rows and no dash
+        for day in re.findall(r'<div class="cal-day[^"]*">(.*?)</div>', this_week, re.S):
+            self.assertNotEqual('<ul class="rows">' in day, self.NONE in day, day)
+
+    def test_a_date_is_lighter_than_its_item_titles_and_an_empty_day_is_short(self):
+        self.assertEqual(rule_props(".cal-date")["font-weight"], "400")
+        self.assertEqual(rule_props(".row .what")["font-weight"], "500")  # the title of a Calendar item
+        none = rule_props(".cal-none")
+        self.assertEqual(none["color"], "var(--faint)")
+        self.assertNotIn("padding", none)  # one 24px line, level with the date
+        self.assertEqual(rule_props(".cal-day:has(> .cal-none) > .cal-date"), {"padding-top": "0", "color": "var(--muted)"})
+        # a phone: the date and the dash stay on one line, the dashes in one column as from 641px (a day with items
+        # puts its rows under the date)
+        self.assertEqual(media_wins(SMALL, ".cal-day:has(> .cal-none)"),
+                         {"grid-template-columns": "112px minmax(0, 1fr)", "gap": "12px"})
+        self.assertEqual(rule_props(".sr-only")["clip-path"], "inset(50%)")
+        self.assertEqual(rule_props(".dash")["color"], "var(--faint)")
+
+    def test_the_offerings_table_ends_with_a_total_row_as_the_expenses_table(self):
+        # the critique's minor note "Offerings has no total row; Expenses has one": both have had one since C2
+        # (money._table writes it); a 1440x900 view ends before the total of a long Offerings table. This pins it:
+        # the same row in both tables, the sum of the shown whole dong amounts, the same money format, on paper too
+        conn = self.db()
+        general = lists.find_item(conn, "fund", name="General")["id"]
+        events = lists.find_item(conn, "spending_category", name="Events")["id"]
+        for amount in (13_500_000, 300_000, 50_000):
+            money.add_offering(conn, TODAY.isoformat(), amount, general)
+        money.add_expense(conn, TODAY.isoformat(), 1_500_000, events)
+        page = self.page("/money")
+        for name, label, added in (("offerings", "Total Offerings", [13_500_000, 300_000, 50_000]),
+                                   ("expenses", "Total Expenses", [1_500_000])):
+            table = section(page, name)
+            shown = [int(a.replace(".", "")) for a in re.findall(r'<td class="n"><span class="num">([\d.]+) ₫</span>', table)]
+            self.assertTrue(set(added) <= set(shown), name)
+            self.assertIn(f'<tr class="total"><th scope="row" colspan="3">{label}</th><td class="n">'
+                          f'<span class="num strong">{money.format_vnd(sum(shown))}</span></td>'
+                          '<td class="edit no-print"></td></tr></tbody>', table)
 
 
 if __name__ == "__main__":

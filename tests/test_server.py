@@ -537,17 +537,26 @@ class SmallLogicTest(unittest.TestCase):
         self.assertEqual(dashboard.trend([60, 80, 70]), ("Same", 70))
         self.assertEqual(dashboard.trend([1, 2, 2]), ("Up", 2))  # 1.5 rounds half up to 2; 2 > 1.5 is Up
 
-    def test_nice_scale(self):
-        self.assertEqual(dashboard.nice_scale(95), (100, 25))
-        self.assertEqual(dashboard.nice_scale(60), (80, 20))
-        self.assertEqual(dashboard.nice_scale(100), (150, 50))
-        self.assertEqual(dashboard.nice_scale(4), (6, 2))
-        self.assertEqual(dashboard.nice_scale(0), (1, 1))
-        for m in (1, 7, 55, 99, 101, 999, 12345, 1_000_000):
-            top, step = dashboard.nice_scale(m)
-            self.assertGreater(top, m)
-            self.assertLessEqual(top // step, 4)
-            self.assertEqual(top % step, 0)
+    def test_fit_scale(self):
+        # CRIT-9: the lowest count rounded down to 10, the highest rounded up to 10, at least 20 apart
+        self.assertEqual(dashboard.fit_scale(74, 91), (70, 100))  # the critique's 91 to 74
+        self.assertEqual(dashboard.fit_scale(60, 82), (60, 90))
+        self.assertEqual(dashboard.fit_scale(81, 88), (80, 100))  # 10 apart: the top grows
+        self.assertEqual(dashboard.fit_scale(80, 80), (70, 90))  # 0 apart: both grow
+        self.assertEqual(dashboard.fit_scale(10, 10), (0, 20))
+        self.assertEqual(dashboard.fit_scale(3, 3), (0, 20))  # never under 0: the top takes it
+        self.assertEqual(dashboard.fit_scale(0, 0), (0, 20))
+        self.assertEqual(dashboard.fit_scale(0, 5), (0, 20))
+        self.assertEqual(dashboard.fit_scale(120, 340), (120, 340))
+        for lo in (0, 1, 9, 10, 55, 99, 101, 999):
+            for hi in (lo, lo + 1, lo + 9, lo + 10, lo + 25, lo + 400):
+                low, high = dashboard.fit_scale(lo, hi)
+                self.assertTrue(all(isinstance(v, int) for v in (low, high)))
+                self.assertEqual((low % 10, high % 10), (0, 0))
+                self.assertTrue(0 <= low <= lo <= hi <= high, (lo, hi, low, high))
+                self.assertGreaterEqual(high - low, 20)
+                self.assertLess(lo - low, 20)  # it fits: under 20 more below the lowest count
+                self.assertLess(high - hi, 30)  # and under 30 more above the highest
 
     def test_services_svg(self):
         rows = [{"starts_at": f"2026-10-{d:02d} 08:00", "count": c} for d, c in ((4, 60), (11, 82), (18, 75))]
@@ -555,6 +564,12 @@ class SmallLogicTest(unittest.TestCase):
         self.assertIn("<polyline", svg)
         self.assertIn("04/10", svg)
         self.assertIn(">75</text>", svg)  # the last value is labelled
+        # CRIT-9: 2 lines, the low (60) and the high (90) one, each with its number; no 0 line when 60 is the low
+        self.assertEqual(re.findall(r'<line class="([^"]+)"', svg), ["gridline", "gridline"])
+        self.assertEqual(re.findall(r'text-anchor="end">(\d+)</text>', svg), ["60", "90"])
+        self.assertIn('points="0.00,126.0 50.00,40.9 100.00,68.0"', svg)  # 60 on the low line: the plot is 60 to 90
+        zero = dashboard.services_svg([{"starts_at": "2026-10-04 08:00", "count": c} for c in (0, 4)])
+        self.assertEqual(re.findall(r'<line class="([^"]+)"', zero), ["gridline base", "gridline"])  # 0: the base line
 
     def test_ui_helpers(self):
         self.assertEqual(ui.fmt_date("2026-11-01"), "01/11/2026")

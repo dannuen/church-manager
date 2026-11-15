@@ -6,7 +6,7 @@ Done Visits make up the Care log.
 
 import datetime as _dt
 
-from . import i18n, settings, text
+from . import i18n, people, settings, text
 from .calendar import _add_items, add_months
 from .db import transaction
 from .i18n import TextError
@@ -99,7 +99,8 @@ def reminder_months(conn):
 
 
 def needs_visit(conn, today=None):
-    """Persons who need a visit, oldest last Visit first (never visited comes first).
+    """Persons who need a visit, oldest last Visit first (never visited comes first); a tie sorts by given
+    name, with the key of the People list (``people._given_name_key``, CRIT-9).
 
     A Person is included when their current Status is not Left or Passed away
     (no Status counts as included) and their last done Visit is older than the
@@ -112,7 +113,7 @@ def needs_visit(conn, today=None):
     cutoff = add_months(day, -reminder_months(conn)).isoformat()
     codes = ", ".join("?" * len(NOT_CARED_STATUS_CODES))
     rows = conn.execute(
-        "SELECT p.id AS person_id, p.full_name, p.name_folded, li.name AS status_name, "
+        "SELECT p.id, p.full_name, p.name_folded, li.name AS status_name, "
         "f.name AS family_name, "
         "(SELECT MAX(ci.visit_done_date) FROM calendar_item ci "
         " WHERE ci.kind = 'Visit' AND ci.visit_done = 1 AND "
@@ -127,17 +128,17 @@ def needs_visit(conn, today=None):
     ).fetchall()
     out = [
         {
-            "person_id": r["person_id"],
+            "person_id": r["id"],
             "full_name": r["full_name"],
             "status_name": r["status_name"],
             "family_name": r["family_name"],
             "last_visit": r["last_visit"],
-            "_folded": r["name_folded"],
+            "_name_key": people._given_name_key(r),
         }
         for r in rows
         if r["last_visit"] is None or r["last_visit"] < cutoff
     ]
-    out.sort(key=lambda r: (r["last_visit"] is not None, r["last_visit"] or "", r["_folded"], r["person_id"]))
+    out.sort(key=lambda r: (r["last_visit"] is not None, r["last_visit"] or "", r["_name_key"]))
     for r in out:
-        del r["_folded"]
+        del r["_name_key"]
     return out

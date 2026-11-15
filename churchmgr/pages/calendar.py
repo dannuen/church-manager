@@ -212,8 +212,10 @@ def _item_row(it):
 def _day_block(day, items, today):
     is_today = day == today
     tag = f' <span class="today-tag">{h(t("calendar.today"))}</span>' if is_today else ""
+    # an empty day is one short line: its date and a faint dash; the sentence is for screen readers (CRIT-9)
     rows = (f'<ul class="rows">{"".join(_item_row(it) for it in items)}</ul>' if items
-            else f'<p class="cal-none">{h(t("calendar.nothing_day"))}</p>')
+            else f'<p class="cal-none"><span class="dash" aria-hidden="true">—</span>'
+                 f'<span class="sr-only">{h(t("calendar.nothing_day"))}</span></p>')
     return (f'<div class="cal-day{" today" if is_today else ""}">'
             f'<p class="cal-date"><span class="num">{h(_day_label(day))}</span>{tag}</p>{rows}</div>')
 
