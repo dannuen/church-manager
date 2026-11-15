@@ -21,7 +21,7 @@ MIN_MONTHS, MAX_MONTHS = 1, 24
 def parse_months(value):
     """``" 6 "`` -> ``6``. Only plain digits from 1 to 24; anything else raises ``ValueError``."""
     raw = (value or "").strip()
-    if not (raw.isascii() and raw.isdigit()) or not MIN_MONTHS <= int(raw) <= MAX_MONTHS:
+    if not (raw.isascii() and raw.isdigit()) or not MIN_MONTHS <= text.digits_to_int(raw) <= MAX_MONTHS:
         raise TextError("settings.months_error", min=MIN_MONTHS, max=MAX_MONTHS)
     return int(raw)
 

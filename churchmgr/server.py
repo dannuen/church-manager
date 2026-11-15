@@ -337,7 +337,7 @@ class _Handler(BaseHTTPRequestHandler):
         raw = self.headers.get("Content-Length") or "0"
         if not raw.isdigit():
             raise HTTPError(400, "Bad Content-Length.")
-        length = int(raw)
+        length = text.digits_to_int(raw)
         if length > MAX_BODY:
             self.close_connection = True
             raise HTTPError(413, f"Too large: the limit is {MAX_BODY // (1024 * 1024)} MB.")

@@ -133,7 +133,7 @@ def parse_head_count(value):
     raw = (value or "").strip()
     if not (raw.isascii() and raw.isdigit()):
         raise TextError("calendar.err_hc_number")
-    count = int(raw)
+    count = text.digits_to_int(raw)
     if count > cal.MAX_HEAD_COUNT:
         raise TextError("calendar.err_hc_large")
     return count
