@@ -100,8 +100,10 @@ def day_step(day, k):
 
 
 def month_picker(action, input_id, value):
-    """The "Go to a month" form of the Money and Calendar pages, limited to 1900-01 to 9999-12."""
-    return (f'<form class="month-picker" action="{action}" method="get">'
+    """The "Go to a month" form of the Money and Calendar pages, limited to 1900-01 to 9999-12. With
+    ``data-auto-submit`` app.js opens the chosen month at once and style.css hides Show (CRIT-8); without
+    the script Show sends the form."""
+    return (f'<form class="month-picker" action="{action}" method="get" data-auto-submit>'
             f'<label for="{input_id}">{h(t("calendar.go_to_month"))}</label><div class="search-line">'
             f'<input class="input" id="{input_id}" name="month" type="month" value="{h(value)}" '
             f'min="{month_text(*FIRST_MONTH)}" max="{month_text(*LAST_MONTH)}" required>'
@@ -210,8 +212,10 @@ def _item_row(it):
 def _day_block(day, items, today):
     is_today = day == today
     tag = f' <span class="today-tag">{h(t("calendar.today"))}</span>' if is_today else ""
+    # an empty day is one short line: its date and a faint dash; the sentence is for screen readers (CRIT-9)
     rows = (f'<ul class="rows">{"".join(_item_row(it) for it in items)}</ul>' if items
-            else f'<p class="cal-none">{h(t("calendar.nothing_day"))}</p>')
+            else f'<p class="cal-none"><span class="dash" aria-hidden="true">—</span>'
+                 f'<span class="sr-only">{h(t("calendar.nothing_day"))}</span></p>')
     return (f'<div class="cal-day{" today" if is_today else ""}">'
             f'<p class="cal-date"><span class="num">{h(_day_label(day))}</span>{tag}</p>{rows}</div>')
 
@@ -235,8 +239,11 @@ def _chip(label, href, current=False):
 
 def month_chip(label, path, month):
     """A chip to ``month`` (``(year, month)`` from :func:`month_step`) on the page ``path``, or nothing
-    when ``month`` is ``None``. ``{}`` in ``label`` becomes the month name."""
-    return "" if month is None else _chip(label.format(ui.fmt_month(*month)), ui.url(path, month=month_text(*month)))
+    when ``month`` is ``None``. ``{}`` in ``label`` becomes the short month ``MM/YYYY`` (``‹ 10/2026``), as
+    a date is written in both languages: Prev, This and Next then fit one line on a phone (CRIT-8)."""
+    if month is None:
+        return ""
+    return _chip(label.format(f"{month[1]:02d}/{month[0]:04d}"), ui.url(path, month=month_text(*month)))
 
 
 def _day_chip(label, day, key):
@@ -245,32 +252,35 @@ def _day_chip(label, day, key):
 
 
 def _toolbar(mode, first, today):
+    """The period bar (CRIT-8): Prev / This / Next (``.period``, one line), the view chips (``.views``: Week,
+    Month) and the "Go to a month" picker, all in one ``nav``. Each chip goes to a period or a view."""
     if mode == "week":
         this = week_start(today)
         shown_month = today if first == this else first  # the month picker starts at the month in view
-        links = (_day_chip(t("calendar.prev_week"), day_step(first, -7), "week")
-                 + _chip(t("calendar.this_week"), "/calendar", first == this)
-                 + _day_chip(t("calendar.next_week"), day_step(first, 7), "week")
-                 + month_chip(t("calendar.month"), "/calendar", month_step(shown_month.year, shown_month.month)))
+        period = (_day_chip(t("calendar.prev_week"), day_step(first, -7), "week")
+                  + _chip(t("calendar.this_week"), "/calendar", first == this)
+                  + _day_chip(t("calendar.next_week"), day_step(first, 7), "week"))
+        views = month_chip(t("calendar.month"), "/calendar", month_step(shown_month.year, shown_month.month))
         month_value = month_text(shown_month.year, shown_month.month)
-    elif mode == "days":  # 7 days from ?from= (the Dashboard's "This week": today and the 6 days after)
-        links = (_day_chip(t("calendar.prev_days"), day_step(first, -7), "from")
-                 + _chip(t("calendar.from_today"), ui.url("/calendar", **{"from": today.isoformat()}), first == today)
-                 + _day_chip(t("calendar.next_days"), day_step(first, 7), "from")
-                 + _day_chip(t("calendar.week"), first, "week")
+    elif mode == "days":  # 7 days from ?from= (the Dashboard's "Next 7 days": today and the 6 days after)
+        period = (_day_chip(t("calendar.prev_days"), day_step(first, -7), "from")
+                  + _chip(t("calendar.from_today"), ui.url("/calendar", **{"from": today.isoformat()}), first == today)
+                  + _day_chip(t("calendar.next_days"), day_step(first, 7), "from"))
+        views = (_day_chip(t("calendar.week"), first, "week")
                  + month_chip(t("calendar.month"), "/calendar", month_step(first.year, first.month)))
         month_value = month_text(first.year, first.month)
     else:
         this_month = (first.year, first.month) == (today.year, today.month)
-        links = (month_chip("‹ {}", "/calendar", month_step(first.year, first.month, -1))
-                 + _chip(t("calendar.this_month"), ui.url("/calendar", month=month_text(today.year, today.month)),
-                         this_month)
-                 + month_chip("{} ›", "/calendar", month_step(first.year, first.month, 1))
-                 + _chip(t("calendar.week"), "/calendar" if this_month else ui.url("/calendar", week=first.isoformat())))
+        period = (month_chip("‹ {}", "/calendar", month_step(first.year, first.month, -1))
+                  + _chip(t("calendar.this_month"), ui.url("/calendar", month=month_text(today.year, today.month)),
+                          this_month)
+                  + month_chip("{} ›", "/calendar", month_step(first.year, first.month, 1)))
+        views = _chip(t("calendar.week"), "/calendar" if this_month else ui.url("/calendar", week=first.isoformat()))
         month_value = month_text(first.year, first.month)
     label = t({"week": "calendar.chips_week", "days": "calendar.chips_days"}.get(mode, "calendar.chips_month"))
-    return (f'<div class="list-toolbar"><nav class="chips" aria-label="{h(label)}">{links}</nav>'
-            f'{month_picker("/calendar", "cal-month", month_value)}</div>')
+    views = f'<div class="chips views">{views}</div>' if views else ""
+    return (f'<nav class="list-toolbar" aria-label="{h(label)}"><div class="period">{period}</div>{views}'
+            f'{month_picker("/calendar", "cal-month", month_value)}</nav>')
 
 
 def _to_record_panel(conn, today):

@@ -157,6 +157,8 @@ class VietnameseScreensTest(_Screens):
         self.assertIn('<span class="kind k-service">Giờ thờ phượng</span>', week)
         month = self.page(f"/calendar?month={TODAY:%Y-%m}")
         self.assertIn(f"Tháng {TODAY.month}/{TODAY.year}", month)
+        # CRIT-9: an empty day of a week shows a dash; its sentence stays, in Vietnamese, for screen readers
+        self.assertIn('<span class="sr-only">Không có gì trong Lịch.</span>', self.page(f"/calendar?week={TODAY.year + 4}-01-07"))
         self.assertIn(f"Không có gì trong Lịch vào Tháng 1/{TODAY.year + 4}.", self.page(f"/calendar?month={TODAY.year + 4}-01"))
         to_record = self.page("/calendar")
         self.assertIn('<h2 id="p-to-record">Số người nhóm cần ghi</h2>', to_record)

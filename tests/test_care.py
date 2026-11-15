@@ -124,6 +124,23 @@ class NeedsVisitTest(CopyTestCase):
     def test_today_default_runs(self):
         self.assertIsInstance(care.needs_visit(self.conn), list)
 
+    def test_a_tie_sorts_by_given_name_as_the_people_list(self):
+        # CRIT-9, critique row 15: never visited, and visited on one day, sort by given name (the last word),
+        # with the key of the People list; the full name alone would give Lê, Nguyễn, Trần
+        c, member = self.conn, self.status("member")
+        added = [people.add_person(c, name, status_id=member, start_date="2020-01-01")
+                 for name in ("Trần Văn Bảo", "Nguyễn Thị An", "Lê Minh Châu", "Đỗ Văn Ân", "Võ Thị Bảo")]
+        for pid in added[:3]:
+            care.mark_visit_done(c, care.plan_visit(c, "2026-01-20 10:00", person_id=pid), "2026-01-20")
+        rows = care.needs_visit(c, today=TODAY)
+        never = [r["full_name"] for r in rows if r["last_visit"] is None]
+        same_day = [r["full_name"] for r in rows if r["last_visit"] == "2026-01-20"]
+        self.assertEqual(never, ["Đỗ Văn Ân", "Võ Thị Bảo", "Dũng Lê", "Khánh Lê", "Quân Lê"])
+        self.assertEqual(same_day, ["Nguyễn Thị An", "Trần Văn Bảo", "Lê Minh Châu"])
+        order = [p["full_name"] for p in people.list_persons(c)]  # the People list puts them in the same order
+        for names in (never, same_day):
+            self.assertEqual(names, sorted(names, key=order.index))
+
     def test_care_log_newest_first_and_for_one_person(self):
         log = care.care_log(self.conn)
         self.assertEqual([r["done_date"] for r in log],

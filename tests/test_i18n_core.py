@@ -23,7 +23,7 @@ NAV_VI = ("Trang chủ", "Mọi người", "Gia đình", "Chi phái", "Lịch", 
 NAV_EN = ("Dashboard", "People", "Families", "Chi phái", "Calendar", "Money", "Care", "Documents",
           "Sent documents", "Lists", "Copies", "Settings", "Search")
 SWITCH = re.compile(
-    r'<main class="canvas"><form class="lang-switch" method="post" action="/language"[^>]*>'
+    r'<main class="canvas" id="main" tabindex="-1"><form class="lang-switch" method="post" action="/language"[^>]*>'
     r'<input type="hidden" name="next" value="([^"]*)">'
     r'<button name="lang" value="vi" lang="vi" aria-pressed="(true|false)">Tiếng Việt</button>'
     r'<button name="lang" value="en" lang="en" aria-pressed="(true|false)">English</button></form>')
@@ -43,8 +43,10 @@ def html_lang(page):
 
 
 def nav_words(page):
+    """``(menu label, the 13 menu words)``: the menu items before the phone's More fold (CRIT-2)."""
     nav = re.search(r'<nav class="nav" aria-label="([^"]*)">(.*?)</nav>', page, re.S)
-    return nav.group(1), tuple(re.findall(r'<a class="nav-item"[^>]*>([^<]*)</a>', nav.group(2)))
+    items = nav.group(2).split('<details class="nav-more">')[0]
+    return nav.group(1), tuple(re.findall(r'<a class="nav-item(?: in-more)?"[^>]*>([^<]*)</a>', items))
 
 
 def lang_select(selected):

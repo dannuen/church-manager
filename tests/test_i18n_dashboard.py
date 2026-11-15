@@ -134,7 +134,8 @@ class _Screens(LiveServer, unittest.TestCase):
     def test_search_nav_item_is_current_on_the_search_page(self):
         page = self.page("/search?q=a")
         nav = re.search(r'<nav class="nav"[^>]*>(.*?)</nav>', page, re.S).group(1)
-        self.assertEqual(re.findall(r'href="([^"]+)" aria-current="page"', nav), ["/search"])
+        # once in the menu, once in the phone's More fold (CRIT-2): style.css shows one of them
+        self.assertEqual(re.findall(r'href="([^"]+)" aria-current="page"', nav), ["/search", "/search"])
         self.assertIn(f'aria-current="page">{t("core.nav_search", self.LANG)}</a>', nav)
 
     def test_live_search_words_are_in_data_attributes(self):
@@ -171,18 +172,20 @@ class VietnameseScreensTest(_Screens):
 
     def test_dashboard_words(self):
         page = self.page("/")
-        for words in ("<h1>Trang chủ</h1>", '<h2 id="p-this-week">Tuần này</h2>',
+        for words in ("<h1>Trang chủ</h1>", '<h2 id="p-this-week">7 ngày tới</h2>',
                       '<h2 id="p-needs-visit">Cần thăm viếng</h2>', '<h2 id="p-services">Giờ thờ phượng</h2>',
                       '<h2 id="p-money-month">Tài chính tháng này</h2>', '<h2 id="p-sent-documents">Văn bản đi</h2>',
                       '<span class="kpi-label">Dâng hiến</span>', '<span class="kpi-label">Số dư</span>',
                       '<span class="kpi-label">Số tiếp theo</span>', '<label for="dash-q">Tìm Người</label>',
-                      'placeholder="Có dấu hoặc không dấu"', ">Lên lịch Thăm viếng</a>", ">Mở Văn bản đi</a>",
+                      'placeholder="Có dấu hoặc không dấu"', ">Lên lịch Thăm viếng</a>",
                       'aria-label="Số người nhóm của ', "<span>Thăm gần nhất</span>"):
             self.assertIn(words, page)
         weekday = t(f"core.weekday_{TODAY.weekday()}", "vi")
-        self.assertRegex(page, rf'<p class="sub">{weekday} {TODAY:%d/%m/%Y} · \d+ người cần thăm viếng · '
-                               r'\d+ Lịch trong tuần này</p>')
+        self.assertRegex(page, rf'<p class="sub">{weekday} {TODAY:%d/%m/%Y} · '  # CRIT-3: Needs a visit has its
+                               r'\d+ Lịch trong 7 ngày tới</p>')  # count on its card, not again here
         count = len(sent.list_sent_documents(self.db(), TODAY.year))
+        # CRIT-4: more than the rows shown -> the foot link names them all
+        self.assertIn(f">Xem tất cả {count}</a>" if count > 2 else ">Mở Văn bản đi</a>", page)
         self.assertIn(f'<span class="meta">{count} Công văn đi trong năm {TODAY.year}</span>', page)
         self.assertRegex(page, r'<strong class="trend-(up|down|same)">(Tăng|Giảm|Không đổi)</strong> · '
                                r'Số người nhóm \d+ ngày \d\d/\d\d/\d{4}, so với trung bình \d+ của \d+ '

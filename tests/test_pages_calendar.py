@@ -258,13 +258,13 @@ class CalendarPagesTest(PagesTestBase):
         page = self.page("/calendar?month=1900-01")
         self.assertNotIn("December 1899", page)
         self.assertNotIn("month=1899-12", page)
-        self.assertIn('href="/calendar?month=1900-02">February 1900 ›</a>', page)
+        self.assertIn('href="/calendar?month=1900-02">02/1900 ›</a>', page)  # CRIT-8: the short month
         self.assertIn("This month", page)
         cal.add_calendar_item(self.db(), "Event", "B21 Lễ ngày cuối", "9999-12-31 23:59")  # the very last minute
         page = self.page("/calendar?month=9999-12")
         self.assertNotIn("January 10000", page)
         self.assertNotIn("month=10000-01", page)
-        self.assertIn('href="/calendar?month=9999-11">‹ November 9999</a>', page)
+        self.assertIn('href="/calendar?month=9999-11">‹ 11/9999</a>', page)
         self.assertIn("This month", page)
         self.assertIn("B21 Lễ ngày cuối", section(page, "calendar-list"))  # the last day of 9999 is listed
         for bad in ("1899-12", "0000-01"):

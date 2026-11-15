@@ -22,9 +22,10 @@ import zipfile
 from unittest import mock
 
 import _support
-from churchmgr import db, documents, fake, handover, lists, money, paths, people, schema, server, settings
+from churchmgr import db, documents, fake, handover, lists, money, paths, people, schema, server, settings, ui
 from churchmgr.i18n import TEXT, TextError, english_left, error_text
 from churchmgr.pages import copies as copy_pages
+from churchmgr.pages.documents import fmt_size
 from test_i18n_core import html_lang, switch
 from test_pages_people import section
 from test_server import LiveServer
@@ -294,6 +295,40 @@ class CopiesScreensTest(ScreensBase):
                     self.assertIn('is also written in a family role in <a href="/">family link</a>.', joined)
                     self.assertRegex(lines[2], r"^And \d+ more places\.$")
 
+    # ---- CRIT-5: the developer words wait under a closed "Technical details" fold
+
+    def test_developer_words_wait_under_a_closed_fold(self):
+        """On the Copies page and the Handover result page, in both languages: church.db, --copy, current.txt,
+        every full path and every size in bytes are only inside the 3 folds (closed); outside them the size is
+        in plain words and the sentences say what the pastor can do."""
+        for lang in LANGS:
+            with self.subTest(lang=lang):
+                headers, _ = self.post(lang, "/copies/handover", {})
+                root = self.roots[lang].resolve()
+                zip_path = root / copy_pages.HANDOVERS / made_name(headers["location"])
+                size = self.db(lang).execute("SELECT COALESCE(SUM(size), 0) FROM document").fetchone()[0]
+                for where, page in (("GET /copies", self.get(lang, "/copies")),
+                                    ("Handover result", self.get(lang, headers["location"]))):
+                    body = page.split("<main", 1)[1].replace("<wbr>", "")
+                    self.assertNotIn('<details class="tech" open', body, where)
+                    folds = [plain(f) for f in re.findall(r'<details class="tech">(.*?)</details>', body, re.S)]
+                    outside = plain(re.sub(r'<details class="tech">.*?</details>', " ", body, flags=re.S))
+                    self.assertEqual([f.split(TEXT[lang]["copies.tech"], 1)[0] for f in folds], ["", "", ""], where)
+                    inside = " ".join(folds)
+                    words = ["church.db", "--copy", "current.txt", str(self.copies[lang].resolve()), str(root),
+                             str(root / copy_pages.HANDOVERS)]
+                    if where == "Handover result":
+                        words.append(str(zip_path))
+                    for word in words:
+                        self.assertNotIn(word, outside, (where, word))
+                        self.assertIn(word, inside, (where, word))
+                    self.assertNotRegex(outside, r"\bbytes?\b", where)
+                    self.assertIn(f"({copy_pages.size_text(size, lang)})", outside, where)
+                    self.assertIn(f"{fmt_size(size, lang)})", inside, where)  # in bytes below 1 KB
+                    for key in ("copies.set_folder_plain", "copies.list_hint", "copies.keep_outside"):
+                        self.assertIn(TEXT[lang][key], outside, (where, key))
+
+
 
 class NewChurchSetupTest(ScreensBase):
     """A Vietnamese church copy ``a`` in a temp copies root; the app started the default way (remember)."""
@@ -376,6 +411,35 @@ class NewChurchSetupTest(ScreensBase):
         _h, page = self.post("vi", "/copies/open", {"folder": "../b"}, 400)
         self.assert_screen("vi", page, "refused open")
 
+    def test_plain_words_say_which_copy_opens_at_start_and_how_to_open_another(self):
+        """CRIT-5: outside the folds the row Mở khi khởi động names the church copy in plain words (this one, or
+        another one), never current.txt or a path (those are in the fold); the line under Các Dữ liệu Hội Thánh
+        is there only when another church copy can be opened."""
+        def view():
+            page = self.get("vi", "/copies")
+            self.assert_screen("vi", page, "GET /copies")
+            this = section(page, "this-copy")
+            outside = re.sub(r'<details class="tech">.*?</details>', "", this, flags=re.S)
+            fold = plain(re.search(r'<details class="tech">(.*?)</details>', this, re.S).group(1).replace("<wbr>", ""))
+            row = re.search(r"<dt>Mở khi khởi động</dt><dd>(.*?)</dd>", outside).group(1)
+            return row, fold, page
+
+        row, fold, page = view()  # nothing in current.txt yet; only the open church copy in the copies folder
+        self.assertEqual(row, ui.DASH)
+        self.assertNotIn('<span class="meta">', section(page, "copies"))
+        paths.write_current(self.root, self.a)
+        row, fold, _page = view()
+        self.assertEqual(row, "Dữ liệu Hội Thánh này")
+        self.assertIn("Dữ liệu Hội Thánh này (ghi trong current.txt)", fold)
+        other = self.root / "b"
+        db.create_church_copy(other, "Hội Thánh Bình Minh U6", "en").close()
+        paths.write_current(self.root, other)
+        row, fold, page = view()
+        self.assertEqual(row, "Một Dữ liệu Hội Thánh khác")
+        self.assertIn(f"{other.resolve()} (ghi trong current.txt)", fold)
+        self.assertIn('<span class="meta">Bấm Mở để chuyển sang một Dữ liệu Hội Thánh khác.</span>',
+                      section(page, "copies"))
+
 
 class CopiesTextErrorTest(unittest.TestCase):
     """The errors of ``paths.py`` and ``handover.py``: ``str()`` English, ``error_text(e, "vi")`` Vietnamese."""
@@ -451,7 +515,7 @@ class CopiesTextTableTest(unittest.TestCase):
         for path in self.CODE:
             used |= set(re.findall(r'"((?:copies|core|settings|setup|people)\.[a-z_0-9]+)"', path.read_text("utf-8")))
         self.assertIn("copies.err_onedrive", used)
-        plural = {"copies.bytes", "copies.documents", "copies.copies", "people.count"}  # tn() keys
+        plural = {"copies.documents", "copies.copies", "people.count"}  # tn() keys
         for key in sorted(used):
             for lang in LANGS:
                 names = [f"{key}_one", f"{key}_many"] if key in plural else [key]
@@ -470,6 +534,18 @@ class CopiesTextTableTest(unittest.TestCase):
         english = words(TEXT["en"].values()) - others_vi
         mine = words(v for k, v in TEXT["vi"].items() if k.startswith("copies."))
         self.assertLessEqual(mine & english, {"zip", "byte"})
+
+    def test_a_size_in_plain_words(self):
+        """CRIT-5: below 1 KB a size outside the folds says "under 1 KB" / "dưới 1 KB"; from 1 KB it is
+        ``fmt_size`` (integer maths only). ``copies.bytes`` is gone: the fold says bytes with ``fmt_size``."""
+        for size, vi_words, en_words in ((0, "dưới 1 KB", "under 1 KB"), (1023, "dưới 1 KB", "under 1 KB"),
+                                         (1024, "1 KB", "1 KB"), (1025, "2 KB", "2 KB"),
+                                         (5 * 1024 * 1024, "5,0 MB", "5,0 MB")):
+            self.assertEqual((copy_pages.size_text(size, "vi"), copy_pages.size_text(size, "en")),
+                             (vi_words, en_words), size)
+        self.assertEqual((fmt_size(137, "vi"), fmt_size(137, "en")), ("137 byte", "137 bytes"))
+        for lang in LANGS:
+            self.assertEqual([k for k in TEXT[lang] if k.startswith("copies.bytes")], [], lang)
 
 
 if __name__ == "__main__":

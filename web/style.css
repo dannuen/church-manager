@@ -41,24 +41,27 @@
      colors stay as they were, on screen and on paper (green is money) */
   --bar-offerings: #2f6f4f; --bar-expenses: #999999;
   /* the wash at the top of the canvas: the app color from dark (left) to light (right). Its first layer is
-     the fade into the ground, drawn over its last --wash-fade only (.canvas::before): 40% of --wash-h, so a
-     wash of --wash-h looks as before, and a taller wash (a tall head) keeps the same fade under its text */
+     the fade into the ground, drawn over its last --wash-fade only (.canvas::before), so a taller wash (a tall
+     head) keeps the same fade under its text. From 861px the fade is short, 48px: a long one (136px) showed
+     a muddy grey-blue band in the gutter and the gaps between the cards (CRIT-9). Under 861px the cards
+     leave only 8px at the sides: the fade stays 40% of --wash-h-narrow there */
   --wash: linear-gradient(180deg, transparent, var(--ground)),
           linear-gradient(112deg, var(--accent-dark) 0%, var(--accent-base) 48%, var(--accent-light) 100%);
-  --wash-h: 340px; --wash-h-narrow: 600px; --wash-fade: 136px; --wash-fade-narrow: 240px; --wash-radius: 28px;
-  /* the one dark card (Dashboard, Money this month): the app color as text (--accent-text, dark enough
-     to read on white) taken darker, from the top left (darkest) to the bottom right (softer). It is dark
-     for every app color, so its text is white and the Balance a light green or a light red;
-     tests/test_pages_ui.py checks 4.5:1 for each text on each of the 3 stops, for any color */
+  --wash-h: 340px; --wash-h-narrow: 600px; --wash-fade: 48px; --wash-fade-narrow: 240px; --wash-radius: 28px;
+  /* the one dark card (Dashboard, Needs a visit, CRIT-7): the app color as text (--accent-text, dark
+     enough to read on white) taken darker, from the top left (darkest) to the bottom right (softer). It is
+     dark for every app color, so its text is white and its grey words a white with a touch of the app
+     color; tests/test_pages_ui.py checks 4.5:1 for each text (3:1 for the link line and the focus ring) on
+     each of the 3 stops, for any color. No money amount sits on it: no green or red on it */
   --highlight: color-mix(in srgb, var(--accent-text), #000000 50%);
   --highlight-mid: color-mix(in srgb, var(--accent-text), #000000 30%);
   --highlight-end: color-mix(in srgb, var(--accent-text), #000000 15%);
   --highlight-fill: linear-gradient(160deg, var(--highlight) 0%, var(--highlight-mid) 55%, var(--highlight-end) 100%);
-  --highlight-ink: #ffffff;                                                  /* title, amounts, links */
-  --highlight-muted: color-mix(in srgb, #ffffff 88%, var(--accent-text));    /* labels, the month */
+  --highlight-ink: #ffffff;                                                  /* the title, the count, names, dates */
+  --highlight-muted: color-mix(in srgb, #ffffff 88%, var(--accent-text));    /* the hint, the list head, a Status */
   --highlight-rule: color-mix(in srgb, var(--highlight-ink) 20%, transparent);  /* lines, the empty box */
-  --highlight-focus: #ffffff;                                                /* the focus ring on it */
-  --positive-on-dark: #9af2c4; --negative-on-dark: #ffd6d2;                  /* the Balance on it */
+  --highlight-line: color-mix(in srgb, var(--highlight-ink) 65%, var(--highlight-end));  /* the line under a name */
+  --highlight-focus: #ffffff;                                                /* the links and the focus ring on it */
   --shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent), 0 6px 20px color-mix(in srgb, var(--text) 7%, transparent);
   --shadow-raised: 0 10px 30px color-mix(in srgb, var(--text) 16%, transparent);
   --font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
@@ -73,7 +76,11 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body { margin: 0; background: var(--ground); color: var(--text); font: var(--fs-body)/24px var(--font); }
 h1, h2, h3, p, ul, ol { margin: 0; }
 a { color: inherit; text-decoration: none; }
-a:hover { text-decoration: underline; text-underline-offset: 3px; }
+/* a link in a table cell or in a row title is in the app color, so a name shows it can be clicked (a card
+   foot link too, .card-link); it is underlined under the pointer and on keyboard focus, with the one ring.
+   One tag weight (:where): print.css (later) keeps it ink on paper (CRIT-1) */
+:where(td) a, :where(.row .what) a { color: var(--accent-text); }
+a:hover, :where(td) a:focus-visible, :where(.row .what) a:focus-visible, .card-link:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
 :focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; border-radius: 4px; }
 .num, table, .kpi-value, input, select { font-variant-numeric: tabular-nums; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -90,8 +97,15 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .nav { display: flex; flex-direction: column; gap: 2px; }
 .nav-item { display: flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: var(--radius-pill); color: var(--muted); font-size: var(--fs-meta); }
 .nav-item:hover { background: var(--raised); color: var(--text); text-decoration: none; }
-.nav-item[aria-current="page"] { background: var(--gradient); color: var(--on-accent); font-weight: 600; }
-.nav-item[aria-current="page"]:hover { background: var(--accent-dark); }
+.nav-item[aria-current="page"], .nav-more:has([aria-current="page"]) > summary { background: var(--gradient); color: var(--on-accent); font-weight: 600; }
+.nav-item[aria-current="page"]:hover, .nav-more:has([aria-current="page"]) > summary:hover { background: var(--accent-dark); }
+/* the "More" fold of the top bar (under 861px, below); from 861px the sidebar shows all 13 items. Its
+   summary takes the current-page look when the page is one of its 8 (CRIT-2) */
+.nav-more { display: none; }
+/* the skip link: the first stop of Tab on every page, out of sight until it has the focus; then a white
+   pill at the top left above everything, with the one focus ring. print.css hides it (.no-print) (CRIT-2) */
+.skip-link { position: fixed; z-index: 100; top: 8px; left: 8px; display: inline-flex; align-items: center; min-height: 44px; padding: 0 20px; border-radius: var(--radius-pill); background: var(--surface); color: var(--accent-text); font-size: var(--fs-meta); font-weight: 600; transform: translateY(-200%); }
+.skip-link:focus { transform: none; box-shadow: var(--shadow-raised); }
 /* The wash: one layer of the app color behind the top of the canvas (the language switch, the title row
    and the top of the first cards). It is not a card. The sidebar stays on the plain ground. */
 .canvas { position: relative; isolation: isolate; min-width: 0; padding: 14px var(--pad) var(--pad); }
@@ -104,6 +118,9 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .title-row > :first-child { flex: 1 1 240px; min-width: 0; }
 .title-row h1 { font-size: var(--fs-display); line-height: 36px; font-weight: 700; }
 .title-row .sub { margin-top: 2px; color: var(--on-accent); }
+/* a line for paper only: People without a search, whose counts are on the Status chips on screen (print.css
+   hides the chips) (CRIT-3) */
+@media screen { .title-row .sub:has(> .on-paper) { display: none; } }
 .title-row .actions { display: flex; align-items: flex-end; gap: 12px; flex: none; }
 /* On the wash every text is --on-accent at full strength. The main action is a pill filled with
    --on-accent and --accent-dark text; the other buttons are pills outlined in --on-accent. The search
@@ -132,7 +149,7 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 /* ---------- panels and the 12-column grid ----------
    A card (spec 4.3): white, a 1px --border edge, --radius-card corners and the soft --shadow; a bold ink
-   title, a grey sub line, ink foot links. An empty list keeps its frame (.empty below). */
+   title, a grey sub line, foot links in the app color. An empty list keeps its frame (.empty below). */
 .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--gap); }
 .span-3 { grid-column: span 3; } .span-4 { grid-column: span 4; } .span-5 { grid-column: span 5; }
 .span-6 { grid-column: span 6; } .span-7 { grid-column: span 7; } .span-12 { grid-column: 1 / -1; }
@@ -144,7 +161,7 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .panel > footer { margin-top: auto; padding-top: 12px; display: flex; flex-wrap: wrap; gap: 8px 20px; }
 .panel.narrow { max-width: 640px; }
 .panel p + p, .panel p + .form, .panel .form + p { margin-top: 12px; }
-.card-link { font-size: var(--fs-meta); font-weight: 600; color: var(--text); }
+.card-link { font-size: var(--fs-meta); font-weight: 600; color: var(--accent-text); }   /* white on the dark card (its own --accent-text) */
 .card-link::after { content: "\00a0›"; }   /* a no-break space: the sign never sits alone on a line */
 header .card-link { white-space: nowrap; }   /* in a card head (Money): the title wraps, the link stays whole */
 
@@ -194,16 +211,22 @@ header .card-link { white-space: nowrap; }   /* in a card head (Money): the titl
 .trend .trend-up { color: var(--accent-text); }
 .trend .trend-down { color: var(--muted); }
 
-/* ---------- the one dark card: Dashboard, Money this month (spec 4.3, D2) ----------
-   No other card is dark. It sets its own tokens, so every rule inside (the title, the month, the KPI
-   labels and values, the lines between them, the Balance, the foot links, the empty box, the text of a
-   panel that failed to load and the focus ring, which is --accent-text) reads on the dark fill. It keeps
-   its 1px edge, in transparent, so it is as high as its neighbours; align-self: start (B11) stays. */
-.dashboard > [data-panel="money-month"] {
+/* ---------- the one dark card: Dashboard, Needs a visit (spec 4.3, D2; CRIT-7) ----------
+   The pastor moved it here from Money this month (critique row 6): the people who need a visit come first.
+   Money this month is a white card like the others now: its amounts in ink, the Balance green or red. No
+   other card is dark. It sets its own tokens, so every rule inside (the title, the hint, the count, the list
+   head, the names, a Status, the dates, the lines between the rows, the foot link, the empty box, the text
+   of a panel that failed to load and the focus ring, which is --accent-text) reads on the dark fill. A name
+   is white like the words beside it, so a line under it shows it is a link (--highlight-line); under the
+   pointer and on keyboard focus the line turns white (the a:hover and :focus-visible rules of CRIT-1 above,
+   one class stronger). One tag weight (:where): print.css (later) keeps it plain ink on paper.
+   It keeps its 1px edge, in transparent, so it is as high as before and ends level with Next 7 days. */
+.dashboard > [data-panel="needs-visit"] {
   --text: var(--highlight-ink); --muted: var(--highlight-muted); --faint: var(--highlight-muted);
   --rule: var(--highlight-rule); --border: var(--highlight-rule); --control: var(--highlight-rule);
-  --positive: var(--positive-on-dark); --negative: var(--negative-on-dark); --accent-text: var(--highlight-focus);
+  --accent-text: var(--highlight-focus);
   background: var(--highlight-fill); border-color: transparent; box-shadow: var(--shadow-raised); color: var(--text); }
+:where(.dashboard > [data-panel="needs-visit"] .row .what) a { text-decoration: underline; text-decoration-color: var(--highlight-line); text-decoration-thickness: 1px; text-underline-offset: 3px; }
 
 /* ---------- search in the title row; live results float under it ---------- */
 .title-search { position: relative; }
@@ -286,20 +309,34 @@ td .num { white-space: nowrap; }   /* a phone number, a date or an amount never 
   /* the top bar keeps its own height and the canvas takes the rest: on a short page the bar never grows
      an empty band under the menu */
   .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
-  .sidebar { position: static; height: auto; flex-direction: column; gap: 8px; padding: 12px 16px 8px; border-bottom: 1px solid var(--border); }
+  .sidebar { position: static; height: auto; overflow: visible; flex-direction: column; gap: 8px; padding: 12px 16px 8px; border-bottom: 1px solid var(--border); }
   .brand { padding: 0; }
-  /* the menu is one row that scrolls sideways: a thin bar in the line color (not the browser's grey one),
-     and the current page's pill is scrolled into view when the page opens */
-  .nav { flex-direction: row; overflow-x: auto; gap: 4px; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: var(--control) transparent; }
-  .nav-item { flex: none; min-height: 44px; }
-  .nav-item[aria-current="page"] { scroll-initial-target: nearest; }
+  /* the menu: 5 items and the "More" fold that holds the other 8 (CRIT-2), with no row that scrolls
+     sideways: one row of 6 on a tablet, 2 rows of 3 on a phone (640px, below). Each is a 44px tap. The
+     fold opens a white card under the menu, over the page; it works with no JS */
+  .nav { position: relative; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+  .nav-item { min-height: 44px; justify-content: center; padding: 0 8px; text-align: center; }
+  .nav .in-more { display: none; }
+  .nav-more { display: block; }
+  .nav-more > summary { gap: 8px; cursor: pointer; list-style: none; }
+  .nav-more > summary::-webkit-details-marker { display: none; }
+  .nav-more > summary::after { content: ""; flex: none; width: 6px; height: 6px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: translateY(-2px) rotate(45deg); }
+  .nav-more[open] > summary::after { transform: translateY(2px) rotate(-135deg); }
+  .nav-more-list { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow-raised); }
   .canvas { padding: 16px; }
   .canvas::before { left: 8px; right: 8px; height: var(--wash-h-narrow); background-size: 100% var(--wash-fade-narrow), 100% 100%; }   /* the title row stacks */
   .grid > * { grid-column: 1 / -1 !important; }
   .title-row { flex-direction: column; align-items: stretch; }
   .title-row > :first-child { flex: none; }   /* a column: no 240px basis in height */
-  .title-row .actions { flex-direction: column; align-items: stretch; }
-  .title-search .input { width: auto; flex: 1; }
+  /* the actions side by side at their own width, the next ones wrap under them; the main (primary)
+     button first. The Dashboard search keeps its own whole row above the button (CRIT-3). Money: Record
+     Offering, Record Expense, then Year report (CRIT-FIX-1). The search field takes what its button leaves:
+     width 0, so its own width (about 20 characters) never pushes the page sideways (360px in vi, CRIT-FIX-1) */
+  .title-row .actions { flex-wrap: wrap; gap: 8px; }
+  .title-row .actions > .primary { order: -1; }
+  .title-row .actions > [href^="/money/year"] { order: 1; }
+  .title-row .title-search { order: -2; flex: 1 1 100%; }
+  .title-search .input { width: 0; flex: 1; }
   .btn { height: 44px; }
   .input { height: 44px; }
   details.change > summary { min-height: 44px; }
@@ -308,6 +345,26 @@ td .num { white-space: nowrap; }   /* a phone number, a date or an amount never 
   .row .side { max-width: none; }
   .row .figure { margin-left: auto; }
   .list-head { display: none; }
+}
+/* the language switch under 861px has no row of its own: it sits at the top right of the canvas, level with
+   the first line of the h1 (the h1 comes 4px down, so the 44px switch ends where that line ends and never
+   sits on the line under it). That line keeps 160px free at its right (the switch is about 146px wide, its
+   current word bold), on that line only: a long name wraps beside the switch, then takes the whole width. A
+   flash comes first at the canvas top: then the switch goes back in the flow above it, so it never sits on
+   the flash (as the Dashboard from 1181px, STYLE-FIX-1). Screen only: on paper the switch is hidden and the
+   h1 keeps its whole line (CRIT-FIX-1) */
+@media screen and (max-width: 860px) {
+  .lang-switch { position: absolute; z-index: 1; top: 12px; right: 28px; margin: 0; }
+  .canvas:has(> .flash) > .lang-switch { position: static; margin: 0 12px 4px; }
+  .lang-switch + .title-row h1 { padding-top: 4px; }
+  .lang-switch + .title-row h1::before { content: ""; float: right; width: 160px; height: 1px; }
+}
+@media (max-width: 640px) {   /* a phone: the menu is 2 rows of 3, the More card 2 columns of 4 (CRIT-2) */
+  .nav { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .nav-more-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* the title-row pills keep 14px at the sides (20px from 641px): at 360px the 2 People buttons share one
+     line in English too ("Add a Person", "Add from .xlsx file"), so the list starts one line higher (CRIT-FIXF1) */
+  .title-row .btn { padding: 0 14px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
 
@@ -367,8 +424,10 @@ details.change .form { max-width: none; }
 .note .when { display: block; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
 .note p { font-size: var(--fs-meta); line-height: 20px; white-space: pre-wrap; overflow-wrap: anywhere; }
 
-/* Care: Needs a visit rows end with "Plan"; each planned Visit holds its "Mark Visit done" form */
-.row .row-action { flex: none; width: 48px; text-align: right; font-size: var(--fs-meta); font-weight: 600; }
+/* Care: Needs a visit rows end with "Plan"; each planned Visit holds its "Mark Visit done" form. A row
+   action (Plan, Record, Edit, Delete, Rename, Hide/Show) is a plain word in the app color, weight 400: the
+   name and the amount of the row stay the strong parts (CRIT-1) */
+.row .row-action { flex: none; width: 48px; text-align: right; font-size: var(--fs-meta); font-weight: 400; color: var(--accent-text); }
 .care .list-head span:nth-child(2) { width: 96px; text-align: right; }
 .care .list-head .spacer { width: 48px; }
 .visits { list-style: none; padding: 0; display: grid; }
@@ -386,10 +445,11 @@ details.change .form { max-width: none; }
   .grid.person > *, .grid.family > *, .grid.chi-phai > *, .grid.care > * { grid-column: 1 / -1; }
 }
 @media (max-width: 640px) {
-  /* tables become two-line rows: the name on line 1, the other fields on line 2 */
+  /* tables become two-line rows: the name on line 1, the other fields on line 2; the parts of a line sit on
+     one baseline (a 44px link beside a plain field, CRIT-1) */
   table.list thead { display: none; }
   table.list, table.list tbody { display: block; }
-  table.list tr { display: flex; flex-wrap: wrap; gap: 2px 12px; padding: 8px 12px; border-bottom: 1px solid var(--rule); }
+  table.list tr { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; padding: 8px 12px; border-bottom: 1px solid var(--rule); }
   table.list tbody tr:last-child { border-bottom: 0; }
   table.list td, table.list tr[data-row] > th { display: block; padding: 0; border: 0; color: var(--muted); }
   table.list td:first-child, table.list tr[data-row] > th:first-child { flex-basis: 100%; color: var(--text); }
@@ -400,8 +460,15 @@ details.change .form { max-width: none; }
   .inline-fields { grid-template-columns: minmax(0, 1fr); }
   .kv > div { grid-template-columns: 96px minmax(0, 1fr); }
   .chip, details.change > summary { min-height: 44px; }
+  /* the People search: its label is for screen readers only (the .sr-only look; it stays the field's
+     label), the field and Search on one line; Clear also, while the field keeps at least 80px, else Clear
+     wraps under them. The bar and its chips are one notch tighter; every chip stays in view, wrapping
+     (CRIT-FIX-1) */
+  .list-toolbar { gap: 8px; margin-bottom: 12px; padding: 8px 12px; }
+  .chip { padding: 0 12px; }
+  .toolbar label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .toolbar .search-line { flex-wrap: wrap; }
-  .toolbar .input { flex-basis: 100%; }   /* a phone: the field on its own line, the buttons under it */
+  .toolbar .input { flex-basis: 80px; }
 }
 
 /* ---------- card C2: Calendar and Money pages ----------
@@ -410,22 +477,37 @@ details.change .form { max-width: none; }
 .grid.calendar, .grid.calendar-item, .grid.money-month { align-items: start; }
 .span-5.stack, .span-7.stack { min-width: 0; }
 
+/* the period bar of the Calendar and Money, one nav (CRIT-8): Prev / This / Next (.period) on one line, then
+   the view chips (.views: Week, Month) and the "Go to a month" picker at the right. When the line is too
+   narrow for the three (a phone, long English words) Prev and Next give up some width and their words take
+   2 lines inside the pill; the middle chip keeps its one line. No chip goes to the next line alone and
+   nothing scrolls sideways (320px too). With app.js (html.js) a [data-auto-submit] picker opens the chosen
+   month by itself, so its Show button hides; without the script Show stays and sends the form */
+.period { display: grid; grid-auto-flow: column; justify-content: start; gap: 8px; }
+.period > .chip { justify-content: center; text-align: center; text-wrap: balance; line-height: 18px; }
+.period:has(> :nth-child(3)) > :nth-child(2) { min-width: max-content; }   /* all three there (1900-01 has no Prev) */
+.list-toolbar > .views { margin-right: auto; }   /* the picker keeps the right end of the bar */
+.js form[data-auto-submit] button[type="submit"] { display: none; }
 /* month picker beside the week / month chips */
 .month-picker, .year-form { display: grid; gap: 6px; }
 .month-picker label, .year-form label { font-size: var(--fs-meta); font-weight: 500; line-height: 20px; }
 .month-picker .input { width: 184px; }
 .year-form .input { width: 112px; }
 
-/* the agenda: one block per day, the date on the left, the Calendar items on the right */
+/* the agenda: one block per day, the date on the left, the Calendar items on the right. The date is weight
+   400, lighter than the titles of its items (500, .row .what): the items lead (CRIT-9) */
 .list-panel.agenda { padding-top: 4px; padding-bottom: 4px; }
 .cal-day { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px; padding: 4px 0; }
 .cal-day + .cal-day { border-top: 1px solid var(--rule); }
-.cal-date { padding-top: 10px; font-size: var(--fs-meta); line-height: 24px; font-weight: 600; }
+.cal-date { padding-top: 10px; font-size: var(--fs-meta); line-height: 24px; font-weight: 400; }
 /* Today: a small pill under the date, outlined in --accent-text (bold --accent-text on white reads for any
    app color; on the --active tint it does not for some colors) */
 .today-tag { display: block; width: fit-content; margin-top: 2px; padding: 0 8px; border: 1px solid currentColor; border-radius: var(--radius-pill); color: var(--accent-text); font-size: var(--fs-small); line-height: 18px; font-weight: 700; }
-.cal-none { padding: 10px 0; color: var(--faint); font-size: var(--fs-meta); line-height: 24px; }
+/* an empty day (a week shows every day) is one short line, 32px: its date in grey and a faint dash where the
+   items would be; "Nothing on the Calendar" is for screen readers only (.sr-only) (CRIT-9) */
+.cal-none { color: var(--faint); font-size: var(--fs-meta); line-height: 24px; }
 .cal-day .cal-none { margin-top: 0; }      /* not the panel's p + p gap: it sits level with the date */
+.cal-day:has(> .cal-none) > .cal-date { padding-top: 0; color: var(--muted); }
 .cal-row { align-items: flex-start; }
 .cal-row .time { width: 104px; padding-top: 2px; }
 .kind { color: var(--muted); }
@@ -440,7 +522,7 @@ fieldset.group legend { padding: 0; margin-bottom: 8px; font-size: var(--fs-meta
 .add-form .form { max-width: none; }
 .add-person { display: grid; grid-template-columns: minmax(0, 1fr) 136px auto; gap: 12px; align-items: end; }
 .row-form { flex: none; margin: 0; }
-.link-btn { min-height: 36px; padding: 0 4px; border: 0; background: none; color: var(--text); font: inherit; font-size: var(--fs-meta); font-weight: 600; cursor: pointer; }
+.link-btn { min-height: 36px; padding: 0 4px; border: 0; background: none; color: var(--accent-text); font: inherit; font-size: var(--fs-meta); font-weight: 400; cursor: pointer; }
 .link-btn:hover { text-decoration: underline; text-underline-offset: 3px; }
 .series-links { font-size: var(--fs-meta); }
 .absent { margin-top: 4px; font-size: var(--fs-meta); line-height: 20px; color: var(--muted); white-space: pre-wrap; }
@@ -448,8 +530,8 @@ fieldset.group legend { padding: 0; margin-bottom: 8px; font-size: var(--fs-meta
 .confirm-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; }
 .confirm-actions .form { display: block; }
 
-/* Money: the totals are type in one light card split by 1px rules (not dark: only the Dashboard card
-   is); Balance is the bold figure, green or red (spec 4.4) */
+/* Money: the totals are type in one light card split by 1px rules (not dark: the one dark card is Needs a
+   visit on the Dashboard); Balance is the bold figure, green or red (spec 4.4) */
 .kpi-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: var(--gap); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow); }
 .kpi-strip .kpi { padding: 18px 24px; }
 .kpi-strip .kpi + .kpi { border-top: 0; border-left: 1px solid var(--rule); }
@@ -477,11 +559,18 @@ table.money.expenses td:nth-child(3) { color: var(--muted); }
 }
 @media (max-width: 640px) {
   .cal-day { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .cal-day:has(> .cal-none) { grid-template-columns: 112px minmax(0, 1fr); gap: 12px; }   /* an empty day: one line, the dashes in one column */
   .cal-date { padding-top: 8px; }
   .today-tag { display: inline; margin-left: 8px; }
   .cal-row .time { width: 100%; order: 1; padding-top: 0; }
   .inline-fields.two, .add-person { grid-template-columns: minmax(0, 1fr); }
-  .month-picker, .year-form { flex: 1 1 100%; }
+  /* line 1: Prev / This / Next alone, one notch tighter than other chips (so the Vietnamese 7 days fit one
+     line at 390px); the view chips and the picker share line 2 when the picker's field fits beside them,
+     else the picker takes line 3 (CRIT-8). A year form keeps its own line */
+  .period { flex: 1 1 100%; gap: 6px; }
+  .period > .chip { padding: 0 10px; }
+  .month-picker { flex: 1 1 auto; }
+  .year-form { flex: 1 1 100%; }
   .month-picker .input, .year-form .input { width: auto; flex: 1; }
   .kpi-strip { grid-template-columns: minmax(0, 1fr); }
   .kpi-strip .kpi + .kpi { border-left: 0; border-top: 1px solid var(--rule); }
@@ -489,7 +578,6 @@ table.money.expenses td:nth-child(3) { color: var(--muted); }
   table.money td.n + td.n::before { content: none; }   /* a dash before an amount would read as a minus */
   table.money tr.total { justify-content: space-between; }
   table.money tr.total > * { display: block; padding: 0; border: 0; }
-  .link-btn { min-height: 44px; }
 }
 
 /* ---------- card C3: Documents, Sent documents, Lists, Copies and Settings ----------
@@ -504,8 +592,14 @@ table.money.expenses td:nth-child(3) { color: var(--muted); }
 .kv.wide > div { grid-template-columns: 128px minmax(0, 1fr); }
 .next-number { padding-top: 0; }
 
-/* a small grey word inside a row: Hidden, Open now (a pill, spec 4.7) */
+/* a small grey word inside a row: Hidden, Open now (a pill, spec 4.7). In the People list the Status of a
+   Person who Left or Passed away is a tag, at the start of its cell and on the baseline of its row (the 1px
+   lift made that row 1px taller) (CRIT-6); the rest of that row's text is --muted, as the phone (640px) has
+   it already, 4.5:1 on --surface and on the --raised hover (StyleTokensTest). Its links keep the app color
+   and the whole-row tap (CRIT-1) */
 .tag { display: inline-flex; align-items: center; flex: none; height: 20px; margin-left: 8px; padding: 0 8px; border-radius: var(--radius-pill); background: var(--active); color: var(--muted); font-size: var(--fs-small); font-weight: 500; white-space: nowrap; vertical-align: 1px; }
+table.people td > .tag { margin-left: 0; vertical-align: baseline; }
+table.people tr.inactive > td { color: var(--muted); }
 .list-item.is-hidden .what { color: var(--muted); }
 
 /* a name field with its button on one line (Add, Rename) */
@@ -513,15 +607,24 @@ table.money.expenses td:nth-child(3) { color: var(--muted); }
 .inline-add > .btn { margin-top: 28px; }   /* the label line (20px) + its gap (8px): level with the field */
 .add-form .inline-add .field label { font-weight: 500; }
 
-/* each list item: name, what uses it, Hide/Show, Rename (the form opens on its own line) */
+/* each list item: name, what uses it, Hide/Show, Rename (the form opens on its own line). The Copies
+   "Technical details" fold (details.tech) has the same summary: a plain word in the app color (CRIT-5) */
 .list-item { flex-wrap: wrap; }
 .list-item .side { max-width: none; }   /* "6 người đang phục vụ" is never cut while the row has room */
-details.rename > summary { display: inline-flex; align-items: center; min-height: 36px; padding: 0 4px; font-size: var(--fs-meta); font-weight: 600; cursor: pointer; list-style: none; }
-details.rename > summary::-webkit-details-marker { display: none; }
-details.rename > summary:hover { text-decoration: underline; text-underline-offset: 3px; }
+details.tech > summary, details.rename > summary { display: inline-flex; align-items: center; min-height: 36px; padding: 0 4px; color: var(--accent-text); font-size: var(--fs-meta); font-weight: 400; cursor: pointer; list-style: none; }
+details.tech > summary::-webkit-details-marker, details.rename > summary::-webkit-details-marker { display: none; }
+details.tech > summary:hover, details.rename > summary:hover { text-decoration: underline; text-underline-offset: 3px; }
 details.rename[open] { flex-basis: 100%; padding-bottom: 4px; }
 details.rename[open] > summary { margin-bottom: 8px; }
 details.rename .form { max-width: none; }
+/* Copies: the developer words of a panel (church.db, --copy, current.txt, full paths, sizes in bytes) wait
+   under one fold, closed at the start; it opens with no JS. Its chevron is drawn as the one of the menu's
+   More fold and turns when it opens (CRIT-5) */
+details.tech { margin-top: 4px; }
+details.tech > summary { gap: 8px; margin-left: -4px; }   /* its text on the edge of the text above */
+details.tech > summary::after { content: ""; flex: none; width: 6px; height: 6px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: translateY(-2px) rotate(45deg); }
+details.tech[open] > summary::after { transform: translateY(2px) rotate(-135deg); }
+details.tech[open] > summary { margin-bottom: 4px; }
 
 /* Handover: the result is a tone step; a refusal is the pale negative pair (red is a state, D4) */
 .result, .refusal { margin-bottom: 16px; padding: 12px 16px; border-radius: var(--radius); font-size: var(--fs-meta); line-height: 20px; }
@@ -535,13 +638,9 @@ details.rename .form { max-width: none; }
 @media (max-width: 1023px) {
   .grid.sent > *, .grid.lists > *, .grid.copies > *, .grid.settings > * { grid-column: 1 / -1; }
 }
-@media (max-width: 640px) {
-  details.rename > summary { min-height: 44px; }
-}
 
 /* C3 round 2: the file of a Sent document under its subject; a file field that looks like the others */
 .cell-sub { display: block; color: var(--muted); font-size: var(--fs-small); line-height: 16px; font-weight: 400; }
-.cell-sub a { color: var(--text); }
 table.sent td:nth-child(-n+4) { white-space: nowrap; }
 table.sent td:last-child { width: 50%; }
 input[type="file"].input { height: auto; min-height: var(--control-height); padding: 5px 6px; font-size: var(--fs-meta); line-height: 28px; }
@@ -557,7 +656,7 @@ input[type="file"].input::file-selector-button:hover { background: var(--raised)
 
 /* Money: each Offering and Expense row ends with its Edit link (print.css hides .no-print) */
 table.money .edit { width: 1%; white-space: nowrap; text-align: right; }
-table.money td.edit a { color: var(--text); font-weight: 600; }
+table.money td.edit a { color: var(--accent-text); font-weight: 400; }
 @media (max-width: 640px) {
   /* line 1: the Date and its Edit link; line 2: the other fields, the amount at the right edge. The Edit
      link takes its own width ("Chỉnh sửa" is wider than "Edit"); an empty item after it ends line 1 */
@@ -614,11 +713,12 @@ table.money th.category { white-space: normal; line-height: 16px; }
 .row .what .file-name { overflow-wrap: anywhere; }
 
 /* ---------- FIX-T 3b ----------
-   B22: each row of the Documents list ends with its Delete text action, in ink like the Money Edit link
-   (not a button); it opens the one question. On a phone it sits at the right of line 1, beside the name.
+   B22: each row of the Documents list ends with its Delete text action, in the app color at weight 400 like
+   the Money Edit link (not a button; CRIT-1); it opens the one question. On a phone it sits at the right of
+   line 1, beside the name.
    The one question names the Document whole: a long name wraps, and may break inside the name. */
 table.documents td:last-child { width: 1%; white-space: nowrap; text-align: right; }
-table.documents td:last-child a { color: var(--text); font-weight: 600; }
+table.documents td:last-child a { color: var(--accent-text); font-weight: 400; }
 .confirm-name { overflow-wrap: anywhere; }
 [data-panel="confirm"] .kv + .hint { margin-top: 12px; }
 @media (max-width: 640px) {
@@ -639,66 +739,56 @@ table.documents td:last-child a { color: var(--text); font-weight: 600; }
 
 /* ---------- STYLE-2: a short window, and the Dashboard on one screen ----------
    From 861px wide and up to 720px high the menu is one notch tighter, on every page: all 13 items stay in
-   view. From 1181px wide the Dashboard page itself never scrolls: the canvas is one window high (at least
-   640px), the grid fills what is left under the title row, and a long list scrolls inside its own card
-   (the card title and its foot link stay in place). Row 1 takes what is left, but never less than its 2 cards
-   with one whole row in each list; row 2 is --dash-row2 high.
-   From 861px to 1180px the grid has 3 rows and the page may scroll; under 861px it is the top bar. Screen
-   only: on paper every list prints whole. */
+   view. From 1181px wide the Dashboard is 2 rows of cards under a tight title row.
+   The DASH RULE (CRIT-4), in this order: 1. no Dashboard list scrolls inside its card (the mouse wheel never
+   sticks in a card: no overflow, no fixed height on a list); 2. every row shown is whole; 3. each list shows
+   at most a fixed number of rows (dashboard.py: WEEK_ROWS, VISIT_ROWS, SENT_ROWS) and, when there are more,
+   its foot link names the full count; 4. from 1181px wide the page fits one screen at 1440x900 and 1280x800,
+   with titles on 2 lines. Each card is as high as its rows (no window-high canvas): below 800px high, and
+   from 861px to 1180px wide, the page itself may scroll. Under 861px it is the top bar. */
 @media (min-width: 861px) and (max-height: 720px) {
   .sidebar { padding: 14px 16px; gap: 12px; }
   .nav-item { min-height: 34px; }
 }
 @media screen and (min-width: 1181px) {
-  .canvas:has(> .dashboard) { height: 100vh; min-height: 640px; padding-bottom: 12px; display: flex; flex-direction: column; }
+  .canvas:has(> .dashboard) { padding-bottom: 12px; }
   .canvas:has(> .dashboard) > .lang-switch { position: absolute; top: 12px; right: 40px; margin: 0; z-index: 1; }
   /* a flash comes first at the canvas top: then the language switch goes back in the flow above it, as on
      every other page, so it never sits on the pale flash (STYLE-FIX-1) */
-  .canvas:has(> .dashboard):has(> .flash) > .lang-switch { position: static; flex: none; margin: 0 12px 4px; }
-  .canvas:has(> .dashboard) > .title-row { flex: none; margin-bottom: 12px; padding-top: 6px; padding-bottom: 8px; }
-  .canvas:has(> .dashboard) > .flash { flex: none; margin-bottom: 8px; }
-  .dashboard { flex: 1 1 0; min-height: 0; gap: 14px; grid-template-rows: minmax(min-content, 1fr) auto; }
-  .dashboard > .panel { min-height: 0; padding: 14px 20px 12px; }
+  .canvas:has(> .dashboard):has(> .flash) > .lang-switch { position: static; margin: 0 12px 4px; }
+  /* the title row is tight (the 14px canvas padding is its top): 14px more for the cards (rule 4) */
+  .canvas:has(> .dashboard) > .title-row { padding-top: 0; padding-bottom: 4px; margin-bottom: 8px; }
+  .canvas:has(> .dashboard) > .flash { margin-bottom: 8px; }
+  .dashboard { gap: 14px; }
+  .dashboard > .panel { padding: 14px 20px 12px; }
   .dashboard .panel > header { margin-bottom: 4px; }
   .dashboard .panel > header > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; }
   .dashboard .panel > footer { padding-top: 8px; }
+  /* a row is as high as its content: one line 40px, a title on 2 lines 56px (2 x 24px + 8px) */
   .dashboard .row { min-height: 40px; padding: 4px 0; }
-  /* a list scrolls inside its card: its height is fixed, so each row takes its content height (a title on
-     2 lines is 48px) and never its min-height only, or the 2nd line sits on the next row (STYLE-FIX-2) */
-  .dashboard > [data-panel="this-week"] .rows, .dashboard > [data-panel="needs-visit"] .rows,
-  .dashboard > [data-panel="sent-documents"] .rows {
-    flex: 1 1 0; min-height: 0; overflow-y: auto; align-content: start; overscroll-behavior: contain;
-    grid-auto-rows: max-content;
-    scrollbar-width: thin; scrollbar-color: var(--control) transparent; scrollbar-gutter: stable;
-    margin-right: -14px; padding-right: 6px; }
-  /* This week and Needs a visit always show one whole row: the list is at least as high as one row at its
-     tallest (a title on 2 lines: 2 x 24px + 8px padding) and row 1 grows to fit its cards (min-content). A
-     fixed 150px floor left Needs a visit 1px high, no row, at 1181x640 (STYLE-FIX-3) */
-  .dashboard > [data-panel="this-week"] .rows, .dashboard > [data-panel="needs-visit"] .rows { min-height: 56px; }
-  /* row 2 keeps its own height (B11), at least --dash-row2. Sent documents and Money this month are never
-     taller: the Sent rows scroll; the Money amounts sit 4px closer, and in an empty month (its dashed box
-     under them) the 3 zero amounts sit side by side, as on the Money page, so every word still shows
-     (STYLE-FIX-1: the empty card was 372-392px, and the page scrolled) */
+  /* row 2 keeps its own height (B11), at least --dash-row2. Money this month is never taller: its amounts
+     sit 4px closer, and in an empty month (its dashed box under them) the 3 zero amounts sit side by side,
+     as on the Money page, so every word still shows (STYLE-FIX-1: the empty card was 372-392px). Sent
+     documents has no cap: its 2 rows are whole, a long subject on 2 lines too (DASH RULE 2). Its date line
+     (date · Recipient · Purpose) is one line, the whole of it in its title, so a long Recipient name never
+     pushes the page past one screen (rule 4; on paper and under 1181px it may take 2 lines) */
   .dashboard > [data-panel="services"], .dashboard > [data-panel="money-month"],
   .dashboard > [data-panel="sent-documents"] { min-height: var(--dash-row2); }
-  .dashboard > [data-panel="money-month"], .dashboard > [data-panel="sent-documents"] { max-height: var(--dash-row2); }
+  .dashboard > [data-panel="sent-documents"] .row .what .sub { -webkit-line-clamp: 1; line-clamp: 1; }
+  .dashboard > [data-panel="money-month"] { max-height: var(--dash-row2); }
   .dashboard > [data-panel="money-month"] .kpi { padding: 4px 0; }
   .dashboard > [data-panel="money-month"]:has(> .empty) .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .dashboard > [data-panel="money-month"]:has(> .empty) .kpi + .kpi { border-top: 0; border-left: 1px solid var(--rule); padding-left: 12px; }
 }
 @media screen and (min-width: 1181px) and (max-height: 720px) {
+  /* a short window: the space between and in the cards is tighter, never the text (STYLE-FIX-3); the
+     Needs a visit hint takes the whole header width (one line, the count stays on the title line) */
   .dashboard .row { min-height: 34px; padding: 2px 0; }
   .dashboard > [data-panel="services"], .dashboard > [data-panel="money-month"],
   .dashboard > [data-panel="sent-documents"] { padding-top: 10px; padding-bottom: 8px; }
-  /* one row at its tallest is 52px here (2 x 24px + 4px). The height for it comes from the space around the
-     row 1 cards and the title row, never from the text, and the Needs a visit hint takes the whole header
-     width (one line, the count stays on the title line), so the page stays one screen down to 640px high
-     (STYLE-FIX-3) */
-  .dashboard > [data-panel="this-week"] .rows, .dashboard > [data-panel="needs-visit"] .rows { min-height: 52px; }
   .dashboard > [data-panel="needs-visit"] > header { flex-wrap: wrap; row-gap: 0; }
   .dashboard > [data-panel="needs-visit"] > header > div { display: contents; }
   .dashboard > [data-panel="needs-visit"] > header > div > .meta { order: 1; flex-basis: 100%; }
-  .canvas:has(> .dashboard) > .title-row { padding-top: 0; padding-bottom: 4px; margin-bottom: 8px; }
   .dashboard { row-gap: 10px; }
   .dashboard > [data-panel="this-week"], .dashboard > [data-panel="needs-visit"] { padding-top: 10px; padding-bottom: 8px; }
   .dashboard > [data-panel="this-week"] > header, .dashboard > [data-panel="needs-visit"] > header { margin-bottom: 2px; }
@@ -716,4 +806,26 @@ table.documents td:last-child a { color: var(--text); font-weight: 600; }
   @media (max-width: 860px) {
     .canvas::before { min-height: var(--wash-h-narrow); bottom: calc(anchor(--title-row bottom) - var(--wash-fade-narrow) - 8px); }
   }
+}
+
+/* ---------- CRIT-1: a whole row opens its page; every small action is a 44px tap on a phone ----------
+   In a table.list row whose first cell holds a link (People, Families, Chi phái, a history table,
+   Documents) that link covers the whole row: an empty ::after, the row is its box. Every other link, button
+   or form of that row stays on top and opens its own page. Screen only: on paper a row is text. A table in
+   its own scroll box (.table-wrap) keeps it: the row is inside the box.
+   Under 861px (a phone, a tablet) each small action is at least 44px high and all of it is the tap: the
+   language switch, a card foot link, a row action (Plan, Record, Rename, Hide/Show), a link in a table (a
+   Money table is a table.list too: its Edit; the Documents Delete), the Copies Technical details fold (CRIT-5).
+   The name link of a row keeps its line height (its tap is the whole row already). From 861px each keeps
+   its own size. */
+@media screen {
+  table.list tbody tr { position: relative; }
+  table.list td:first-child > a::after { content: ""; position: absolute; inset: 0; }
+  table.list tr:has(> td:first-child > a) > td:not(:first-child) :is(a, button, form) { position: relative; z-index: 1; }
+}
+@media (max-width: 860px) {
+  .lang-switch button, .card-link, .row .row-action, details.rename > summary, details.tech > summary, .link-btn,
+  table.list td a { display: inline-flex; align-items: center; min-height: 44px; }
+  .row .row-action { justify-content: flex-end; }
+  table.list td:first-child > a { margin-block: -12px; }
 }

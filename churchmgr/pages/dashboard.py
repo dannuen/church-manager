@@ -15,16 +15,18 @@ from ..i18n import t, tn
 from ..server import Response
 from ..ui import clamp2, h, vi
 
-WEEK_ROWS = 6  # Calendar items shown before "View all"
-VISIT_ROWS = 6  # Persons shown in Needs a visit (the card allows up to 10; the design rule caps lists at 4-6)
+# DASH RULE (CRIT-4): a Dashboard list never scrolls inside its card. It shows at most this many rows; when
+# there are more, its foot link names the full count ("View all N ..."). The numbers are below the 5/5/2 of
+# the rule so the page fits 1280x800 with every title on 2 lines (rule 4). Needs a visit has one row less than
+# the Next 7 days: its head is 41px taller (the hint line and the list head), so the 2 cards of row 1 end level.
+WEEK_ROWS = 4  # Calendar items of the Next 7 days
+VISIT_ROWS = 3  # Persons in Needs a visit
 HEAD_COUNTS = 8
 SENT_ROWS = 2  # B17: 2 recent rows keep Sent documents level with Services and Money this month
 CHART_HEIGHT = 154  # px, the Services chart at every width
 # Row 2 of the 12 columns: Services, Money this month, Sent documents (4 + 4 + 4)
 ROW2_SPANS = ("span-4", "span-4", "span-4")
 _FAILED = object()
-# Round chart steps: 1, 2, 5, 10, 20, 25, 50, ... (integers only).
-_STEPS = tuple(sorted({m * 10 ** e for e in range(9) for m in (1, 2, 5)} | {25 * 10 ** e for e in range(8)}))
 TREND_WORDS = {"Up": "dashboard.trend_up", "Down": "dashboard.trend_down", "Same": "dashboard.trend_same"}
 
 
@@ -45,13 +47,14 @@ def trend(counts):
     return word, (2 * total + k) // (2 * k)
 
 
-def nice_scale(max_value):
-    """Y axis for counts: ``(top, step)`` with round steps, ``top > max_value``, at most 4 steps."""
-    for step in _STEPS:
-        top = (max_value // step + 1) * step
-        if top // step <= 4:
-            return top, step
-    return max_value + 1, max_value + 1
+def fit_scale(low_value, high_value):
+    """Y axis that fits the Head counts (CRIT-9): ``(low, high)``, the lowest count rounded down to 10 and
+    the highest rounded up to 10. They stay at least 20 apart: 10 apart, the top grows by 10; 0 apart, the
+    top and the bottom grow by 10 each (the bottom never under 0, then the top takes it). Integers only."""
+    low, high = low_value // 10 * 10, -(-high_value // 10) * 10
+    short = max(0, 20 - (high - low))
+    down = min(low, short // 20 * 10)
+    return low - down, high + short - down
 
 
 def services_svg(rows):
@@ -61,11 +64,14 @@ def services_svg(rows):
     percentages, and the line sits in an inner SVG stretched across the plot (its stroke does not
     scale). So the 12px text keeps its size and the Services card keeps its height when the window
     changes. The y ticks and the last value sit in the side padding of ``.chart`` (style.css).
+    The y scale fits the counts (``fit_scale``), not 0 to a round top, so a change from 91 to 74 shows;
+    its two lines, the low and the high one, carry their numbers, so the scale is honest. The low line is
+    the darker base line only when it is 0.
     With more than 5 Services every second date is labelled, counted back from the last one.
     """
     counts = [r["count"] for r in rows]
     n = len(counts)
-    top, step = nice_scale(max(counts))
+    low, high = fit_scale(min(counts), max(counts))
     height, pad_top, bottom = CHART_HEIGHT, 10, 28
     plot_h = height - pad_top - bottom
 
@@ -73,10 +79,10 @@ def services_svg(rows):
         return 100 * i / (n - 1) if n > 1 else 50
 
     def y(c):
-        return pad_top + plot_h - plot_h * c / top
+        return pad_top + plot_h - plot_h * (c - low) / (high - low)
 
     parts = []
-    for v in range(0, top + 1, step):
+    for v in (low, high):
         yy = y(v)
         cls = "gridline base" if v == 0 else "gridline"
         parts.append(f'<line class="{cls}" x1="0" x2="100%" y1="{yy:.1f}" y2="{yy:.1f}"/>')
@@ -163,7 +169,7 @@ def _this_week(items, today, span):
     body = f'<ul class="rows">{"".join(rows)}</ul>' if rows else _empty(t("dashboard.nothing_week"))
     more = (t("dashboard.view_all_calendar", n=len(items)) if len(items) > WEEK_ROWS
             else t("dashboard.open_calendar"))
-    # the same 7 days on the Calendar (not its Monday-to-Sunday week), so the count matches
+    # the same 7 days on the Calendar (its 7-day view, not its Monday-to-Sunday week), so the count matches
     href = ui.url("/calendar", **{"from": today.isoformat()})
     return _panel(name, title, body, meta=meta, foot=_link(more, href), span=span)
 
@@ -260,7 +266,9 @@ def _sent_documents(next_number, recent, year, span):
         rows.append(f'<li class="row" data-row><span class="what wrap">{subject}'
                     f'{clamp2(sub, sub_text, cls="sub")}</span></li>')
     body += f'<ul class="rows">{"".join(rows)}</ul>' if rows else _empty(t("dashboard.no_sent"))
-    return _panel(name, title, body, meta=h(meta), foot=_link(t("dashboard.open_sent"), "/sent"), span=span)
+    # /sent lists this year: more than SENT_ROWS this year means the rows shown are this year's newest
+    more = t("dashboard.view_all_sent", n=count) if count > SENT_ROWS else t("dashboard.open_sent")
+    return _panel(name, title, body, meta=h(meta), foot=_link(more, "/sent"), span=span)
 
 
 def _search_panel():
@@ -303,9 +311,8 @@ def dashboard(req):
     next_number = _load(sent.next_number, conn, today.year)
     recent = _load(_recent_sent, conn, today.year)
 
+    # how many need a visit is the count on the Needs a visit card: not again in this line (CRIT-3)
     finding = [f"{ui.fmt_weekday(today)} {ui.fmt_date(today)}"]
-    if needs is not _FAILED:
-        finding.append(tn("dashboard.finding_needs", len(needs)))
     if week is not _FAILED:
         finding.append(tn("dashboard.finding_week", len(week)))
     body = (

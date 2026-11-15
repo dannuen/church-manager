@@ -1,9 +1,13 @@
-// Church Manager: the only script. Four jobs: live search (with a short wait), the print button, the
-// file size check and the one-send forms. Pages work without it. Results are built with textContent, never innerHTML.
+// Church Manager: the only script. Five jobs: live search (with a short wait), the print button, the
+// file size check, the one-send forms and the month fields that open a month on change (CRIT-8). Pages work
+// without it: it marks <html class="js"> first, and only then style.css hides what the script replaces.
+// Results are built with textContent, never innerHTML.
 // No words live here: the page gives them in its own language (data-text-none, data-text-failed,
 // data-text-too-large).
 (function () {
   "use strict";
+
+  document.documentElement.classList.add("js");
 
   document.querySelectorAll("form[data-live-search]").forEach(function (form) {
     var input = form.querySelector("input[name=q]");
@@ -99,5 +103,30 @@
   });
   window.addEventListener("pageshow", function () {
     document.querySelectorAll("form[data-once]").forEach(function (form) { once(form, false); });
+  });
+
+  // <form data-auto-submit> with an <input type="month">: a chosen month opens at once (no Show click; under
+  // html.js style.css hides Show). A pick from the browser's month box sends on change. A typed key fires
+  // change too ("1" of "12" is already January), so after a key the form waits for Enter (the browser sends
+  // it) or for the field to lose the focus. Only a whole month that passes the field's own check (1900-01 to
+  // 9999-12) and is not the month on the page is sent. Back shows the page's month again in the field.
+  document.querySelectorAll("form[data-auto-submit]").forEach(function (form) {
+    var input = form.querySelector("input[type=month]");
+    if (!input) { return; }
+    var typed = false;
+
+    function send() {
+      typed = false;
+      var whole = /^[0-9]{4}-[0-9]{2}$/.test(input.value);
+      if (!whole || !input.checkValidity() || input.value === input.defaultValue) { return; }
+      if (form.requestSubmit) { form.requestSubmit(); } else { form.submit(); }
+    }
+
+    input.addEventListener("pointerdown", function () { typed = false; });
+    input.addEventListener("keydown", function (e) { if (e.key !== "Tab" && e.key !== "Enter") { typed = true; } });
+    input.addEventListener("change", function () { if (!typed) { send(); } });
+    input.addEventListener("blur", function () { if (typed) { send(); } });
+    form.addEventListener("submit", function () { typed = false; });
+    window.addEventListener("pageshow", function () { input.value = input.defaultValue; typed = false; });
   });
 })();
