@@ -642,7 +642,7 @@ class FormControlsTest(PagesTestBase):
     style.css paints red."""
 
     STYLED = {".input", ".btn", ".link-btn", ".lang-switch button", 'input[type="checkbox"]',
-              "details.change > summary", "details.rename > summary", ".nav-more > summary"}
+              "details.change > summary", "details.rename > summary", ".nav-more > summary", "details.tech > summary"}
 
     def test_every_form_control_carries_a_class_style_css_styles(self):
         conn = self.db()
@@ -667,7 +667,8 @@ class FormControlsTest(PagesTestBase):
                 self.assertTrue(cls and {"input", "btn", "link-btn"} & set(cls.group(1).split()),
                                 (path, tag, attrs))
             for attrs in re.findall(r"<details\b([^>]*)>", page):  # its summary is a pill or a text action
-                self.assertRegex(attrs, r'class="(change|rename|nav-more)"', path)  # nav-more: the menu (CRIT-2)
+                # nav-more: the menu (CRIT-2); tech: a Technical details fold of the Copies page (CRIT-5)
+                self.assertRegex(attrs, r'class="(change|rename|nav-more|tech)"', path)
         for selector in self.STYLED:
             self.assertTrue(declarations(selector), selector)
 
@@ -1227,10 +1228,10 @@ class CritOneTest(PagesTestBase):
         for selector in (".link-btn", "details.rename > summary"):
             self.assertFalse([s for s, _b in media_rules("(max-width: 640px)")
                               if selector in (x.strip() for x in s.split(","))], selector)
-        # from 861px each keeps its own size
+        # from 861px each keeps its own size (the Copies Technical details fold shares the Rename rule, CRIT-5)
         top = top_level_rules()
         for selector, height in ((".lang-switch button", "28px"), (".link-btn", "36px"),
-                                 ("details.rename > summary", "36px")):
+                                 ("details.tech > summary, details.rename > summary", "36px")):
             self.assertEqual(whole_rule(top, selector)["min-height"], height, selector)
         for selector in (".card-link", ".row .row-action", "table.money td.edit a"):
             self.assertNotIn("min-height", whole_rule(top, selector), selector)
@@ -1589,6 +1590,40 @@ class CritFourTest(PagesTestBase):
         # 1 this year and last year's newest under it: /sent lists this year only (1), so no count is named
         box = dashboard._sent_documents("02/2026", (1, [row, row]), TODAY.year, "span-4")
         self.assertIn(f">{opened}</a>", box)
+
+
+class CritFiveTest(PagesTestBase):
+    """CRIT-5, critique row 10: the Copies page puts its developer words (church.db, --copy, current.txt, full
+    paths, sizes in bytes) under one "Technical details" fold per panel that holds them: a ``<details
+    class="tech">``, closed at the start, that opens with no JS. Its summary shares the Rename rule (a plain word
+    in the app color, weight 400), is a 44px tap under 861px, and has a drawn chevron that turns when it opens.
+    The words of both languages, inside and outside the folds: test_i18n_copies.CopiesScreensTest."""
+
+    def test_the_fold_has_the_rename_look_and_a_drawn_chevron(self):
+        top = top_level_rules()
+        shared = whole_rule(top, "details.tech > summary, details.rename > summary")
+        self.assertEqual((shared["color"], shared["font-weight"], shared["list-style"], shared["min-height"]),
+                         ("var(--accent-text)", "400", "none", "36px"))
+        marker = "details.tech > summary::-webkit-details-marker, details.rename > summary::-webkit-details-marker"
+        self.assertEqual(whole_rule(top, marker), {"display": "none"})
+        self.assertEqual(whole_rule(top, "details.tech > summary"), {"gap": "8px", "margin-left": "-4px"})
+        chevron = whole_rule(top, "details.tech > summary::after")
+        self.assertEqual((chevron["content"], chevron["border-width"], chevron["transform"]),
+                         ('""', "0 1.5px 1.5px 0", "translateY(-2px) rotate(45deg)"))
+        self.assertEqual(whole_rule(top, "details.tech[open] > summary::after"),
+                         {"transform": "translateY(2px) rotate(-135deg)"})
+        rule = media_wins(PHONE, "details.tech > summary")
+        self.assertEqual((rule.get("display"), rule.get("align-items"), rule.get("min-height")),
+                         ("inline-flex", "center", "44px"))
+
+    def test_the_copies_page_has_one_closed_fold_per_panel_with_developer_words(self):
+        page = self.page("/copies")
+        self.assertEqual(page.count("<details"), 4, "the menu's More fold and 3 Technical details folds")
+        for name in ("this-copy", "copies", "handover"):
+            box = section(page, name)
+            self.assertEqual(box.count("<details"), 1, name)
+            self.assertIn('<details class="tech"><summary>Technical details</summary>', box, name)
+        self.assertNotIn("<details", section(page, "new-church-setup"))  # no developer word there
 
 
 if __name__ == "__main__":

@@ -13,6 +13,9 @@ Rules kept here:
   folder itself, never by a path from the request. OneDrive folders are refused.
 - Words on screen come from the text table (section ``copies``). Paths and file names are data: shown
   as they are, never translated.
+- Developer words (``church.db``, ``--copy``, ``current.txt``, full paths, sizes in bytes) wait under one
+  closed "Technical details" fold per panel (``tech_fold``), where they were; the words outside it say in
+  plain words which church copy is open and what the pastor can do (CRIT-5).
 """
 
 import sqlite3
@@ -73,11 +76,20 @@ def path_html(path):
             + "</span>")
 
 
-def size_text(size):
-    """``fmt_size`` in the words of the page: below 1 KB it says ``byte`` itself.
-    shortcut: ``pages/documents.py`` (another card) still writes ``byte``/``bytes`` in English; use its
-    ``fmt_size`` alone once that card puts it in the text table."""
-    return tn("copies.bytes", size) if size < 1024 else fmt_size(size)
+def size_text(size, lang=None):
+    """A size in plain words: ``under 1 KB`` below 1 KB, else ``fmt_size`` (integer maths only). The size
+    in bytes is a developer word: only a Technical details fold shows it (``fmt_size`` there)."""
+    return t("copies.under_kb", lang) if size < 1024 else fmt_size(size, lang)
+
+
+def tech_fold(inner_html):
+    """``inner_html`` (the developer words of one panel) under one "Technical details" fold: a plain
+    ``<details>``, closed at the start, that opens with no JS."""
+    return f'<details class="tech"><summary>{h(t("copies.tech"))}</summary>{inner_html}</details>'
+
+
+def _kv(rows):
+    return '<dl class="kv wide">' + "".join(f"<div><dt>{h(k)}</dt><dd>{v}</dd></div>" for k, v in rows) + "</dl>"
 
 
 def _read_copy(folder):
@@ -183,38 +195,52 @@ def _safe_label(label, bodies, fallback):
 # ---------------------------------------------------------------- /copies
 
 def _this_copy(req):
+    """Plain rows (church, what is inside, which church copy opens at start), then the fold with the folders,
+    ``church.db``, the size in bytes, ``current.txt`` and ``--copy``, then the OneDrive warning."""
     state = req.state
     current = paths.read_current(state.copies_root)
     current_txt = mark(paths.CURRENT_FILE)
     if current is not None and current.resolve() == state.copy_folder:
-        at_start = ui.t_html("copies.start_this", file=current_txt)
+        at_start = h(t("copies.this_copy"))
+        at_start_tech = ui.t_html("copies.start_this", file=current_txt)
     elif current is not None:
-        at_start = ui.t_html("copies.start_other", path=path_html(current), file=current_txt)
+        at_start = h(t("copies.start_other_plain"))
+        at_start_tech = ui.t_html("copies.start_other", path=path_html(current), file=current_txt)
     else:
-        at_start = ui.DASH
+        at_start = at_start_tech = ui.DASH
     if not state.remember:
-        at_start += ('<br><span class="faint">'
-                     + ui.t_html("copies.set_folder", flag=mark("--copy"), file=current_txt) + "</span>")
+        at_start += f'<br><span class="faint">{h(t("copies.set_folder_plain"))}</span>'
+        at_start_tech += ('<br><span class="faint">'
+                          + ui.t_html("copies.set_folder", flag=mark("--copy"), file=current_txt) + "</span>")
     counts = req.conn.execute(
         "SELECT (SELECT COUNT(*) FROM person), (SELECT COUNT(*) FROM document), "
         "(SELECT COALESCE(SUM(size), 0) FROM document)").fetchone()
-    inside = ui.t_html("copies.inside", db=mark(db.DB_NAME), people=h(tn("people.count", counts[0])),
-                       documents=h(tn("copies.documents", counts[1])), size=h(size_text(counts[2])))
+    persons, docs = h(tn("people.count", counts[0])), h(tn("copies.documents", counts[1]))
+    inside = ui.t_html("copies.inside_plain", people=persons, documents=docs, size=h(size_text(counts[2])))
+    inside_tech = ui.t_html("copies.inside", db=mark(db.DB_NAME), people=persons, documents=docs,
+                            size=h(fmt_size(counts[2])))
     rows = [
         (t("copies.church"), vi(req.church_name)),
-        (t("copies.saved_in_row"), path_html(state.copy_folder)),
-        (t("copies.copies_folder"), path_html(state.copies_root)),
         (t("copies.inside_row"), inside),
         (t("copies.opens_at_start"), at_start),
     ]
-    kv = '<dl class="kv wide">' + "".join(f"<div><dt>{h(k)}</dt><dd>{v}</dd></div>" for k, v in rows) + "</dl>"
+    tech = [
+        (t("copies.saved_in_row"), path_html(state.copy_folder)),
+        (t("copies.copies_folder"), path_html(state.copies_root)),
+        (t("copies.inside_row"), inside_tech),
+        (t("copies.opens_at_start"), at_start_tech),
+    ]
+    # the fold before the warning: its "copy the whole folder above" (vi) points at the Saved in folder
     note = f'<p class="hint">{h(t("copies.keep_outside"))}</p>'
-    return panel("this-copy", t("copies.this_copy"), kv + note)
+    return panel("this-copy", t("copies.this_copy"), _kv(rows) + tech_fold(_kv(tech)) + note)
 
 
 def _copies_panel(req, error):
+    """The church copies of the copies folder. Under the title the plain words say how to open another one
+    (only when one can be opened); the fold says what is listed (folders that hold ``church.db``)."""
     state = req.state
     lines = []
+    can_open = False
     for c in list_copies(state.copies_root):
         is_open = c["folder"] == state.copy_folder
         name = vi(c["name"]) if c["name"] else f'<span class="faint">{h(t("copies.cannot_read"))}</span>'
@@ -225,6 +251,7 @@ def _copies_panel(req, error):
         elif c["name"] is None:
             action = ui.DASH
         else:
+            can_open = True
             label = h(t("copies.open_label", name=c["name"]))
             action = (f'<form class="row-form" action="/copies/open" method="post">{ui.hidden("folder", c["folder"].name)}'
                       f'<button class="btn secondary" type="submit" aria-label="{label}">{h(t("core.btn_open"))}</button>'
@@ -239,18 +266,18 @@ def _copies_panel(req, error):
         body = empty(t("copies.no_copies"))
     if error and error[0] == "open":
         body = f'<p class="error" role="alert">{h(i18n.error_text(error[1]))}</p>' + body
-    meta = ui.t_html("copies.list_meta", db=mark(db.DB_NAME))
+    body += tech_fold(f'<p class="hint">{ui.t_html("copies.list_meta", db=mark(db.DB_NAME))}</p>')
+    meta = h(t("copies.list_hint")) if can_open else ""
     return panel("copies", t("copies.list_title"), body, meta=meta)
 
 
-def _handover_result(req):
-    made = find_handover(req.state.copies_root, req.query.get("made") or "")
+def _handover_result(made):
+    """The box above the Make Handover button after a Handover was made (``made``: its zip, or ``None``).
+    Where the zip is saved, and its size in bytes, are in the fold of the panel."""
     if made is None:
         return ""
-    saved_as = ui.t_html("copies.saved_as", path=path_html(made), size=h(size_text(made.stat().st_size)))
     return ('<div class="result" role="status" data-row>'
             f'<p><strong>{h(t("copies.made"))}</strong> {h(t("copies.notes_removed"))}</p>'
-            f'<p class="hint">{saved_as}</p>'
             f'<p><a class="btn secondary" href="/copies/handovers/{h(made.name)}">{h(t("copies.download"))}</a></p>'
             "</div>")
 
@@ -345,9 +372,13 @@ def _refusal_html(conn, copy_folder, refusal):
 def _handover_panel(req, refusal):
     root = req.state.copies_root
     out = handovers_dir(root)
+    made_now = find_handover(root, req.query.get("made") or "")
     intro = f'<p>{h(t("copies.handover_intro"))}</p>'
     form = ui.form("/copies/handover", ui.button(t("copies.make")))
     where = f'<p class="hint">{ui.t_html("copies.saved_in", path=path_html(out))}</p>'
+    if made_now is not None:
+        where += ('<p class="hint">' + ui.t_html("copies.saved_as", path=path_html(made_now),
+                                                 size=h(fmt_size(made_now.stat().st_size))) + "</p>")
     made = list_handovers(root)
     if made:
         rows = "".join(
@@ -358,7 +389,7 @@ def _handover_panel(req, refusal):
     else:
         listing = ""
     refusal_html = _refusal_html(req.conn, req.state.copy_folder, refusal) if refusal else ""
-    body = _handover_result(req) + refusal_html + intro + form + where + listing
+    body = _handover_result(made_now) + refusal_html + intro + form + tech_fold(where) + listing
     return panel("handover", t("copies.handover"), body)
 
 

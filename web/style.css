@@ -567,15 +567,24 @@ table.money.expenses td:nth-child(3) { color: var(--muted); }
 .inline-add > .btn { margin-top: 28px; }   /* the label line (20px) + its gap (8px): level with the field */
 .add-form .inline-add .field label { font-weight: 500; }
 
-/* each list item: name, what uses it, Hide/Show, Rename (the form opens on its own line) */
+/* each list item: name, what uses it, Hide/Show, Rename (the form opens on its own line). The Copies
+   "Technical details" fold (details.tech) has the same summary: a plain word in the app color (CRIT-5) */
 .list-item { flex-wrap: wrap; }
 .list-item .side { max-width: none; }   /* "6 người đang phục vụ" is never cut while the row has room */
-details.rename > summary { display: inline-flex; align-items: center; min-height: 36px; padding: 0 4px; color: var(--accent-text); font-size: var(--fs-meta); font-weight: 400; cursor: pointer; list-style: none; }
-details.rename > summary::-webkit-details-marker { display: none; }
-details.rename > summary:hover { text-decoration: underline; text-underline-offset: 3px; }
+details.tech > summary, details.rename > summary { display: inline-flex; align-items: center; min-height: 36px; padding: 0 4px; color: var(--accent-text); font-size: var(--fs-meta); font-weight: 400; cursor: pointer; list-style: none; }
+details.tech > summary::-webkit-details-marker, details.rename > summary::-webkit-details-marker { display: none; }
+details.tech > summary:hover, details.rename > summary:hover { text-decoration: underline; text-underline-offset: 3px; }
 details.rename[open] { flex-basis: 100%; padding-bottom: 4px; }
 details.rename[open] > summary { margin-bottom: 8px; }
 details.rename .form { max-width: none; }
+/* Copies: the developer words of a panel (church.db, --copy, current.txt, full paths, sizes in bytes) wait
+   under one fold, closed at the start; it opens with no JS. Its chevron is drawn as the one of the menu's
+   More fold and turns when it opens (CRIT-5) */
+details.tech { margin-top: 4px; }
+details.tech > summary { gap: 8px; margin-left: -4px; }   /* its text on the edge of the text above */
+details.tech > summary::after { content: ""; flex: none; width: 6px; height: 6px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: translateY(-2px) rotate(45deg); }
+details.tech[open] > summary::after { transform: translateY(2px) rotate(-135deg); }
+details.tech[open] > summary { margin-bottom: 4px; }
 
 /* Handover: the result is a tone step; a refusal is the pale negative pair (red is a state, D4) */
 .result, .refusal { margin-bottom: 16px; padding: 12px 16px; border-radius: var(--radius); font-size: var(--fs-meta); line-height: 20px; }
@@ -766,15 +775,16 @@ table.documents td:last-child a { color: var(--accent-text); font-weight: 400; }
    its own scroll box (.table-wrap) keeps it: the row is inside the box.
    Under 861px (a phone, a tablet) each small action is at least 44px high and all of it is the tap: the
    language switch, a card foot link, a row action (Plan, Record, Rename, Hide/Show), a link in a table (a
-   Money table is a table.list too: its Edit; the Documents Delete). The name link of a row keeps its line
-   height (its tap is the whole row already). From 861px each keeps its own size. */
+   Money table is a table.list too: its Edit; the Documents Delete), the Copies Technical details fold (CRIT-5).
+   The name link of a row keeps its line height (its tap is the whole row already). From 861px each keeps
+   its own size. */
 @media screen {
   table.list tbody tr { position: relative; }
   table.list td:first-child > a::after { content: ""; position: absolute; inset: 0; }
   table.list tr:has(> td:first-child > a) > td:not(:first-child) :is(a, button, form) { position: relative; z-index: 1; }
 }
 @media (max-width: 860px) {
-  .lang-switch button, .card-link, .row .row-action, details.rename > summary, .link-btn,
+  .lang-switch button, .card-link, .row .row-action, details.rename > summary, details.tech > summary, .link-btn,
   table.list td a { display: inline-flex; align-items: center; min-height: 44px; }
   .row .row-action { justify-content: flex-end; }
   table.list td:first-child > a { margin-block: -12px; }
