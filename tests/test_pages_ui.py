@@ -29,6 +29,8 @@ CRIT-6 (class CritSixTest): in the People list a Person who Left or Passed away 
 Status as a tag; the All list keeps everyone (the pastor chose A).
 CRIT-7 (class CritSevenTest): the one dark card is Needs a visit (the pastor chose B); Money this month is a
 white card; a name on the dark card is underlined to show it is a link.
+CRIT-8 (class CritEightTest): the Calendar and Money period bar: Prev / This / Next on one line, the month
+chips say MM/YYYY, the month picker opens a month on change with app.js (Show stays without it).
 """
 
 import datetime as dt
@@ -1755,6 +1757,101 @@ class CritSevenTest(PagesTestBase):
     def add_offering(self):
         conn = self.db()
         money.add_offering(conn, TODAY.isoformat(), 100_000, lists.find_item(conn, "fund", name="General")["id"])
+
+
+class CritEightTest(PagesTestBase):
+    """CRIT-8, critique row 9: the period bar of the Calendar and Money is one nav. Prev / This / Next sit in
+    ``.period``, a grid of one row: no chip goes to the next line alone (on a phone the words of Prev and Next
+    may take 2 lines inside the pill; the middle chip keeps one line). The month chips say ``‹ MM/YYYY`` and
+    ``MM/YYYY ›``. The view chips (``.views``: Week, Month) and the "Go to a month" picker follow. The picker
+    opens the chosen month on change with app.js (``data-auto-submit``, its 5th job); style.css hides Show only
+    under ``html.js``, so with no script Show sends the form. The sizes (one line at 390 and 360px, vi and en,
+    no sideways scroll) and the picker with the script on and off are measured in a browser: see the card."""
+
+    CHIP = r'<a class="chip" href="([^"]+)"(?: aria-current="true")?>([^<]+)</a>'
+
+    def bar(self, path):
+        """``(nav label, [(href, words)] of .period, [(href, words)] of .views, the picker form)`` of ``path``."""
+        page = self.page(path)
+        nav = re.search(r'<nav class="list-toolbar" aria-label="([^"]+)">(.*?)</nav>', page, re.S)
+        self.assertIsNotNone(nav, path)
+        period = re.search(r'<div class="period">(.*?)</div>', nav.group(2), re.S).group(1)
+        views = re.search(r'<div class="chips views">(.*?)</div>', nav.group(2), re.S)
+        form = re.search(r'<form class="month-picker".*?</form>', nav.group(2), re.S).group(0)
+        return (nav.group(1), re.findall(self.CHIP, period), re.findall(self.CHIP, views.group(1)) if views else [],
+                form)
+
+    def test_the_month_chips_say_mm_yyyy_and_the_view_chips_stand_apart(self):
+        this = f"{TODAY:%Y-%m}"
+        label, period, views, _form = self.bar("/calendar?month=2030-01")
+        self.assertEqual(label, "Calendar months")
+        self.assertEqual(period, [("/calendar?month=2029-12", "‹ 12/2029"), (f"/calendar?month={this}", "This month"),
+                                  ("/calendar?month=2030-02", "02/2030 ›")])
+        self.assertEqual(views, [("/calendar?week=2030-01-01", "Week")])
+        label, period, views, _form = self.bar("/money?month=2030-01")
+        self.assertEqual(label, "Money months")
+        self.assertEqual(period, [("/money?month=2029-12", "‹ 12/2029"), ("/money", "This month"),
+                                  ("/money?month=2030-02", "02/2030 ›")])
+        self.assertEqual(views, [])
+        from churchmgr.pages import calendar as cal_pages
+        self.assertEqual(cal_pages.month_chip("{} ›", "/money", (1900, 2)),
+                         '<a class="chip" href="/money?month=1900-02">02/1900 ›</a>')  # the same in Tiếng Việt: no t()
+        self.assertEqual(cal_pages.month_chip("‹ {}", "/money", None), "")
+
+    def test_week_and_7_day_chips_keep_their_words_and_every_period_stays_reachable(self):
+        label, period, views, _form = self.bar("/calendar?week=2030-01-07")
+        self.assertEqual(label, "Calendar weeks")
+        self.assertEqual(period, [("/calendar?week=2029-12-31", "‹ Previous week"), ("/calendar", "This week"),
+                                  ("/calendar?week=2030-01-14", "Next week ›")])
+        self.assertEqual(views, [("/calendar?month=2030-01", "Month")])
+        label, period, views, _form = self.bar("/calendar?from=2030-01-07")
+        self.assertEqual(label, "Calendar 7 days")
+        self.assertEqual(period, [("/calendar?from=2029-12-31", "‹ Previous 7 days"),
+                                  (f"/calendar?from={TODAY.isoformat()}", "From today"),
+                                  ("/calendar?from=2030-01-14", "Next 7 days ›")])
+        self.assertEqual(views, [("/calendar?week=2030-01-07", "Week"), ("/calendar?month=2030-01", "Month")])
+
+    def test_the_picker_opens_a_month_on_change_and_keeps_show_for_pages_without_the_script(self):
+        for path, action, field, show in (("/calendar", "/calendar", "cal-month", "Show"),
+                                          ("/calendar?from=2030-01-07", "/calendar", "cal-month", "Show"),
+                                          ("/money", "/money", "money-month", "Show")):
+            form = self.bar(path)[3]
+            self.assertTrue(form.startswith(f'<form class="month-picker" action="{action}" method="get" '
+                                            'data-auto-submit>'), path)
+            self.assertIn(f'id="{field}" name="month" type="month"', form)
+            self.assertIn(f'<button class="btn secondary" type="submit">{show}</button>', form)  # no script: Show
+        # style.css hides Show only when app.js has run (html.js); no other rule hides it
+        self.assertEqual(rule_props('.js form[data-auto-submit] button[type="submit"]'), {"display": "none"})
+        self.assertEqual([sel for sel, _body in css_rules() if "data-auto-submit" in sel],
+                         ['.js form[data-auto-submit] button[type="submit"]'])
+        js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+        code = re.sub(r"^\s*//.*$", "", js, flags=re.M)
+        self.assertIn("Five jobs", js)
+        # html.js is set first, before any job: then CSS may hide what the script replaces
+        self.assertLess(code.index('document.documentElement.classList.add("js")'), code.index("querySelectorAll"))
+        job = code[code.index('querySelectorAll("form[data-auto-submit]")'):]
+        for part in ('input[type=month]', '"change"', "checkValidity()", "/^[0-9]{4}-[0-9]{2}$/",
+                     "input.defaultValue", "requestSubmit", '"keydown"', '"blur"', '"pageshow"'):
+            self.assertIn(part, job)
+        self.assertNotIn("innerHTML", code)
+
+    def test_prev_this_next_are_one_row_that_never_wraps_a_chip(self):
+        period = rule_props(".period")
+        self.assertEqual((period["display"], period["grid-auto-flow"], period["justify-content"]),
+                         ("grid", "column", "start"))
+        chip = rule_props(".period > .chip")
+        self.assertEqual((chip["text-wrap"], chip["text-align"], chip["line-height"]), ("balance", "center", "18px"))
+        # the middle chip (This week, From today, This month) keeps its one line when Prev and Next are there
+        self.assertEqual(rule_props(".period:has(> :nth-child(3)) > :nth-child(2)"), {"min-width": "max-content"})
+        self.assertEqual(rule_props(".list-toolbar > .views"), {"margin-right": "auto"})
+        # a phone: the three take line 1, one notch tighter; the picker may sit beside the view chips
+        self.assertEqual(media_wins(SMALL, ".period"), {"flex": "1 1 100%", "gap": "6px"})
+        self.assertEqual(media_wins(SMALL, ".period > .chip"), {"padding": "0 10px"})
+        self.assertEqual(media_wins(SMALL, ".month-picker"), {"flex": "1 1 auto"})
+        self.assertEqual(media_wins(SMALL, ".year-form"), {"flex": "1 1 100%"})
+        for sel, body in css_rules():
+            if "period" in sel:
+                self.assertNotRegex(body, r"overflow|nowrap|scroll|flex-wrap", sel)  # no strip that scrolls
 
 
 if __name__ == "__main__":

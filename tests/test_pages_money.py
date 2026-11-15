@@ -197,14 +197,14 @@ class MoneyPagesTest(PagesTestBase):
         page = self.page("/money?month=1900-01")
         self.assertNotIn("December 1899", page)
         self.assertNotIn("month=1899-12", page)
-        self.assertIn('href="/money?month=1900-02">February 1900 ›</a>', page)
+        self.assertIn('href="/money?month=1900-02">02/1900 ›</a>', page)  # CRIT-8: the short month
         self.assertIn("This month", page)
         self.assertIn("1.900.001 ₫", section(page, "money-totals"))
         money.add_offering(self.db(), "9999-12-31", 9_999_001, self.fund())  # the data layer takes a far date
         page = self.page("/money?month=9999-12")
         self.assertNotIn("January 10000", page)
         self.assertNotIn("month=10000-01", page)
-        self.assertIn('href="/money?month=9999-11">‹ November 9999</a>', page)
+        self.assertIn('href="/money?month=9999-11">‹ 11/9999</a>', page)
         self.assertIn("This month", page)
         self.assertIn("9.999.001 ₫", section(page, "money-totals"))
         self.assertIn(shown("9999-12-31"), section(page, "offerings"))

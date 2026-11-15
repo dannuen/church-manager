@@ -169,6 +169,11 @@ class MoneyTwoLanguagesTest(unittest.TestCase):
         self.assertIn('<span class="kpi-label">Số dư</span>', page)
         self.assertIn('<a class="btn primary" href="/money/offerings/new">Ghi Dâng hiến</a>', page)
         self.assertIn('<label for="money-month">Đến tháng</label>', page)
+        # CRIT-8: the month chips say MM/YYYY in Tiếng Việt too, This month keeps its words
+        chips = self.get("vi", "/money?month=2001-01")
+        for chip in ('href="/money?month=2000-12">‹ 12/2000</a>', 'href="/money">Tháng này</a>',
+                     'href="/money?month=2001-02">02/2001 ›</a>'):
+            self.assertIn(chip, chips)
         offerings = section(page, "offerings")
         self.assertIn('<th scope="col" class="date">Ngày</th><th scope="col">Quỹ</th>'
                       '<th scope="col">Người dâng hiến</th><th scope="col" class="n">Số tiền</th>', offerings)

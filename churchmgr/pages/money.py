@@ -122,7 +122,7 @@ def _month_picker(value):
     """The "Go to a month" form, limited to 1900-01 to 9999-12.
     shortcut: a copy of ``pages.calendar.month_picker`` with the words of this page, so this card needs no
     change in the Calendar card's file; use that one again once it takes its words from the text table."""
-    return ('<form class="month-picker" action="/money" method="get">'
+    return ('<form class="month-picker" action="/money" method="get" data-auto-submit>'
             f'<label for="money-month">{h(t("money.go_to_month"))}</label><div class="search-line">'
             f'<input class="input" id="money-month" name="month" type="month" value="{h(value)}" '
             f'min="{month_text(*FIRST_MONTH)}" max="{month_text(*LAST_MONTH)}" required>'
@@ -130,15 +130,16 @@ def _month_picker(value):
 
 
 def _month_toolbar(year, month, today):
-    """The month chips and the month picker. At 1900-01 there is no previous chip and at 9999-12 no next
+    """The month chips (``‹ 10/2026``, This month, ``12/2026 ›``: one line, CRIT-8) and the month picker
+    (it opens a month on change with app.js). At 1900-01 there is no previous chip and at 9999-12 no next
     chip (``month_step`` gives ``None``): no link to a month the app refuses."""
     this = (year, month) == (today.year, today.month)
     current = ' aria-current="true"' if this else ""
     links = (month_chip("‹ {}", "/money", month_step(year, month, -1))
              + f'<a class="chip" href="/money"{current}>{h(t("money.this_month"))}</a>'
              + month_chip("{} ›", "/money", month_step(year, month, 1)))
-    return (f'<div class="list-toolbar"><nav class="chips" aria-label="{h(t("money.months_label"))}">{links}</nav>'
-            f"{_month_picker(month_text(year, month))}</div>")
+    return (f'<nav class="list-toolbar" aria-label="{h(t("money.months_label"))}"><div class="period">{links}</div>'
+            f"{_month_picker(month_text(year, month))}</nav>")
 
 
 def _kpis(totals, n_offerings, n_expenses):

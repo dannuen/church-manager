@@ -472,6 +472,17 @@ details.change .form { max-width: none; }
 .grid.calendar, .grid.calendar-item, .grid.money-month { align-items: start; }
 .span-5.stack, .span-7.stack { min-width: 0; }
 
+/* the period bar of the Calendar and Money, one nav (CRIT-8): Prev / This / Next (.period) on one line, then
+   the view chips (.views: Week, Month) and the "Go to a month" picker at the right. When the line is too
+   narrow for the three (a phone, long English words) Prev and Next give up some width and their words take
+   2 lines inside the pill; the middle chip keeps its one line. No chip goes to the next line alone and
+   nothing scrolls sideways (320px too). With app.js (html.js) a [data-auto-submit] picker opens the chosen
+   month by itself, so its Show button hides; without the script Show stays and sends the form */
+.period { display: grid; grid-auto-flow: column; justify-content: start; gap: 8px; }
+.period > .chip { justify-content: center; text-align: center; text-wrap: balance; line-height: 18px; }
+.period:has(> :nth-child(3)) > :nth-child(2) { min-width: max-content; }   /* all three there (1900-01 has no Prev) */
+.list-toolbar > .views { margin-right: auto; }   /* the picker keeps the right end of the bar */
+.js form[data-auto-submit] button[type="submit"] { display: none; }
 /* month picker beside the week / month chips */
 .month-picker, .year-form { display: grid; gap: 6px; }
 .month-picker label, .year-form label { font-size: var(--fs-meta); font-weight: 500; line-height: 20px; }
@@ -543,7 +554,13 @@ table.money.expenses td:nth-child(3) { color: var(--muted); }
   .today-tag { display: inline; margin-left: 8px; }
   .cal-row .time { width: 100%; order: 1; padding-top: 0; }
   .inline-fields.two, .add-person { grid-template-columns: minmax(0, 1fr); }
-  .month-picker, .year-form { flex: 1 1 100%; }
+  /* line 1: Prev / This / Next alone, one notch tighter than other chips (so the Vietnamese 7 days fit one
+     line at 390px); the view chips and the picker share line 2 when the picker's field fits beside them,
+     else the picker takes line 3 (CRIT-8). A year form keeps its own line */
+  .period { flex: 1 1 100%; gap: 6px; }
+  .period > .chip { padding: 0 10px; }
+  .month-picker { flex: 1 1 auto; }
+  .year-form { flex: 1 1 100%; }
   .month-picker .input, .year-form .input { width: auto; flex: 1; }
   .kpi-strip { grid-template-columns: minmax(0, 1fr); }
   .kpi-strip .kpi + .kpi { border-left: 0; border-top: 1px solid var(--rule); }
