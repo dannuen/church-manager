@@ -558,8 +558,14 @@ table.money.expenses td:nth-child(3) { color: var(--muted); }
 .kv.wide > div { grid-template-columns: 128px minmax(0, 1fr); }
 .next-number { padding-top: 0; }
 
-/* a small grey word inside a row: Hidden, Open now (a pill, spec 4.7) */
+/* a small grey word inside a row: Hidden, Open now (a pill, spec 4.7). In the People list the Status of a
+   Person who Left or Passed away is a tag, at the start of its cell and on the baseline of its row (the 1px
+   lift made that row 1px taller) (CRIT-6); the rest of that row's text is --muted, as the phone (640px) has
+   it already, 4.5:1 on --surface and on the --raised hover (StyleTokensTest). Its links keep the app color
+   and the whole-row tap (CRIT-1) */
 .tag { display: inline-flex; align-items: center; flex: none; height: 20px; margin-left: 8px; padding: 0 8px; border-radius: var(--radius-pill); background: var(--active); color: var(--muted); font-size: var(--fs-small); font-weight: 500; white-space: nowrap; vertical-align: 1px; }
+table.people td > .tag { margin-left: 0; vertical-align: baseline; }
+table.people tr.inactive > td { color: var(--muted); }
 .list-item.is-hidden .what { color: var(--muted); }
 
 /* a name field with its button on one line (Add, Rename) */

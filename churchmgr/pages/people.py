@@ -93,20 +93,26 @@ def date_field(label, name, fid, value=None, error=None, min_date=None, hint=Non
                     max=today_text(), min=min_date, required=True, hint=hint)
 
 
-def table(headers, rows, cls=""):
+def table(headers, rows, cls="", row_classes=()):
     """A table. ``headers``: ``[(text, numeric), ...]`` or ``[(text, numeric, column class), ...]``;
     ``rows``: lists of trusted cell HTML. The column class is on the header and on every cell of that
     column (``act``: a column of text actions only, which print.css leaves off paper).
-    Every body row has ``data-row``. On a phone each row becomes two lines (style.css)."""
+    Every body row has ``data-row``. ``row_classes``: a class per body row, in the order of ``rows``
+    (``""`` or a missing one: none), such as ``inactive`` on People. On a phone each row becomes two
+    lines (style.css)."""
     def cell(tag, content, header, extra=""):
         names = (["n"] if header[1] else []) + list(header[2:3])
         cls = f' class="{" ".join(names)}"' if names else ""
         return f"<{tag}{extra}{cls}>{content}</{tag}>"
 
+    def row_start(i):
+        name = row_classes[i] if i < len(row_classes) else ""
+        return f'<tr data-row class="{h(name)}">' if name else "<tr data-row>"
+
     head = "".join(cell("th", h(c[0]), c, ' scope="col"') for c in headers)
     body = "".join(
-        "<tr data-row>" + "".join(cell("td", c, headers[i]) for i, c in enumerate(r)) + "</tr>"
-        for r in rows
+        row_start(n) + "".join(cell("td", c, headers[i]) for i, c in enumerate(r)) + "</tr>"
+        for n, r in enumerate(rows)
     )
     return (f'<div class="table-wrap"><table class="list {h(cls)}"><thead><tr>{head}</tr></thead>'
             f"<tbody>{body}</tbody></table></div>")
@@ -243,7 +249,7 @@ def list_page(req):
         rows = [r for r in rows if r["id"] in found]
 
     chi_phai_of = {}
-    lines = []
+    lines, marks = [], []
     for r in rows:
         fam = people.current_family(conn, r["id"])
         family_cell, chi_cell = ui.DASH, ui.DASH
@@ -255,13 +261,18 @@ def list_page(req):
             cp = chi_phai_of[fam["family_id"]]
             if cp is not None:
                 chi_cell = chi_phai_link(cp["chi_phai_id"], cp["name"])
+        # CRIT-6: a Person who Left or Passed away stays in the list, the row muted and the Status a tag,
+        # so the pastor sees it before calling the phone of that row
+        inactive = r["status_code"] in care.NOT_CARED_STATUS_CODES
+        status = h(r["status_name"]) if r["status_name"] else ui.DASH
         lines.append([
             person_link(r["id"], r["full_name"]),
-            h(r["status_name"]) if r["status_name"] else ui.DASH,
+            f'<span class="tag">{status}</span>' if inactive else status,
             family_cell,
             chi_cell,
             num(r["phone"]) if r["phone"] else ui.DASH,
         ])
+        marks.append("inactive" if inactive else "")
 
     search = (
         '<form class="search-form toolbar" action="/people" method="get" role="search">'
@@ -276,7 +287,7 @@ def list_page(req):
     )
     if lines:
         body = table([(t("people.person"), False), (t("people.status"), False), (t("people.family"), False),
-                      (t("people.chi_phai"), False), (t("people.phone"), False)], lines, "people")
+                      (t("people.chi_phai"), False), (t("people.phone"), False)], lines, "people", marks)
     elif not everyone:
         body = empty(t("people.empty"))
     elif q:

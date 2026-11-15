@@ -25,6 +25,8 @@ CRIT-2 (class CritTwoTest): under 861px the menu is 5 items and a More fold (no 
 is the first stop of every page.
 CRIT-3 (class CritThreeTest): under 861px the title-row actions sit side by side, the primary first; no number
 or button twice in the head of People, Money, Sent documents and the Dashboard.
+CRIT-6 (class CritSixTest): in the People list a Person who Left or Passed away keeps the row, muted, with the
+Status as a tag; the All list keeps everyone (the pastor chose A).
 """
 
 import datetime as dt
@@ -1624,6 +1626,76 @@ class CritFiveTest(PagesTestBase):
             self.assertEqual(box.count("<details"), 1, name)
             self.assertIn('<details class="tech"><summary>Technical details</summary>', box, name)
         self.assertNotIn("<details", section(page, "new-church-setup"))  # no developer word there
+
+
+class CritSixTest(PagesTestBase):
+    """CRIT-6, critique row 12 (the pastor chose A: the All list keeps everyone). In the People list a Person
+    whose current Status is Left or Passed away (care.NOT_CARED_STATUS_CODES) keeps the row, the name link
+    and the phone, but the row is ``inactive``: its text is --muted (4.5:1 on --surface and on the --raised
+    hover for any app color: StyleTokensTest) and its Status is a ``.tag`` at the start of its cell. The links
+    keep the app color (CRIT-1). Member, Attender and Visitor rows are as before. A search finds them too."""
+
+    ROW = re.compile(r'<tr data-row(?: class="([^"]*)")?><td><a href="/people/(\d+)">(.*?)</tr>', re.S)
+
+    def rows(self, path):
+        """``{person id: (row class, row html)}`` of the People table of ``path``."""
+        body = re.search(r"<tbody>(.*?)</tbody>", self.page(path), re.S).group(1)
+        found = {int(pid): (cls or "", html_) for cls, pid, html_ in self.ROW.findall(body)}
+        self.assertEqual(len(found), body.count("<tr data-row"), "every row starts with its name link")
+        return found
+
+    def test_the_muted_row_and_the_tag_in_style_css(self):
+        top = top_level_rules()
+        self.assertEqual(whole_rule(top, "table.people tr.inactive > td"), {"color": "var(--muted)"})
+        self.assertEqual(whole_rule(top, "table.people td > .tag"),
+                         {"margin-left": "0", "vertical-align": "baseline"})  # the row keeps its height
+        tag = whole_rule(top, ".tag")
+        self.assertEqual((tag["background"], tag["color"]), ("var(--active)", "var(--muted)"))
+        for surface in ("--surface", "--raised", "--active"):  # the row, its hover, the tag
+            self.assertIn(("--muted", surface), TEXT_PAIRS, surface)
+        # the links of the row keep the app color: no rule paints a link of an inactive row
+        self.assertFalse([sel for sel, _b in css_rules() if "inactive" in sel and " a" in sel])
+
+    def test_left_and_passed_away_rows_are_muted_with_a_status_tag_and_all_keeps_everyone(self):
+        persons = people.list_persons(self.db())
+        inactive = {p["id"]: p for p in persons if p["status_code"] in ("left", "passed_away")}
+        self.assertEqual({p["status_code"] for p in inactive.values()}, {"left", "passed_away"})  # the fake has both
+        rows = self.rows("/people")
+        self.assertEqual(set(rows), {p["id"] for p in persons})  # row12 = A: All shows everyone
+        page = self.page("/people")
+        self.assertRegex(page, rf'<a class="chip" href="/people" aria-current="true">[^<]+ '
+                               rf'<span class="num">{len(persons)}</span></a>')  # the All count is its rows
+        for p in persons:
+            cls, row = rows[p["id"]]
+            if p["id"] in inactive:
+                self.assertEqual(cls, "inactive", p["full_name"])
+                self.assertIn(f'<td><span class="tag">{ui.h(p["status_name"])}</span></td>', row)
+                if p["phone"]:
+                    self.assertIn(f'<span class="num">{ui.h(p["phone"])}</span>', row)  # the phone stays
+            else:
+                self.assertEqual(cls, "", p["full_name"])
+                self.assertNotIn('class="tag"', row, p["full_name"])
+        # the Status chip of Left and of Passed away still lists them, muted
+        for code in ("left", "passed_away"):
+            chip_rows = self.rows(f"/people?status={self.item('status', code=code)}")
+            self.assertEqual({pid for pid in chip_rows}, {i for i, p in inactive.items() if p["status_code"] == code})
+            self.assertEqual({cls for cls, _r in chip_rows.values()}, {"inactive"})
+
+    def test_a_search_finds_a_person_who_left_and_marks_the_row(self):
+        pid = self.new_person("Trịnh Văn Khải Crit Sáu", status_code="left", phone="0901 234 567")
+        rows = self.rows("/people?q=" + urllib.parse.quote("Khải Crit Sáu"))
+        self.assertEqual(list(rows), [pid])
+        cls, row = rows[pid]
+        self.assertEqual(cls, "inactive")
+        self.assertIn('<span class="tag">', row)
+        self.assertIn('<span class="num">0901 234 567</span>', row)
+
+    def test_table_rows_have_no_class_unless_one_is_given(self):
+        from churchmgr.pages import people as people_pages
+        plain = people_pages.table([("A", False)], [["x"], ["y"]])
+        self.assertEqual(plain.count("<tr data-row>"), 2)
+        marked = people_pages.table([("A", False)], [["x"], ["y"], ["z"]], "people", ["", "inactive"])
+        self.assertEqual(re.findall(r"<tr data-row(?: class=\"(\w+)\")?>", marked), ["", "inactive", ""])
 
 
 if __name__ == "__main__":
