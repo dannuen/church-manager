@@ -27,6 +27,8 @@ CRIT-3 (class CritThreeTest): under 861px the title-row actions sit side by side
 or button twice in the head of People, Money, Sent documents and the Dashboard.
 CRIT-6 (class CritSixTest): in the People list a Person who Left or Passed away keeps the row, muted, with the
 Status as a tag; the All list keeps everyone (the pastor chose A).
+CRIT-7 (class CritSevenTest): the one dark card is Needs a visit (the pastor chose B); Money this month is a
+white card; a name on the dark card is underlined to show it is a link.
 """
 
 import datetime as dt
@@ -449,9 +451,8 @@ TEXT_PAIRS = (  # (text, what it sits on): at least 4.5:1
     # the wash, the current menu item; the white pill of the title row is --accent-dark on --on-accent
     *(("--on-accent", s) for s in ("--accent-dark", "--accent-base", "--accent-light")),
     ("--accent-deep", "--active"),  # STYLE-4: the bold text of the current chip on its tint
-    # STYLE-5: the one dark card (Money this month): each text on each of its 3 stops
-    *((fg, s) for fg in ("--highlight-ink", "--highlight-muted", "--positive-on-dark", "--negative-on-dark")
-      for s in HIGHLIGHT_STOPS),
+    # STYLE-5, CRIT-7: the one dark card (Needs a visit): each text on each of its 3 stops (no money on it)
+    *((fg, s) for fg in ("--highlight-ink", "--highlight-muted") for s in HIGHLIGHT_STOPS),
     # CRIT-1: a foot link on the dark card is its --accent-text (--highlight-focus)
     *(("--highlight-focus", s) for s in HIGHLIGHT_STOPS),
 )
@@ -461,6 +462,7 @@ PART_PAIRS = (  # a field border or the focus ring: at least 3:1
     # STYLE-4: the ring on the Private note panel and beside a tint; the edge of the current chip
     ("--accent-text", "--raised"), ("--accent-text", "--active"),
     *(("--highlight-focus", s) for s in HIGHLIGHT_STOPS),  # STYLE-5: the ring on the dark card
+    *(("--highlight-line", s) for s in HIGHLIGHT_STOPS),  # CRIT-7: the line under a name on the dark card
 )
 
 
@@ -698,12 +700,13 @@ def rule_props(selector, name="style.css"):
     return found
 
 
-CARD = '.dashboard > [data-panel="money-month"]'
+CARD = '.dashboard > [data-panel="money-month"]'  # Money this month: its row 2 sizes (B11, STYLE-FIX-1, CRIT-4)
+DARK_CARD = '.dashboard > [data-panel="needs-visit"]'  # the one dark card (CRIT-7: the pastor chose Needs a visit)
 
 
 class CardsAndChartsTest(PagesTestBase):
     """STYLE-5 (spec 4.3, 4.4, 4.8-4.12, D2, D5, D6): white cards with round corners and a soft shadow;
-    ONE dark card (Dashboard, Money this month) made from the app color, whose every text reads on it
+    ONE dark card (Dashboard, Needs a visit since CRIT-7) made from the app color, whose every text reads on it
     (its own tokens; StyleTokensTest checks them for 220 app colors); green and red on money amounts only
     (the Services trend word is not money); the Private note panel unlike the other cards; on paper the
     dark card is ink on white and nothing is green or red."""
@@ -728,30 +731,30 @@ class CardsAndChartsTest(PagesTestBase):
             self.assertEqual(rule_props(selector)["border-radius"], "var(--radius)", selector)
 
     def test_one_dark_card_made_from_the_app_color(self):
-        card = rule_props(CARD)
+        card = rule_props(DARK_CARD)
         self.assertEqual((card["background"], card["box-shadow"], card["color"], card["border-color"]),
                          ("var(--highlight-fill)", "var(--shadow-raised)", "var(--text)", "transparent"))
         # every color token a rule inside the card uses points to a token checked on the 3 stops
         self.assertEqual({p: v for p, v in card.items() if p.startswith("--")}, {
             "--text": "var(--highlight-ink)", "--muted": "var(--highlight-muted)", "--faint": "var(--highlight-muted)",
             "--rule": "var(--highlight-rule)", "--border": "var(--highlight-rule)", "--control": "var(--highlight-rule)",
-            "--positive": "var(--positive-on-dark)", "--negative": "var(--negative-on-dark)",
             "--accent-text": "var(--highlight-focus)"})  # the focus ring is --accent-text: white on the card
-        self.assertIn("align-self: start", declarations(CARD))  # B11 stays
+        # it stretches to the height of Next 7 days (row 1): no align-self of its own
+        self.assertNotIn("align-self", declarations(DARK_CARD))
         # no other dark card: the fill is used by this one rule only
         fill_rules = [sel for sel, body in css_rules() if "var(--highlight-fill)" in body]
-        self.assertEqual(fill_rules, [CARD])
+        self.assertEqual(fill_rules, [DARK_CARD])
         # the fill: 3 stops, each the app color as text (--accent-text) taken darker
         tokens = root_tokens()
         self.assertEqual(re.findall(r"var\((--[\w-]+)\)", tokens["--highlight-fill"]), list(HIGHLIGHT_STOPS))
         for stop in HIGHLIGHT_STOPS:
             self.assertRegex(tokens[stop], r"^color-mix\(in srgb, var\(--accent-text\), #000000 \d+%\)$", stop)
         page = self.page("/")
-        self.assertEqual(page.count('data-panel="money-month"'), 1)
+        self.assertEqual(page.count('data-panel="needs-visit"'), 1)
         # every class inside it is one these rules reach (a new class with its own color would show here)
-        classes = set(" ".join(re.findall(r'class="([^"]*)"', section(page, "money-month"))).split())
-        self.assertLessEqual(classes, {"kpis", "kpi", "kpi-label", "kpi-value", "num", "strong", "neg", "meta",
-                                       "card-link", "empty", "no-print"})
+        classes = set(" ".join(re.findall(r'class="([^"]*)"', section(page, "needs-visit"))).split())
+        self.assertLessEqual(classes, {"count", "num", "meta", "list-head", "rows", "row", "what", "wrap", "clamp-2",
+                                       "side", "figure", "faint", "dash", "card-link", "empty", "no-print"})
 
     def test_green_and_red_only_on_money_amounts(self):
         # Balance: green when 0 or more, red below 0; a Services trend word is never green or red (D5)
@@ -781,10 +784,10 @@ class CardsAndChartsTest(PagesTestBase):
         self.assertEqual(rule_props(".kind.k-service")["color"], "var(--accent-text)")
 
     def test_on_paper_the_dark_card_is_ink_on_white(self):
-        card = rule_props(CARD, "print.css")
+        card = rule_props(DARK_CARD, "print.css")
         self.assertEqual((card["background"], card["box-shadow"], card["--highlight-ink"], card["--highlight-muted"],
-                          card["--positive-on-dark"], card["--negative-on-dark"]),
-                         ("none", "none", "#000", "#333", "#000", "#000"))
+                          card["--highlight-rule"], card["--highlight-line"]),
+                         ("none", "none", "#000", "#333", "#888", "#888"))
         self.assertEqual(rule_props(".panel", "print.css")["box-shadow"], "none")
         self.assertEqual(rule_props(".kpi-strip", "print.css")["box-shadow"], "none")
         for selector in (".kpi-value.strong", ".kpi-value.strong:not(.neg)"):  # no green or red Balance
@@ -834,7 +837,7 @@ class PrintAndFinalWalkTest(PagesTestBase):
     its ``:root`` wins. The layout faults the walk found (also at 900, 1000 and 1180px) stay fixed."""
 
     def test_on_paper_no_shadow_and_no_fill_on_cards_the_title_row_and_the_dark_card(self):
-        for selector in (".panel", ".title-row", CARD):
+        for selector in (".panel", ".title-row", DARK_CARD):
             rule = print_media_props(selector)
             self.assertEqual((rule.get("box-shadow"), rule.get("background")), ("none", "none"), selector)
         self.assertEqual(print_media_props(".canvas::before")["display"], "none !important")  # no wash
@@ -1163,7 +1166,7 @@ class CritOneTest(PagesTestBase):
         # one tag weight: the later "a" rule of print.css keeps a data link ink on paper
         self.assertEqual(rule_props("a", "print.css")["color"], "inherit")
         # the dark card: its own --accent-text is --highlight-focus, white (StyleTokensTest: 4.5:1 on its stops)
-        self.assertEqual(rule_props(CARD)["--accent-text"], "var(--highlight-focus)")
+        self.assertEqual(rule_props(DARK_CARD)["--accent-text"], "var(--highlight-focus)")
         self.assertEqual(root_tokens()["--highlight-focus"], "#ffffff")
         self.assertIn(("--accent-text", "--surface"), TEXT_PAIRS)  # a link on a card: 4.5:1 for any app color
         self.assertIn(("--highlight-focus", "--highlight"), TEXT_PAIRS)  # a foot link on the dark card
@@ -1696,6 +1699,62 @@ class CritSixTest(PagesTestBase):
         self.assertEqual(plain.count("<tr data-row>"), 2)
         marked = people_pages.table([("A", False)], [["x"], ["y"], ["z"]], "people", ["", "inactive"])
         self.assertEqual(re.findall(r"<tr data-row(?: class=\"(\w+)\")?>", marked), ["", "inactive", ""])
+
+
+class CritSevenTest(PagesTestBase):
+    """CRIT-7, critique row 6 (the pastor chose B): the one dark card of the Dashboard is Needs a visit, so the
+    people who need care come before money. Money this month is a white card like the others: its amounts in
+    ink, the Balance green or red (STYLE-5: green and red on money amounts only). On the dark card a name is
+    white like the words beside it, so a line (--highlight-line, 3:1 on each stop for any app color) shows it is
+    a link; under the pointer and on keyboard focus the line turns white. The card shape and the DASH RULE stay
+    (the sizes are measured in a browser: see the card)."""
+
+    LINK = ':where(.dashboard > [data-panel="needs-visit"] .row .what) a'
+
+    def test_money_this_month_is_a_white_card(self):
+        # no rule paints the Money card: no fill, no shadow, no edge color, no token of its own
+        for sel, body in css_rules():
+            if "money-month" in sel:
+                self.assertNotRegex(body, r"(^|;)\s*(--[\w-]+|background[\w-]*|color|box-shadow|border-color)\s*:", sel)
+        self.assertNotIn("money-month", (ROOT / "web" / "print.css").read_text(encoding="utf-8"))
+        self.assertNotIn("color", rule_props(".kpi-value"))  # the amounts take the ink of the white card
+        self.assertEqual(rule_props(".kpi-value.strong:not(.neg)")["color"], "var(--positive)")  # Balance 0 or more
+        # the Balance on a dark fill is gone with its 2 tokens
+        for name in ("style.css", "print.css"):
+            self.assertNotRegex((ROOT / "web" / name).read_text(encoding="utf-8"), r"--(positive|negative)-on-dark", name)
+        # the real page: Money this month keeps its 3 amounts, as a plain panel
+        self.add_offering()
+        money_box = section(self.page("/"), "money-month")
+        self.assertEqual(money_box.count('class="kpi-value num'), 3)
+        self.assertIn('class="kpi-value num strong"', money_box)
+
+    def test_a_name_on_the_dark_card_is_underlined_to_show_it_is_a_link(self):
+        line = rule_props(self.LINK)
+        self.assertEqual((line["text-decoration"], line["text-decoration-color"], line["text-decoration-thickness"],
+                          line["text-underline-offset"]), ("underline", "var(--highlight-line)", "1px", "3px"))
+        # the line: white over the lightest stop, 3:1 on each stop for any app color (StyleTokensTest)
+        self.assertEqual(root_tokens()["--highlight-line"],
+                         "color-mix(in srgb, var(--highlight-ink) 65%, var(--highlight-end))")
+        for stop in HIGHLIGHT_STOPS:
+            self.assertIn(("--highlight-line", stop), PART_PAIRS, stop)
+        # one class stronger: under the pointer and on keyboard focus the shorthand draws the line in white
+        for selector in ("a:hover", ":where(.row .what) a:focus-visible"):
+            self.assertEqual(rule_props(selector)["text-decoration"], "underline", selector)
+        # one tag weight: the later "a" rule of print.css keeps the name plain ink on paper
+        self.assertEqual(rule_props("a", "print.css")["text-decoration"], "none")
+        self.assertEqual(rule_props(DARK_CARD, "print.css")["--highlight-line"], "#888")
+        # only the dark card: the names of Needs a visit on the Care page keep the app color, no line at rest
+        self.assertEqual([sel for sel, body in css_rules() if "text-decoration: underline" in body
+                          and "needs-visit" in sel], [self.LINK])
+        # the real page: each name of the dark card is a link inside .row .what
+        visit = section(self.page("/"), "needs-visit")
+        names = re.findall(r'<li class="row" data-row><span class="what wrap"><span class="clamp-2" lang="vi" '
+                           r'title="[^"]+"><a href="/people/\d+">', visit)
+        self.assertEqual(len(names), dashboard.VISIT_ROWS)
+
+    def add_offering(self):
+        conn = self.db()
+        money.add_offering(conn, TODAY.isoformat(), 100_000, lists.find_item(conn, "fund", name="General")["id"])
 
 
 if __name__ == "__main__":

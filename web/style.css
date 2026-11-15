@@ -46,19 +46,20 @@
   --wash: linear-gradient(180deg, transparent, var(--ground)),
           linear-gradient(112deg, var(--accent-dark) 0%, var(--accent-base) 48%, var(--accent-light) 100%);
   --wash-h: 340px; --wash-h-narrow: 600px; --wash-fade: 136px; --wash-fade-narrow: 240px; --wash-radius: 28px;
-  /* the one dark card (Dashboard, Money this month): the app color as text (--accent-text, dark enough
-     to read on white) taken darker, from the top left (darkest) to the bottom right (softer). It is dark
-     for every app color, so its text is white and the Balance a light green or a light red;
-     tests/test_pages_ui.py checks 4.5:1 for each text on each of the 3 stops, for any color */
+  /* the one dark card (Dashboard, Needs a visit, CRIT-7): the app color as text (--accent-text, dark
+     enough to read on white) taken darker, from the top left (darkest) to the bottom right (softer). It is
+     dark for every app color, so its text is white and its grey words a white with a touch of the app
+     color; tests/test_pages_ui.py checks 4.5:1 for each text (3:1 for the link line and the focus ring) on
+     each of the 3 stops, for any color. No money amount sits on it: no green or red on it */
   --highlight: color-mix(in srgb, var(--accent-text), #000000 50%);
   --highlight-mid: color-mix(in srgb, var(--accent-text), #000000 30%);
   --highlight-end: color-mix(in srgb, var(--accent-text), #000000 15%);
   --highlight-fill: linear-gradient(160deg, var(--highlight) 0%, var(--highlight-mid) 55%, var(--highlight-end) 100%);
-  --highlight-ink: #ffffff;                                                  /* title, amounts, links */
-  --highlight-muted: color-mix(in srgb, #ffffff 88%, var(--accent-text));    /* labels, the month */
+  --highlight-ink: #ffffff;                                                  /* the title, the count, names, dates */
+  --highlight-muted: color-mix(in srgb, #ffffff 88%, var(--accent-text));    /* the hint, the list head, a Status */
   --highlight-rule: color-mix(in srgb, var(--highlight-ink) 20%, transparent);  /* lines, the empty box */
-  --highlight-focus: #ffffff;                                                /* the focus ring on it */
-  --positive-on-dark: #9af2c4; --negative-on-dark: #ffd6d2;                  /* the Balance on it */
+  --highlight-line: color-mix(in srgb, var(--highlight-ink) 65%, var(--highlight-end));  /* the line under a name */
+  --highlight-focus: #ffffff;                                                /* the links and the focus ring on it */
   --shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent), 0 6px 20px color-mix(in srgb, var(--text) 7%, transparent);
   --shadow-raised: 0 10px 30px color-mix(in srgb, var(--text) 16%, transparent);
   --font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
@@ -208,16 +209,22 @@ header .card-link { white-space: nowrap; }   /* in a card head (Money): the titl
 .trend .trend-up { color: var(--accent-text); }
 .trend .trend-down { color: var(--muted); }
 
-/* ---------- the one dark card: Dashboard, Money this month (spec 4.3, D2) ----------
-   No other card is dark. It sets its own tokens, so every rule inside (the title, the month, the KPI
-   labels and values, the lines between them, the Balance, the foot links, the empty box, the text of a
-   panel that failed to load and the focus ring, which is --accent-text) reads on the dark fill. It keeps
-   its 1px edge, in transparent, so it is as high as its neighbours; align-self: start (B11) stays. */
-.dashboard > [data-panel="money-month"] {
+/* ---------- the one dark card: Dashboard, Needs a visit (spec 4.3, D2; CRIT-7) ----------
+   The pastor moved it here from Money this month (critique row 6): the people who need a visit come first.
+   Money this month is a white card like the others now: its amounts in ink, the Balance green or red. No
+   other card is dark. It sets its own tokens, so every rule inside (the title, the hint, the count, the list
+   head, the names, a Status, the dates, the lines between the rows, the foot link, the empty box, the text
+   of a panel that failed to load and the focus ring, which is --accent-text) reads on the dark fill. A name
+   is white like the words beside it, so a line under it shows it is a link (--highlight-line); under the
+   pointer and on keyboard focus the line turns white (the a:hover and :focus-visible rules of CRIT-1 above,
+   one class stronger). One tag weight (:where): print.css (later) keeps it plain ink on paper.
+   It keeps its 1px edge, in transparent, so it is as high as before and ends level with Next 7 days. */
+.dashboard > [data-panel="needs-visit"] {
   --text: var(--highlight-ink); --muted: var(--highlight-muted); --faint: var(--highlight-muted);
   --rule: var(--highlight-rule); --border: var(--highlight-rule); --control: var(--highlight-rule);
-  --positive: var(--positive-on-dark); --negative: var(--negative-on-dark); --accent-text: var(--highlight-focus);
+  --accent-text: var(--highlight-focus);
   background: var(--highlight-fill); border-color: transparent; box-shadow: var(--shadow-raised); color: var(--text); }
+:where(.dashboard > [data-panel="needs-visit"] .row .what) a { text-decoration: underline; text-decoration-color: var(--highlight-line); text-decoration-thickness: 1px; text-underline-offset: 3px; }
 
 /* ---------- search in the title row; live results float under it ---------- */
 .title-search { position: relative; }
@@ -503,8 +510,8 @@ fieldset.group legend { padding: 0; margin-bottom: 8px; font-size: var(--fs-meta
 .confirm-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; }
 .confirm-actions .form { display: block; }
 
-/* Money: the totals are type in one light card split by 1px rules (not dark: only the Dashboard card
-   is); Balance is the bold figure, green or red (spec 4.4) */
+/* Money: the totals are type in one light card split by 1px rules (not dark: the one dark card is Needs a
+   visit on the Dashboard); Balance is the bold figure, green or red (spec 4.4) */
 .kpi-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: var(--gap); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow); }
 .kpi-strip .kpi { padding: 18px 24px; }
 .kpi-strip .kpi + .kpi { border-top: 0; border-left: 1px solid var(--rule); }
