@@ -63,7 +63,7 @@ The ids in the examples are only examples. Get the real ids from `search`, `pers
 
 | Command | What it saves | Example (a dry run) |
 |---|---|---|
-| `add-person` | A new Person. `--full-name` is needed. Also `--gender` (M or F), `--birth-date`, `--phone`, `--address`, `--note`, `--status-id` (from `lists`), `--start-date` | `python -m churchmgr.agent add-person --full-name "Lê Văn An" --status-id 3` |
+| `add-person` | A new Person. `--full-name` is needed. Also `--gender` (M or F), `--birth-date` (`YYYY-MM-DD`, or `YYYY-00-00` for a year only), `--phone`, `--address`, `--note`, `--status-id` (from `lists`), `--start-date` | `python -m churchmgr.agent add-person --full-name "Lê Văn An" --status-id 3` |
 | `add-family` | A new Family. `--name` is needed. Also `--address` | `python -m churchmgr.agent add-family --name "Gia đình Lê Văn An"` |
 | `join-family` | Puts a Person in a Family: `--person-id`, `--family-id`, `--family-role` (Head, Spouse, Child or Other), `--start-date`. An old Family link is closed and kept | `python -m churchmgr.agent join-family --person-id 12 --family-id 3 --family-role Head` |
 | `add-offering` | An Offering: `--amount`, `--fund-id` (from `lists`), `--giver person-ID` or `--giver family-ID` (no `--giver` = a no-name offering), `--date`, `--note` | `python -m churchmgr.agent add-offering --amount 1.250.000 --fund-id 9 --giver person-5` |
@@ -131,6 +131,9 @@ printed. Do not try another way.
 - **Dates and times.** A day is `YYYY-MM-DD`. A date and time is `"2026-11-08 09:00"` (with the
   quotes) or `2026-11-08T09:00`. The date of an Offering, an Expense, a Status start or a done Visit
   cannot be after today.
+- **A Birth date can be a year only.** `--birth-date` takes `YYYY-MM-DD` or `YYYY-00-00` (year only),
+  not after today. In an answer, `1980-00-00` means the year only: born in 1980, day and month
+  unknown. Tell the pastor "born in 1980", never a day.
 - **A repeat makes many Calendar items.** `--repeat weekly` or `monthly` with `--repeat-until` makes
   one item per week or month. Tell the pastor how many (`calendar_item_ids` in the dry run). A Visit
   does not repeat.

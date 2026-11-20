@@ -364,7 +364,7 @@ def build_parser():
     add_write("add-person", cmd_add_person, "Add a Person.", [
         ("full_name", "NAME", "the full name (required)"),
         ("gender", "M|F", "M or F; leave it out if not known"),
-        ("birth_date", "YYYY-MM-DD", "the birth date, not after today"),
+        ("birth_date", "YYYY-MM-DD", "YYYY-MM-DD, or YYYY-00-00 for a year only; not after today"),
         ("phone", "PHONE", "the phone number"),
         ("address", "ADDRESS", "the own address (used when the Person is not in a Family)"),
         ("note", "TEXT", "a normal note (never a Private note)"),
