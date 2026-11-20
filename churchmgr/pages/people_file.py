@@ -3,11 +3,14 @@
 
 Rules kept here:
 - A row is checked with the rules of the Add a Person form, by calling them (``text.clean_name``,
-  ``people._gender``, ``people_pages.past_or_today``, ``people_pages.add_person_from_form``), never a copy.
+  ``people._gender``, ``people_pages.birth_from_input``, ``people_pages.past_or_today``,
+  ``people_pages.add_person_from_form``), never a copy. A Birth date may be a year only (stored ``1980-00-00``).
 - A Family is found by its name without diacritics (``family.name_folded``): no match = one new Family for
   all the rows with that name, two or more = a row error. Save writes it with ``people.add_family`` and
   ``people_pages.set_family_from_form``. A Family already in the church copy is never changed: a Person
   only joins it (a new Family link). No Chi phái is set from a file.
+- A Family with no Family role typed gets Head when the Full name is the Family name (without diacritics, in
+  any case), else Other. A typed Family role always wins; a Family role with no Family is a row error.
 - Nothing is saved before Save. Save checks the rows again (the hidden field is input like any other)
   and writes every row in one transaction: one bad row and nothing is saved, no Person and no Family.
 - A file of 2 or more rows where every name is already in the church was maybe saved before: Save needs the
@@ -146,7 +149,13 @@ def _check_rows(conn, numbered, date1904):
             values["gender"] = typed
             refuse("gender", i18n.error_text(exc))
 
-        date("birth_date", "people.birth_date")
+        typed = xlsx.cell_text(raw.get("birth_date"))
+        try:  # a date, or a year only (1980 -> 1980-00-00): the rule of the Add a Person form
+            values["birth_date"] = people_pages.birth_from_input(raw.get("birth_date"), "people.birth_date",
+                                                                 date1904) or ""
+        except ValueError as exc:
+            values["birth_date"] = typed
+            refuse("birth_date", i18n.error_text(exc))
         for key in ("phone", "address", "note"):
             values[key] = xlsx.cell_text(raw.get(key))
 
@@ -182,8 +191,9 @@ def _check_rows(conn, numbered, date1904):
             refuse("family_role", t("people.file_err_family_role", names=", ".join(_role_words(None))))
         elif typed and not values["family"]:
             refuse("family_role", t("people.file_err_family_needed"))
-        elif values["family"] and not typed:
-            refuse("family_role", t("people.file_err_family_role_needed"))
+        elif values["family"] and not typed:  # empty: Head when the Full name is the Family name, else Other
+            same = text.fold(values["family"]) == text.fold(values["full_name"])
+            values["family_role"] = "Head" if same else "Other"
 
         checks.append({"row": row, "values": values, "status_id": status_id, "status_name": status_name,
                        "family_id": family_id, "family_name": family_name, "new_family": new_family,
@@ -355,7 +365,8 @@ def _help(conn):
     words = ui.t_html("people.file_help_words", gender=h(t("people.file_col_gender")), genders=genders,
                       status=h(t("people.file_col_status")), statuses=h(statuses),
                       start_date=h(t("people.file_col_start_date")), family=h(t("people.file_col_family")),
-                      family_role=h(t("people.file_col_family_role")), roles=roles)
+                      family_role=h(t("people.file_col_family_role")), roles=roles,
+                      full_name=h(t("people.file_col_full_name")))
     return f'<p class="lead">{h(lead)}</p><p class="hint">{words}</p>'
 
 
@@ -376,13 +387,16 @@ def empty_get(req):
                     {"Content-Disposition": content_disposition(t("people.file_download_name", lang))})
 
 
-def _date_cell(value):
+def _date_cell(value, birth=False):
+    """A date of a row, or the value as typed when it is not one. ``birth``: a Birth date, where a year only
+    (``1980-00-00``) shows as ``1980``."""
     if not value:
         return ui.DASH
     try:
-        return people_pages.num(ui.fmt_date(text.check_date(value)))
+        day = text.check_birth_date(value) if birth else text.check_date(value)
     except ValueError:  # as typed: not a date
         return vi(value)
+    return people_pages.num(ui.fmt_birth_date(day) if birth else ui.fmt_date(day))
 
 
 def _family_cells(check):
@@ -411,8 +425,8 @@ def _row_cells(check, today):
     lines += [f'<p class="hint">{h(sentence)}</p>' for sentence in check["warnings"]]
     result = "".join(lines) or f'<span class="faint">{h(t("people.file_ok"))}</span>'
     return [people_pages.num(check["row"]), vi(v["full_name"]), h(t(gender)) if gender else vi(v["gender"]),
-            _date_cell(v["birth_date"]), people_pages.num(v["phone"]) if v["phone"] else ui.DASH, status, start,
-            *_family_cells(check), result]
+            _date_cell(v["birth_date"], birth=True), people_pages.num(v["phone"]) if v["phone"] else ui.DASH, status,
+            start, *_family_cells(check), result]
 
 
 def _check_page(req, checks, ignored, status=200):
