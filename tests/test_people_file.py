@@ -61,21 +61,55 @@ def zip_of(members):
     return buf.getvalue()
 
 
-def hand_made(sheet_data, shared=None, workbook_pr=""):
+def hand_made(sheet_data, shared=None, workbook_pr="", styles=None, styles_target="styles.xml"):
     """A small .xlsx made by hand, as another spreadsheet program could write it: the sheet sits in
-    ``xl/worksheets/data.xml`` under the relation id ``rId7``."""
+    ``xl/worksheets/data.xml`` under the relation id ``rId7``. ``styles``: the text of a styles part, at
+    ``xl/<styles_target>`` under the relation id ``rId9``; with ``styles_target`` ``None`` it sits at
+    ``xl/styles.xml`` with no relation."""
+    styles_rel = (f'<Relationship Id="rId9" Type="{REL_NS}/styles" Target="{styles_target}"/>'
+                  if styles is not None and styles_target else "")
     members = {
         "xl/workbook.xml": (f'<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="{MAIN_NS}" '
                             f'xmlns:r="{REL_NS}">{workbook_pr}<sheets><sheet name="Mọi người" sheetId="1" '
                             'r:id="rId7"/></sheets></workbook>'),
         "xl/_rels/workbook.xml.rels": (
             '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-            f'<Relationship Id="rId7" Type="{REL_NS}/worksheet" Target="worksheets/data.xml"/></Relationships>'),
+            f'<Relationship Id="rId7" Type="{REL_NS}/worksheet" Target="worksheets/data.xml"/>{styles_rel}'
+            '</Relationships>'),
         "xl/worksheets/data.xml": f'<worksheet xmlns="{MAIN_NS}"><sheetData>{sheet_data}</sheetData></worksheet>',
     }
     if shared is not None:
         members["xl/sharedStrings.xml"] = f'<sst xmlns="{MAIN_NS}">{shared}</sst>'
+    if styles is not None:
+        members["xl/" + (styles_target or "styles.xml")] = styles
     return zip_of(members)
+
+
+def styles_xml(num_fmt_ids, custom=""):
+    """A styles part: one cell style per id of ``num_fmt_ids`` (``s="0"``, ``s="1"``, ...) and the custom number
+    formats ``custom`` (``<numFmt>`` elements). Its ``cellStyleXfs`` list has a date format first: only the
+    ``cellXfs`` list counts for ``s=``."""
+    fmts = f'<numFmts count="{custom.count("<numFmt ")}">{custom}</numFmts>' if custom else ""
+    xfs = "".join(f'<xf numFmtId="{n}" fontId="0" fillId="0" borderId="0" xfId="0"/>' for n in num_fmt_ids)
+    return (f'<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="{MAIN_NS}">{fmts}'
+            '<cellStyleXfs count="1"><xf numFmtId="14" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+            f'<cellXfs count="{len(num_fmt_ids)}">{xfs}</cellXfs>'
+            '<dxfs count="1"><dxf><numFmt numFmtId="170" formatCode="dd/mm/yyyy"/></dxf></dxfs></styleSheet>')
+
+
+def inline(ref, value):
+    """A text cell ``value`` at ``ref`` (such as ``A1``)."""
+    return f'<c r="{ref}" t="inlineStr"><is><t>{value}</t></is></c>'
+
+
+def birth_file(births, styles=None, titles=("Họ và tên", "Ngày sinh"), workbook_pr=""):
+    """A People file made by hand: a Full name and a Birth date column; ``births`` is ``[(cell value, style)]``,
+    one row each (style ``None``: no ``s=``). The names are ``Người 2``, ``Người 3``, ... (the sheet row)."""
+    rows = [f'<row r="1">{inline("A1", titles[0])}{inline("B1", titles[1])}</row>']
+    for r, (value, style) in enumerate(births, start=2):
+        s = f' s="{style}"' if style is not None else ""
+        rows.append(f'<row r="{r}">{inline(f"A{r}", f"Người {r}")}<c r="B{r}"{s}><v>{value}</v></c></row>')
+    return hand_made("".join(rows), workbook_pr=workbook_pr, styles=styles)
 
 
 class XlsxTest(unittest.TestCase):
@@ -193,6 +227,74 @@ class XlsxTest(unittest.TestCase):
         self.assertEqual(xlsx.cell_text(1.5), "1.5")
         self.assertEqual(xlsx.cell_text("  0912 345 678 "), "0912 345 678")
         self.assertEqual(xlsx.cell_text(None), "")
+
+    # ---- BY-FIX1: a number cell with a date style is a DateNumber
+    def test_date_style_marks_a_number_cell(self):
+        """Built-in date formats (14-22, 27-36, 45-47, 50-58) and custom codes with d or y (not inside "...",
+        [...] or after a \\) mark a number cell; every other cell stays as it was."""
+        custom = ('<numFmt numFmtId="164" formatCode="dd/mm/yyyy"/>'
+                  '<numFmt numFmtId="165" formatCode="0&quot; days&quot;"/>'
+                  '<numFmt numFmtId="166" formatCode="[Red]#,##0"/>'
+                  '<numFmt numFmtId="167" formatCode="\\d0"/>'
+                  '<numFmt numFmtId="168" formatCode="[$-409]D/M/YYYY"/>')
+        ids = [0, 14, 49, 164, 165, 166, 167, 168, 22, 27, 36, 45, 47, 50, 58, 13, 23, 37, 48, 59, 4]
+        dated = {1, 3, 7, 8, 9, 10, 11, 12, 13, 14}  # the s= of a date format
+        row1 = "".join(f'<c r="{xlsx._column_name(s + 1)}1" s="{s}"><v>1926</v></c>' for s in range(len(ids)))
+        row2 = ('<c r="A2" s="1" t="n"><v>7380</v></c><c r="B2" s="1" t="inlineStr"><is><t>1926</t></is></c>'
+                '<c r="C2" s="1" t="str"><v>1926</v></c><c r="D2" s="99"><v>1926</v></c>'
+                '<c r="E2" s="x"><v>1926</v></c><c r="F2" s="-1"><v>1926</v></c><c r="G2"><v>1926</v></c>'
+                '<c r="H2" s="&#178;"><v>1926</v></c>')
+        data = hand_made(f'<row r="1">{row1}</row><row r="2">{row2}</row>', styles=styles_xml(ids, custom))
+        rows = xlsx.read_first_sheet(data).rows
+        self.assertEqual(rows[0], [1926.0] * len(ids))
+        self.assertEqual({s for s, v in enumerate(rows[0]) if isinstance(v, xlsx.DateNumber)}, dated)
+        self.assertEqual({type(v) for s, v in enumerate(rows[0]) if s not in dated}, {float})
+        self.assertIsInstance(rows[1][0], xlsx.DateNumber)  # t="n" is a number cell too
+        self.assertEqual(rows[1][:8], [7380.0, "1926", "1926", 1926.0, 1926.0, 1926.0, 1926.0, 1926.0])
+        self.assertEqual([type(v) for v in rows[1][3:8]], [float] * 5)  # a bad s=, or s=0 (General)
+        number = rows[0][1]
+        self.assertIsInstance(number, float)  # cell_date and cell_text read it as any number
+        self.assertEqual((xlsx.cell_date(number, False), xlsx.cell_text(number)), ("1905-04-09", "1926"))
+
+    def test_styles_part_from_the_workbook_relation(self):
+        cell = '<row r="1"><c r="A1" s="1"><v>1926</v></c></row>'
+        for target in ("look.xml", "/xl/look.xml", "../xl/look.xml"):
+            data = hand_made(cell, styles=styles_xml([0, 14]), styles_target=target.rpartition("/")[2])
+            if target != "look.xml":  # the same part, named another way in the relation
+                with zipfile.ZipFile(io.BytesIO(data)) as zf:
+                    members = {n: zf.read(n) for n in zf.namelist()}
+                rels = members["xl/_rels/workbook.xml.rels"].decode("utf-8")
+                members["xl/_rels/workbook.xml.rels"] = rels.replace('Target="look.xml"', f'Target="{target}"').encode()
+                data = zip_of(members)
+            self.assertIsInstance(xlsx.read_first_sheet(data).rows[0][0], xlsx.DateNumber, target)
+        # no relation: xl/styles.xml
+        data = hand_made(cell, styles=styles_xml([0, 14]), styles_target=None)
+        self.assertIsInstance(xlsx.read_first_sheet(data).rows[0][0], xlsx.DateNumber)
+
+    def test_no_or_broken_styles_part_marks_no_date(self):
+        """No styles part, a broken one, or a style with no usable number format: plain numbers, never an
+        error (the file reads as before)."""
+        cell = '<row r="1"><c r="A1" s="1"><v>1926</v></c></row>'
+        broken = ["<styleSheet", "not xml at all",
+                  f'<styleSheet xmlns="{MAIN_NS}"><cellXfs><xf/><xf numFmtId="abc"/></cellXfs></styleSheet>',
+                  f'<styleSheet xmlns="{MAIN_NS}"><cellXfs><xf numFmtId="0"/></cellXfs></styleSheet>']
+        files = [hand_made(cell)] + [hand_made(cell, styles=s) for s in broken]
+        missing = hand_made(cell, styles=styles_xml([0, 14]), styles_target="look.xml")
+        with zipfile.ZipFile(io.BytesIO(missing)) as zf:
+            members = {n: zf.read(n) for n in zf.namelist() if n != "xl/look.xml"}  # the relation points nowhere
+        files.append(zip_of(members))
+        for data in files:
+            value = xlsx.read_first_sheet(data).rows[0][0]
+            self.assertEqual((type(value), value), (float, 1926.0))
+
+    def test_a_styles_part_too_big_is_refused(self):
+        """The styles part has the limit of every part (a zip bomb stops there)."""
+        cell = '<row r="1"><c r="A1" s="1"><v>1926</v></c></row>'
+        big = styles_xml([0, 14]).replace("</styleSheet>", " " * 3000 + "</styleSheet>")
+        with mock.patch.object(xlsx, "MAX_MEMBER", 2000):
+            self.assertIsInstance(xlsx.read_first_sheet(hand_made(cell, styles=styles_xml([0, 14]))).rows[0][0],
+                                  xlsx.DateNumber)
+            self.assert_refused(hand_made(cell, styles=big), "people.file_err_too_big")
 
 
 class PeopleFileTest(_support.CopyTestCase):
@@ -644,6 +746,55 @@ class PeopleFileTest(_support.CopyTestCase):
         self.assertEqual((added, [key for c in again for key, _s in c["errors"]]), (0, ["birth_date"]))
         self.assertEqual(self.family_counts(), before)
 
+    # ---- BY-FIX1 (BY-TEST BUG-1): a date cell is a date, never a year
+    def test_birth_date_cell_with_date_style(self):
+        """Ngày sinh cells with the date style 14 (as Excel saves 09/04/1905): the day, not the year 1926."""
+        late = (TOMORROW - dt.date(1899, 12, 30)).days  # tomorrow as a date cell
+        data = birth_file([(1926, 1), (7380, 1), (1000, 1), (late, 1)], styles_xml([0, 14]))
+        checks, _ = people_file.check_people_file(self.conn, data)
+        self.assertEqual([c["values"]["birth_date"] for c in checks[:3]], ["1905-04-09", "1920-03-15", "1902-09-26"])
+        self.assertEqual([c["errors"] for c in checks[:3]], [[], [], []])
+        self.assertEqual([key for key, _s in checks[3]["errors"]], ["birth_date"])
+        self.assertTrue(checks[3]["errors"][0][1].startswith("Row 5, Birth date: Birth date cannot be after today"),
+                        checks[3]["errors"])
+        # without the late row: Save checks the rows again and keeps the day
+        data = birth_file([(1926, 1), (7380, 1), (1000, 1)], styles_xml([0, 14]))
+        checks, _ = people_file.check_people_file(self.conn, data)
+        self.assertEqual(self.save(people_file.rows_json(checks)), (3, 0, []))
+        rows = self.conn.execute("SELECT full_name, birth_date FROM person ORDER BY id DESC LIMIT 3").fetchall()
+        self.assertEqual([tuple(r) for r in reversed(rows)], [("Người 2", "1905-04-09"), ("Người 3", "1920-03-15"),
+                                                              ("Người 4", "1902-09-26")])
+
+    def test_birth_date_custom_date_style_and_1904(self):
+        """A custom date format (dd/mm/yyyy, id 164), English titles; with date1904 the 1904 count is used."""
+        styles = styles_xml([0, 164], '<numFmt numFmtId="164" formatCode="dd/mm/yyyy"/>')
+        for workbook_pr, day in (("", "1905-04-09"), ('<workbookPr date1904="1"/>', "1909-04-10")):
+            data = birth_file([(1926, 1)], styles, ("Full name", "Birth date"), workbook_pr)
+            checks, _ = people_file.check_people_file(self.conn, data)
+            self.assertEqual((checks[0]["values"]["birth_date"], checks[0]["errors"]), (day, []), workbook_pr)
+        self.assertEqual(xlsx.cell_date(1926.0, True), "1909-04-10")
+
+    def test_birth_year_in_a_general_cell_or_with_no_styles(self):
+        """A plain number 1980 is still a year: General (id 0) or Number (id 1) style, no s=, no styles part, or a
+        broken styles part (the file is not refused)."""
+        general = styles_xml([0, 1])
+        files = [birth_file([(1980, 0), (1980, 1), (1980, None)], general), birth_file([(1980, 1)]),
+                 birth_file([(1980, 1)], "<styleSheet"), birth_file([(1980, 1)], "not xml at all")]
+        for data in files:
+            checks, _ = people_file.check_people_file(self.conn, data)
+            self.assertEqual({(c["values"]["birth_date"], len(c["errors"])) for c in checks}, {("1980-00-00", 0)})
+
+    def test_birth_from_input_never_reads_a_date_cell_as_a_year(self):
+        birth = people_file.people_pages.birth_from_input
+        self.assertEqual(birth(xlsx.DateNumber(1926.0)), "1905-04-09")
+        self.assertEqual(birth(xlsx.DateNumber(1926.0), date1904=True), "1909-04-10")
+        self.assertEqual(birth(xlsx.DateNumber(29221.0)), "1980-01-01")
+        self.assertEqual((birth(1926.0), birth(1926)), ("1926-00-00", "1926-00-00"))  # a plain number: a year
+        for bad in (xlsx.DateNumber(0.0), xlsx.DateNumber(-3.0)):
+            with self.assertRaises(i18n.TextError) as cm:
+                birth(bad)
+            self.assertEqual(cm.exception.key, "people.err_birth_date")
+
 
 def part(data, name):
     """One part of a .xlsx file (bytes) as text, such as ``xl/worksheets/sheet2.xml``."""
@@ -693,6 +844,14 @@ class EmptyFileTest(_support.CopyTestCase):
                          "Không bắt buộc, và chỉ điền khi có Gia đình: Chủ gia đình, Vợ/Chồng, Con, Người thân khác, "
                          "Head, Spouse, Child, Other. Để trống khi có Gia đình: Chủ gia đình nếu Họ và tên trùng với "
                          "tên Gia đình, nếu không thì Người thân khác.")
+
+    def test_help_line_birth_date_says_a_year_only_is_fine(self):
+        en = {row[0]: row[1] for row in people_file.help_rows(self.conn, "en") if len(row) == 2}
+        vi = {row[0]: row[1] for row in people_file.help_rows(self.conn, "vi") if len(row) == 2}
+        self.assertEqual(en["Birth date"], "Optional. Write the date like 31/12/1980, or the year only, like 1980. "
+                                           "Not after today.")
+        self.assertEqual(vi["Ngày sinh"], "Không bắt buộc. Viết ngày như 31/12/1980, hoặc chỉ năm, như 1980. "
+                                          "Không sau hôm nay.")
 
     def test_the_example_row_passes_the_check(self):
         """The example is the last row of the Help sheet, under the column titles. Put on sheet 1 it is a

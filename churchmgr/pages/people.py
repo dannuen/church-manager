@@ -66,8 +66,9 @@ def birth_from_input(value, what="people.birth_date", date1904=False):
     for a year only. Empty (``None``, ``""``, spaces) gives ``None``.
 
     A year is a whole number from 1000 to 9999, 4 digits of text, or ``YYYY-00-00``; it must be from 1900
-    and not after this year. Any other number is a spreadsheet date (``date1904``: the file's date system).
-    Other text is read as 31/12/1980, 1/2/1980 or 1980-12-31, and that day is not after today.
+    and not after this year. A date cell (an ``xlsx.DateNumber``: a number with a date style) is never a
+    year, and neither is any other number: those are spreadsheet dates (``date1904``: the file's date
+    system). Other text is read as 31/12/1980, 1/2/1980 or 1980-12-31. A date is not after today.
     A refusal is a ``TextError`` whose English sentence starts with ``what``.
     """
     if isinstance(value, str):
@@ -75,7 +76,7 @@ def birth_from_input(value, what="people.birth_date", date1904=False):
     if value is None or value == "":
         return None
     year = None
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
+    if isinstance(value, (int, float)) and not isinstance(value, (bool, xlsx.DateNumber)):
         if 1000 <= value <= 9999 and float(value).is_integer():
             year = int(value)
     elif isinstance(value, str) and _BIRTH_YEAR.fullmatch(value):

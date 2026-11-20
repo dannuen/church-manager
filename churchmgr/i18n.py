@@ -156,7 +156,8 @@ TEXT = {
         "people.file_help_example": "Ví dụ một dòng (chỉ có ở trang này, không bao giờ được thêm):",
         "people.file_help_full_name": "Bắt buộc. Họ và tên của một Người.",
         "people.file_help_gender": "Không bắt buộc. Một trong các từ: {genders}.",
-        "people.file_help_birth_date": "Không bắt buộc. Viết ngày như 31/12/1980, không sau hôm nay.",
+        "people.file_help_birth_date": "Không bắt buộc. Viết ngày như 31/12/1980, hoặc chỉ năm, như 1980. "
+                                       "Không sau hôm nay.",
         "people.file_help_phone": "Không bắt buộc. Viết như 0912345678: số 0 đầu được giữ.",
         "people.file_help_address": "Không bắt buộc.",
         "people.file_help_note": "Không bắt buộc. Ghi chú thường: ai có Dữ liệu Hội Thánh cũng đọc được. Đừng viết Ghi "
@@ -1232,7 +1233,8 @@ TEXT = {
         "people.file_help_example": "An example row (only on this sheet, never added):",
         "people.file_help_full_name": "Required. The name of one Person.",
         "people.file_help_gender": "Optional. One of these words: {genders}.",
-        "people.file_help_birth_date": "Optional. Write the date like 31/12/1980, not after today.",
+        "people.file_help_birth_date": "Optional. Write the date like 31/12/1980, or the year only, like 1980. "
+                                       "Not after today.",
         "people.file_help_phone": "Optional. Write it like 0912345678: the first 0 is kept.",
         "people.file_help_address": "Optional.",
         "people.file_help_note": "Optional. A normal note: anyone with the church copy can read it. Do not write a "
