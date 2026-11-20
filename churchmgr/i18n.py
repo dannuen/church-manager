@@ -133,6 +133,7 @@ TEXT = {
         "dashboard.title": "Trang chủ",
         "dashboard.open_calendar": "Mở Lịch",
         # --- people
+        "people.err_birth_date": "{label} phải là một ngày có thật như 31/12/1980, hoặc một năm từ 1900 như 1980.",
         "people.file_saved_before": "Tất cả các tên trong tệp này đều đã có trong Hội Thánh. Có thể bạn đã lưu tệp "
                                     "này rồi.",
         "people.file_again": "Vẫn thêm họ một lần nữa",
@@ -262,7 +263,7 @@ TEXT = {
         "people.empty_q": "Không có Người nào khớp với “{q}” ở đây.",
         "people.empty_status": "Hiện không có Người nào có Trạng thái này.",
         "people.first_status": "Trạng thái ban đầu",
-        "people.birth_hint": "Để trống nếu không biết.",
+        "people.birth_hint": "Như 31/12/1980, hoặc chỉ năm: 1980. Để trống nếu không biết.",
         "people.address_hint": "Dùng khi Người này không ở trong Gia đình nào.",
         "people.note_hint": "Ghi chú thông thường. Ghi chú cá nhân được thêm trên trang của Người.",
         "people.start_hint": "Ngày bắt đầu Trạng thái này. Không sau hôm nay.",
@@ -1204,6 +1205,7 @@ TEXT = {
         "dashboard.title": "Dashboard",
         "dashboard.open_calendar": "Open Calendar",
         # --- people
+        "people.err_birth_date": "{label} must be a real date like 31/12/1980, or a year from 1900 like 1980.",
         "people.file_saved_before": "Every name in this file is already in the church. You may have saved this "
                                     "file before.",
         "people.file_again": "Add them again anyway",
@@ -1331,7 +1333,7 @@ TEXT = {
         "people.empty_q": "No Person matches “{q}” here.",
         "people.empty_status": "No Person has this Status now.",
         "people.first_status": "First Status",
-        "people.birth_hint": "Leave empty if you do not know it.",
+        "people.birth_hint": "Like 31/12/1980, or the year only: 1980. Leave empty if you do not know it.",
         "people.address_hint": "Used when the Person is not in a Family.",
         "people.note_hint": "A normal note. A Private note is added on the Person page.",
         "people.start_hint": "The day this Status began. Not after today.",

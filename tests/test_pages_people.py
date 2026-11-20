@@ -291,6 +291,77 @@ class PeoplePagesTest(PagesTestBase):
         self.assertIn("Full name is required", page)
         self.assertIn('id="f-full_name-error"', page)
 
+    def birth_box(self, page):
+        """The ``<input>`` tag of the Birth date field."""
+        m = re.search(r'<input [^>]*name="birth_date"[^>]*>', page)
+        self.assertIsNotNone(m, "no Birth date field")
+        return m.group(0)
+
+    def test_add_person_form_year_only(self):
+        """BY-2: Add Person takes a year only (stored YYYY-00-00), 31/12/1980 or 1980-12-31 in a text box."""
+        page = self.page("/people/new")
+        box = self.birth_box(page)
+        self.assertIn('type="text"', box)
+        self.assertNotIn("max=", box)  # the date picker could not take a year only
+        self.assertIn('<p class="hint" id="f-birth_date-hint">Like 31/12/1980, or the year only: 1980. '
+                      "Leave empty if you do not know it.</p>", page)
+        for name, typed, stored in (("Trương Văn Năm Một", "1980", "1980-00-00"),
+                                    ("Trương Văn Năm Hai", "31/12/1975", "1975-12-31"),
+                                    ("Trương Văn Năm Ba", "1990-05-12", "1990-05-12"),
+                                    ("Trương Văn Năm Bốn", "1980-00-00", "1980-00-00")):
+            pid = self.new_person(name, birth_date=typed)
+            self.assertEqual(people.get_person(self.db(), pid)["birth_date"], stored, typed)
+        # a bad Birth date: the sentence next to the field, the value kept as typed, no Person added
+        conn = self.db()
+        before = len(people.list_persons(conn))
+        real = "Birth date must be a real date like 31/12/1980, or a year from 1900 like 1980."
+        after = f"Birth date cannot be after today ({shown(ago(0))}). Use today or an earlier date."
+        for typed, sentence in (("1850", real), ("31/02/1990", real), ("abc", real), (str(TODAY.year + 1), after)):
+            form = {"full_name": "Trương Văn Năm Sai", "gender": "", "birth_date": typed, "phone": "", "address": "",
+                    "note": "", "status_id": self.item("status", code="visitor"), "start_date": ago(0)}
+            _h, page = self.post("/people/new", form, expect=400)
+            self.assertIn(f'<p class="error" id="f-birth_date-error">{sentence}</p>', page, typed)
+            self.assertIn(f'value="{typed}"', self.birth_box(page), typed)
+        self.assertEqual(len(people.list_persons(conn)), before)
+
+    def test_edit_person_keeps_year(self):
+        """BY-2: Edit shows a year-only Birth date as 1980, so Save with no change keeps the year."""
+        pid = people.add_person(self.db(), "Lương Văn Giữ Năm", birth_date="1980-00-00")
+        box = self.birth_box(self.page(f"/people/{pid}/edit"))
+        self.assertIn('type="text"', box)
+        self.assertIn('value="1980"', box)
+        self.assertNotIn("max=", box)
+        same = {"full_name": "Lương Văn Giữ Năm", "gender": "", "birth_date": "1980", "phone": "", "address": "",
+                "note": ""}
+        self.post(f"/people/{pid}/edit", same)
+        self.assertEqual(people.get_person(self.db(), pid)["birth_date"], "1980-00-00")
+        # a full date shows as 31/12/1980 and comes back the same
+        self.post(f"/people/{pid}/edit", {**same, "birth_date": "1980-12-31"})
+        self.assertIn('value="31/12/1980"', self.birth_box(self.page(f"/people/{pid}/edit")))
+        self.post(f"/people/{pid}/edit", {**same, "birth_date": "31/12/1980"})
+        self.assertEqual(people.get_person(self.db(), pid)["birth_date"], "1980-12-31")
+        # no Birth date: the box is empty, never a dash
+        self.post(f"/people/{pid}/edit", {**same, "birth_date": ""})
+        self.assertIsNone(people.get_person(self.db(), pid)["birth_date"])
+        box = self.birth_box(self.page(f"/people/{pid}/edit"))
+        self.assertIn('value=""', box)
+        self.assertNotIn("—", box)
+        # a bad one: next to the field, kept as typed, nothing saved
+        _h, page = self.post(f"/people/{pid}/edit", {**same, "birth_date": "1850"}, expect=400)
+        self.assertIn('<p class="error" id="f-birth_date-error">Birth date must be a real date like 31/12/1980, '
+                      "or a year from 1900 like 1980.</p>", page)
+        self.assertIn('value="1850"', self.birth_box(page))
+        self.assertIsNone(people.get_person(self.db(), pid)["birth_date"])
+
+    def test_person_page_shows_year(self):
+        """BY-2: the Person page shows a year-only Birth date as 1980, never 00/00."""
+        pid = people.add_person(self.db(), "Quách Văn Chỉ Năm", birth_date="1980-00-00")
+        details = section(self.page(f"/people/{pid}"), "details")
+        self.assertIn('<span class="num">1980</span>', details)
+        self.assertNotIn("00/00", details)
+        people.update_person(self.db(), pid, birth_date="1980-12-31")
+        self.assertIn('<span class="num">31/12/1980</span>', section(self.page(f"/people/{pid}"), "details"))
+
     def test_full_name_at_most_120_characters(self):
         """B3: a Full name of 120 characters is saved; 121 is refused next to the field (add and edit)."""
         long_name = "Trần Thị B3 " + "Hồng" * 27
@@ -508,6 +579,37 @@ class SmallLogicTest(unittest.TestCase):
             with self.assertRaises(ValueError) as ctx:
                 people_pages.past_or_today(bad, "Done date")
             self.assertTrue(str(ctx.exception).startswith("Done date"), bad)
+
+    def test_birth_from_input(self):
+        """BY-2: one reader for a typed Birth date or a People file cell. A year only gives YYYY-00-00."""
+        read = people_pages.birth_from_input
+        serial = (dt.date(1980, 12, 31) - dt.date(1899, 12, 30)).days  # a spreadsheet date number
+        for value, want in (("1980", "1980-00-00"), (1980, "1980-00-00"), (1980.0, "1980-00-00"),
+                            (" 1980 ", "1980-00-00"), ("1900", "1900-00-00"),
+                            (str(TODAY.year), f"{TODAY.year}-00-00"), ("1980-00-00", "1980-00-00"),
+                            ("31/12/1980", "1980-12-31"), ("1/2/1980", "1980-02-01"), ("1980-12-31", "1980-12-31"),
+                            ("31/12/1850", "1850-12-31"),  # a full date has no 1900 floor
+                            (TODAY.isoformat(), TODAY.isoformat()), (float(serial), "1980-12-31"),
+                            ("", None), ("  ", None), (None, None)):
+            self.assertEqual(read(value), want, repr(value))
+        self.assertEqual(read(serial - 1462, date1904=True), "1980-12-31")
+        after = f"Birth date cannot be after today ({shown(TODAY.isoformat())}). Use today or an earlier date."
+        real = "Birth date must be a real date like 31/12/1980, or a year from 1900 like 1980."
+        for bad, key, sentence in (
+                ("2999", "people.err_after_today", after), (2999, "people.err_after_today", after),
+                (str(TODAY.year + 1), "people.err_after_today", after),
+                ((TODAY + dt.timedelta(days=1)).isoformat(), "people.err_after_today", after),
+                ("1850", "people.err_birth_date", real), (1850.0, "people.err_birth_date", real),
+                ("1899-00-00", "people.err_birth_date", real), ("abc", "people.err_birth_date", real),
+                ("31/02/1990", "people.err_birth_date", real), ("1980-00-05", "people.err_birth_date", real),
+                ("19800", "people.err_birth_date", real), ("1980.5", "people.err_birth_date", real),
+                (0, "people.err_birth_date", real)):
+            with self.assertRaises(ValueError, msg=repr(bad)) as ctx:
+                read(bad)
+            self.assertEqual((getattr(ctx.exception, "key", None), str(ctx.exception)), (key, sentence), repr(bad))
+        with self.assertRaises(ValueError) as ctx:
+            read("abc", "Born")  # the label starts the sentence, so field_errors finds the field
+        self.assertTrue(str(ctx.exception).startswith("Born must be a real date"), str(ctx.exception))
 
     def test_field_errors(self):
         labels = {"start_date": "Start date", "family_role": "Family role", "family_id": "Family"}
