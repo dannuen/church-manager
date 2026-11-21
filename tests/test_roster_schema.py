@@ -7,7 +7,7 @@ import unittest
 
 import _support  # noqa: F401  (puts the repo on sys.path)
 from _support import CopyTestCase, temp_folder
-from churchmgr import agent, db, handover, lists, people, schema
+from churchmgr import agent, db, handover, i18n, lists, people, schema
 
 V2_TABLES = ("service_role_link", "rotation_place", "skipped_date", "service_role")  # links first: they point at roles
 
@@ -118,8 +118,13 @@ class MigrationTest(unittest.TestCase):
         folder, conn = make_v1_copy(self)
         conn.execute("CREATE TABLE skipped_date (x)")  # the last V2 table cannot be made
         conn.close()
-        with self.assertRaises(sqlite3.OperationalError):
+        with self.assertRaises(db.ChurchCopyError) as ctx:  # a page shows the text of a key, not SQLite text
             db.open_church_copy(folder)
+        self.assertEqual((ctx.exception.key, ctx.exception.params["needed"]), ("errors.copy_upgrade", 2))
+        self.assertIsInstance(ctx.exception.__cause__, sqlite3.OperationalError)
+        self.assertIn("could not be brought to database version 2 (table skipped_date already exists). "
+                      "It was not changed.", str(ctx.exception))
+        self.assertIn("không thay đổi", i18n.error_text(ctx.exception, "vi"))
         conn = db.connect(folder / db.DB_NAME)
         self.addCleanup(conn.close)
         self.assertEqual(version(conn), 1)

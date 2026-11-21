@@ -44,6 +44,8 @@ def old_english(key, p):
         return f"{p['path']} is not a Church Manager database ({p['detail']})."
     if key == "errors.copy_version":
         return f"{p['path']} has database version {p['version']}; this app needs version {schema.SCHEMA_VERSION}."
+    if key == "errors.copy_upgrade":  # new with schema version 2: no older sentence
+        return f"{p['path']} could not be brought to database version {p['needed']} ({p['detail']}). It was not changed."
     where = "is the church copy folder itself" if key == "errors.copy_root_is_copy" else (
         f"is inside the church copy {p['folder']}")
     return (f"The copies folder {p['root']} {where}, so Handover zips and New church setups would be saved "
@@ -86,6 +88,10 @@ class CopyErrorTest(unittest.TestCase):
         (tmp / "old").mkdir()
         (tmp / "old" / db.DB_NAME).write_bytes(b"")  # an empty SQLite file: version 0
         catch(lambda: db.open_church_copy(tmp / "old"))
+        v1 = db.create_church_copy(tmp / "v1", "Hội Thánh Thử")
+        v1.execute("PRAGMA user_version = 1")  # its version-2 tables are there already: the move to 2 fails
+        v1.close()
+        catch(lambda: db.open_church_copy(tmp / "v1"))
         catch(lambda: server.make_server(copy, copy, 0, remember=False))
         catch(lambda: server.make_server(copy, copy / "backups", 0, remember=False))
         # SQLite settings that only a broken SQLite gives: made by hand.

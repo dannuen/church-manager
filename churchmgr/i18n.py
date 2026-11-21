@@ -1062,6 +1062,8 @@ TEXT = {
         "search.title": "Tìm kiếm",
         "search.find_person": "Tìm Người",
         # --- errors
+        "errors.copy_upgrade": "Không chuyển được {path} sang cơ sở dữ liệu bản {needed} ({detail}). Dữ liệu Hội "
+                               "Thánh không thay đổi.",
         "errors.copy_plain": "{message}",
         "errors.copy_foreign_keys": "Không bật được khóa ngoại của SQLite.",
         "errors.copy_journal_mode": "Chế độ nhật ký của SQLite đang là {mode}, cần là chế độ xóa.",
@@ -2130,6 +2132,8 @@ TEXT = {
         "search.title": "Search",
         "search.find_person": "Find a Person",
         # --- errors
+        "errors.copy_upgrade": "{path} could not be brought to database version {needed} ({detail}). It was not "
+                               "changed.",
         "errors.copy_plain": "{message}",
         "errors.copy_foreign_keys": "SQLite foreign keys could not be turned on.",
         "errors.copy_journal_mode": "SQLite journal mode is {mode}, expected delete.",

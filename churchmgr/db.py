@@ -144,7 +144,11 @@ def open_church_copy(folder):
         raise ChurchCopyError("errors.copy_version", path=db_path, version=version, needed=schema.SCHEMA_VERSION)
     try:
         if version == 1:
-            _to_version_2(conn)
+            try:
+                _to_version_2(conn)
+            except sqlite3.Error as exc:  # rolled back: the copy stays version 1
+                raise ChurchCopyError("errors.copy_upgrade", path=db_path, needed=schema.SCHEMA_VERSION,
+                                      detail=str(exc)) from exc
         stale = schema.stale_triggers(conn)
         if stale:
             with transaction(conn):
