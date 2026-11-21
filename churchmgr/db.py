@@ -87,8 +87,8 @@ def create_church_copy(folder, church_name, lang="en"):
     """Make a new church copy in ``folder`` and return an open connection.
 
     Refuses a OneDrive folder and a folder that already has ``church.db``.
-    Creates the folder, ``documents/``, the whole schema, the default lists with
-    the names of ``lang`` (``vi`` or ``en``) and the settings ``church_name``,
+    Creates the folder, ``documents/``, the whole schema, the default lists and the default Service roles
+    with the names of ``lang`` (``vi`` or ``en``) and the settings ``church_name``,
     ``care_reminder_months`` (3) and ``language`` (``lang``). The app always passes
     a language; the default ``en`` keeps the old tests in English.
     The caller must close the connection.
@@ -106,6 +106,7 @@ def create_church_copy(folder, church_name, lang="en"):
         with transaction(conn):
             schema.create_schema(conn)
             schema.insert_default_lists(conn, lang)
+            schema.insert_default_service_roles(conn, lang)
             values = {"church_name": name, **schema.DEFAULT_SETTINGS, settings.LANGUAGE: lang}
             conn.executemany(
                 "INSERT INTO setting (key, value) VALUES (?, ?)", list(values.items())
@@ -120,7 +121,8 @@ def create_church_copy(folder, church_name, lang="en"):
 def open_church_copy(folder):
     """Open the church copy in ``folder`` and return a connection.
 
-    Checks that ``church.db`` exists and has the right ``user_version``. A copy made by an older app
+    Checks that ``church.db`` exists and has a ``user_version`` in ``schema.KNOWN_VERSIONS``. A version-1
+    copy is brought to version 2 in one transaction (:func:`_to_version_2`). A copy made by an older app
     gets the triggers of this app (``schema.stale_triggers``); an up-to-date copy is not written.
     Makes ``documents/`` if it is missing. The caller must close the connection.
     """
@@ -137,10 +139,16 @@ def open_church_copy(folder):
     except sqlite3.DatabaseError as exc:
         conn.close()
         raise ChurchCopyError("errors.copy_not_database", path=db_path, detail=str(exc)) from exc
-    if version != schema.SCHEMA_VERSION:
+    if version not in schema.KNOWN_VERSIONS:
         conn.close()
         raise ChurchCopyError("errors.copy_version", path=db_path, version=version, needed=schema.SCHEMA_VERSION)
     try:
+        if version == 1:
+            try:
+                _to_version_2(conn)
+            except sqlite3.Error as exc:  # rolled back: the copy stays version 1
+                raise ChurchCopyError("errors.copy_upgrade", path=db_path, needed=schema.SCHEMA_VERSION,
+                                      detail=str(exc)) from exc
         stale = schema.stale_triggers(conn)
         if stale:
             with transaction(conn):
@@ -150,6 +158,17 @@ def open_church_copy(folder):
         raise
     (folder / DOCUMENTS_DIR).mkdir(exist_ok=True)
     return conn
+
+
+def _to_version_2(conn):
+    """Bring a version-1 church copy to version 2 in ONE transaction: the new tables, indexes and triggers
+    (``schema.STATEMENTS_V2``), the default Service roles in the copy's language, then ``user_version`` 2.
+    Old tables and rows are not touched."""
+    with transaction(conn):
+        for statement in schema.STATEMENTS_V2:
+            conn.execute(statement)
+        schema.insert_default_service_roles(conn, settings.get_language(conn))
+        conn.execute("PRAGMA user_version = 2")
 
 
 def documents_folder(folder):

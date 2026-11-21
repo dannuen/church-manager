@@ -1,6 +1,7 @@
 """B8: verify.py gives the tests at most 600 seconds; a timeout prints one FAIL line, not a traceback.
 I18N-U7: the both-language rules of step 6 name each fault, and every GET route must be in the page list.
-I18N-U7-fix1: an English word inside a Tiếng Việt text is named (the key, and each page that shows it)."""
+I18N-U7-fix1: an English word inside a Tiếng Việt text is named (the key, and each page that shows it).
+RO-7: the Roster check fails when Auto-fill leaves a Service role empty; a version-1 church copy opens."""
 
 import contextlib
 import io
@@ -13,7 +14,7 @@ from unittest import mock
 
 import _support  # noqa: F401 - puts the repo root on sys.path
 import verify
-from churchmgr import db, fake, i18n
+from churchmgr import db, fake, i18n, server
 
 
 class RunTestsTimeoutTest(unittest.TestCase):
@@ -134,6 +135,38 @@ class RoutesListedTest(unittest.TestCase):
             ok, detail = verify.check_routes(self.db_path)
         self.assertFalse(ok)
         self.assertIn("NO PAGE CHECKED FOR: /nowhere/<int:id>", detail)
+
+
+class RosterChecksTest(unittest.TestCase):
+    """RO-7: the two Roster checks of verify.py on a fake church: each can fail, and passes on the real app."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="cm-test-")
+        self.addCleanup(tmp.cleanup)
+        self.root = pathlib.Path(tmp.name)
+        assert "onedrive" not in str(self.root.resolve()).lower()
+
+    def test_the_roster_check_names_each_empty_service_role(self):
+        copy = self.root / "fake"
+        fake.build_fake_church(copy, people=20)
+        source = copy / db.DB_NAME
+        httpd = server.make_server(copy, self.root, 0, remember=False)
+        server.serve_in_thread(httpd)
+        self.addCleanup(verify.stop, httpd)
+        said_filled = (303, {"location": "/calendar/roster?quarter=2026-4&msg=3+Service+roles+filled."}, b"")
+        with mock.patch.object(verify, "post_form", lambda *args: said_filled):  # a fill that saves nothing
+            ok, detail = verify.check_roster(httpd.port, source, verify.note_texts(source))
+        self.assertFalse(ok)
+        self.assertIn("but 0 links are new", detail)
+        self.assertRegex(detail, r"EMPTY after Auto-fill: Bồi linh \d{4}-\d\d-\d\d")
+        ok, detail = verify.check_roster(httpd.port, source, verify.note_texts(source))
+        self.assertTrue(ok, detail)
+        self.assertIn("each Service role held", detail)
+
+    def test_a_version_1_copy_opens_as_version_2(self):
+        ok, detail = verify.check_old_copy(self.root / "v1", 20)
+        self.assertTrue(ok, detail)
+        self.assertIn("version 1 with 0 Roster tables -> opened: version 2", detail)
 
 
 if __name__ == "__main__":

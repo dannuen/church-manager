@@ -829,3 +829,48 @@ table.documents td:last-child a { color: var(--accent-text); font-weight: 400; }
   .row .row-action { justify-content: flex-end; }
   table.list td:first-child > a { margin-block: -12px; }
 }
+
+/* ---------- RO-5: the Roster (Lịch phân công) and its Auto-fill preview ----------
+   The pastor's paper list as a screen: one card per month (.roster-month), one row per week. Per weekday a
+   date column (the date is the one link of a row: it opens the Service roles of that Service) and a column
+   per Service role done by a Person; the last column is Notes (the Ministry in charge). A swap reads as on
+   paper: the old name struck in --muted, an arrow, the name now in ink. Names are ink, not the app color,
+   and no row lights up under the pointer (--accent-text on --raised is under 4.5:1 for some app colors).
+   The 3 month tables share one column grid (fixed layout: the date columns 104px, the name columns share the
+   rest), so a column sits at the same place in each month, as on paper; a week with no Service keeps a
+   whole row. The table keeps 720px (a name column about 128px): on a phone it scrolls inside its card
+   (.table-wrap), never the page. The sizes are screen only: print.css sets the paper ones. */
+@media screen {
+  .roster-table { min-width: 720px; table-layout: fixed; }
+  .roster-table .roster-date { width: 104px; }
+  .roster-table td { height: 37px; padding: 8px 12px; font-size: var(--fs-meta); line-height: 20px; }
+  .roster-table :where(thead) th { padding-block: 6px; white-space: normal; vertical-align: bottom; }
+}
+.roster-table .roster-date { white-space: nowrap; }
+.roster-table s { color: var(--muted); }
+.roster-names { overflow-wrap: break-word; }
+.grid + .roster { margin-top: var(--gap); }   /* the preview: its month cards under the Save and dates cards */
+/* a name Auto-fill would add (the preview, not saved yet): ink on the tint of the app color, with a line
+   under it in --accent-text, so it shows without its color too; bold stays the paper's month start. The
+   legend in the Save card shows the same mark */
+.roster-new { padding: 0 4px; border-radius: 4px; background: var(--active); color: var(--text); text-decoration: underline 2px var(--accent-text); text-underline-offset: 4px; }
+
+/* ---------- RO-6: the Roster setup (Thiết lập Lịch phân công) and the page of one Service role ----------
+   The Lists page look: cards with a table and the add form under a line (.add-form), Hide / Show and the
+   Rotation moves as plain words in the app color (.link-btn). New here only: a radio button or a checkbox with
+   its label on its right and one plain sentence under the label (.choice: the same-person rule, the month
+   start), the box as big as the checkbox of style.css. */
+.roster-setup .choice { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 2px 12px; align-items: start; }
+.roster-setup .choice input { margin: 0; }
+.roster-setup .choice input[type="radio"] { width: 20px; height: 20px; accent-color: var(--accent-text); cursor: pointer; }
+.roster-setup .choice label { font-size: var(--fs-meta); font-weight: 500; line-height: 20px; cursor: pointer; }
+.roster-setup .choice .hint, .roster-setup .choice .error { grid-column: 2; }
+.roster-setup .inline-fields > .field { align-content: start; }   /* a field beside one with a hint keeps its label on top */
+/* From 641px (a phone has the two-line rows of table.list): the row words sit together at the right; the
+   Service roles table keeps 760px, its day and done-by cells one line each, and scrolls inside its card when the
+   card is narrower (900px to 1080px with the menu), never the page */
+@media screen and (min-width: 641px) {
+  .roster-setup td.act { width: 1%; white-space: nowrap; }
+  .roster-setup table.roster-roles { min-width: 760px; }
+  .roster-setup table.roster-roles td:nth-child(2), .roster-setup table.roster-roles td:nth-child(3) { white-space: nowrap; }
+}

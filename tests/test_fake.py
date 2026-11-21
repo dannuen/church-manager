@@ -10,7 +10,7 @@ from unittest import mock
 
 import _support
 from _support import temp_folder
-from churchmgr import calendar, care, db, documents, fake, handover, lists, money, people, search, sent, story
+from churchmgr import calendar, care, db, documents, fake, handover, lists, money, people, roster, search, sent, story
 
 TODAY = dt.date(2026, 11, 1)  # a Sunday
 
@@ -45,6 +45,11 @@ def snapshot(conn):
         "sent_document": "SELECT year, seq, date, recipient_id, purpose_id, subject FROM sent_document ORDER BY id",
         "private_note": "SELECT person_id, body FROM private_note ORDER BY id",
         "document": "SELECT original_name, size, sha256, person_id, family_id, calendar_item_id FROM document",
+        "service_role": "SELECT * FROM service_role ORDER BY id",
+        "rotation_place": "SELECT * FROM rotation_place ORDER BY 1, 2",
+        "service_role_link": "SELECT * FROM service_role_link ORDER BY id",
+        "skipped_date": "SELECT * FROM skipped_date ORDER BY date",
+        "list_item": "SELECT * FROM list_item ORDER BY id",
     }
     return {name: [tuple(r) for r in conn.execute(sql)] for name, sql in queries.items()}
 
@@ -106,10 +111,11 @@ class FakeChurchTest(unittest.TestCase):
     def test_calendar_care_money_sent(self):
         services = self.conn.execute("SELECT starts_at FROM calendar_item WHERE kind = 'Service' "
                                      "ORDER BY starts_at").fetchall()
-        self.assertEqual(len(services), 16)
-        past = [s for s in services if s[0] < f"{TODAY} 00:00"]
+        self.assertEqual(len(services), 32)  # 16 Sundays and the 16 Thursdays (Bồi linh) of the same weeks
+        weekdays = [dt.datetime.strptime(s[0], "%Y-%m-%d %H:%M").weekday() for s in services]
+        self.assertEqual((weekdays.count(6), weekdays.count(3)), (16, 16))
+        past = [s for s, day in zip(services, weekdays) if day == 6 and s[0] < f"{TODAY} 00:00"]
         self.assertEqual(len(past), 12)
-        self.assertTrue(all(dt.datetime.strptime(s[0], "%Y-%m-%d %H:%M").weekday() == 6 for s in services))
         self.assertEqual(self.count("SELECT COUNT(*) FROM head_count"), 12)
         self.assertGreaterEqual(self.count("SELECT COUNT(*) FROM calendar_person"), 16)
         log = care.care_log(self.conn)
@@ -127,6 +133,47 @@ class FakeChurchTest(unittest.TestCase):
         st = money.giving_statement(self.conn, TODAY.year, family_id=families[0]["id"])
         self.assertTrue(st["rows"])
         self.assertGreater(st["total"], 0)
+
+    def test_roster(self):
+        ministries = [m["name"] for m in lists.get_list(self.conn, "ministry")]
+        self.assertEqual(ministries, ["Worship", "Youth", "Children", *fake.ROSTER_MINISTRIES])  # added at the end
+        boi_linh, leader, offering, in_charge = roster.roles(self.conn)
+        self.assertEqual([r["name"] for r in (boi_linh, leader, offering, in_charge)],
+                         ["Bồi linh", "Service leader", "Offering leader", "Ministry in charge"])
+        places = {r["id"]: roster.rotation(self.conn, r["id"]) for r in (boi_linh, leader, offering, in_charge)}
+        self.assertEqual([len(p) for p in places.values()], [6, 6, 6, 3])
+        self.assertEqual([p["name"] for p in places[in_charge["id"]]], list(fake.ROSTER_MINISTRIES))
+        statuses = {p["id"]: p["status_code"] for p in people.list_persons(self.conn)}
+        for role_id in (boi_linh["id"], leader["id"], offering["id"]):
+            self.assertTrue(all(statuses[p["person_id"]] not in ("left", "passed_away") for p in places[role_id]))
+        self.assertFalse({p["person_id"] for p in places[leader["id"]]} & {p["person_id"] for p in places[offering["id"]]})
+        items = self.conn.execute("SELECT id, title, starts_at FROM calendar_item WHERE kind = 'Service' "
+                                  "ORDER BY starts_at").fetchall()
+        thursdays = [r for r in items if r["title"] == "Bồi linh"]
+        self.assertTrue(all(r["starts_at"].endswith(" 19:30") for r in thursdays))
+        swaps = cleared = 0
+        for item in items:
+            links = roster.item_links(self.conn, item["id"])
+            if item["starts_at"][:10] >= TODAY.isoformat():
+                self.assertEqual(links, [], item["starts_at"])  # the future stays empty for Auto-fill
+                continue
+            by_role = {}
+            for link in links:
+                by_role.setdefault(link["role_name"], []).append(link)
+            for name, rows in by_role.items():
+                swaps += len(rows) == 2
+                cleared += len(rows) == 1 and rows[0]["end_date"] is not None
+                if len(rows) == 2:  # the old name closed on the day the new one starts
+                    self.assertEqual((rows[0]["end_date"], rows[1]["end_date"]), (rows[1]["start_date"], None))
+            filled = {"Bồi linh"} if item["title"] == "Bồi linh" else {"Service leader", "Offering leader"}
+            self.assertEqual(set(by_role) - {"Ministry in charge"}, filled, item["starts_at"])  # every person role
+        self.assertEqual((swaps, cleared), (1, 1))
+        in_charge_sundays = self.count("SELECT COUNT(*) FROM service_role_link WHERE service_role_id = ?",
+                                       in_charge["id"])
+        self.assertEqual(in_charge_sundays, 6)  # every 2nd of the 12 past Sundays
+        self.assertEqual(self.counts["service_role_links"], self.count("SELECT COUNT(*) FROM service_role_link"))
+        skipped = roster.skipped_dates(self.conn, "1900-01-01", "9999-12-31")
+        self.assertEqual([tuple(r) for r in skipped], [("2026-11-15", "Hội đồng bồi linh")])  # a future Sunday
 
     def test_private_notes_documents_and_story(self):
         bodies = [r[0] for r in self.conn.execute("SELECT body FROM private_note ORDER BY id")]

@@ -62,7 +62,7 @@ def _read_source(db_path):
     src = _connect_ro(db_path)
     try:
         version = src.execute("PRAGMA user_version").fetchone()[0]
-        if version != schema.SCHEMA_VERSION:
+        if version not in schema.KNOWN_VERSIONS:  # it reads only tables every known version has
             raise HandoverError("copies.err_db_version", path=db_path, version=schema.SCHEMA_VERSION)
         row = src.execute("SELECT value FROM setting WHERE key = 'church_name'").fetchone()
         slug = text.slugify(row[0] if row else "church")

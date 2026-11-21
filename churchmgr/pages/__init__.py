@@ -9,8 +9,9 @@ PAGES = [dashboard, search, setup]
 PAGES += [people, people_file, families, chi_phai, care]  # card C1 (people_file: the People file, spec 001)
 
 from . import calendar, money  # noqa: E402 - card C2
+from . import roster  # noqa: E402 - the Service role Roster (card RO-4)
 
-PAGES += [calendar, money]  # card C2
+PAGES += [calendar, roster, money]  # card C2; roster after calendar: its routes are /calendar/... too
 
 from . import copies, documents, lists, sent, settings  # noqa: E402 - card C3
 
