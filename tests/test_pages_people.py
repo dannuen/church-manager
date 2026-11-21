@@ -35,6 +35,11 @@ def shown(iso):
     return dt.date.fromisoformat(iso).strftime("%d/%m/%Y")
 
 
+def flash_of(headers):
+    """The flash sentence of a redirect (its ``?msg=``)."""
+    return urllib.parse.parse_qs(urllib.parse.urlsplit(headers["location"]).query)["msg"][0]
+
+
 def section(page, name):
     """The inner HTML of ``<section ... data-panel="name">`` (panels are never nested)."""
     m = re.search(rf'<section [^>]*data-panel="{re.escape(name)}"[^>]*>(.*?)</section>', page, re.S)
@@ -169,10 +174,10 @@ class PeoplePagesTest(PagesTestBase):
         self.assertIn("Start date cannot be after today", page)
         self.assertIn('id="status-date-error"', page)  # the sentence sits next to the date field
         self.assertIn("<details class=\"change\" open>", page)
-        _h, page = self.post(f"/people/{pid}/status", {"status_id": self.item("status", code="member"),
-                                                       "start_date": ago(20)}, expect=400)
-        self.assertIn("History is never rewritten", page)
-        self.assertEqual(len(people.status_history(self.db(), pid)), 1)
+        # SP-2: a Status date before the last change adds to the past (it is no longer refused)
+        self.post(f"/people/{pid}/status", {"status_id": self.item("status", code="member"), "start_date": ago(20)})
+        self.assertEqual([(r["code"], r["start_date"], r["end_date"]) for r in people.status_history(self.db(), pid)],
+                         [("member", ago(20), ago(10)), ("visitor", ago(10), None)])
         # Family, Ministry, Chi phái and Trưởng Chi phái forms refuse a future date too
         conn = self.db()
         fam = people.list_families(conn)[0]["id"]
@@ -192,6 +197,96 @@ class PeoplePagesTest(PagesTestBase):
         self.post("/people/new", {"full_name": "Võ Văn Tương Lai", "status_id": self.item("status", code="member"),
                                   "start_date": tomorrow}, expect=400)
         self.assertEqual(len(people.list_persons(conn)), before)
+
+    # ---- SP-2: Change Status takes any date up to today (people.insert_status)
+
+    def status_lines(self, pid):
+        return [(r["code"], r["start_date"], r["end_date"]) for r in people.status_history(self.db(), pid)]
+
+    def status_item(self, code):
+        """The Status item of ``code``: its id and its name as the pages show it."""
+        return lists.find_item(self.db(), "status", code=code)
+
+    def input_box(self, page, fid):
+        """The ``<input>`` tag with id ``fid``."""
+        m = re.search(rf'<input [^>]*id="{re.escape(fid)}"[^>]*>', page)
+        self.assertIsNotNone(m, f"no input {fid}")
+        return m.group(0)
+
+    def test_status_form_has_no_min_date(self):
+        pid = self.new_person("Đinh Văn Ngày Xưa", "visitor", start=ago(30))
+        fam = people.list_families(self.db())[0]["id"]
+        self.post(f"/people/{pid}/family", {"family_id": fam, "family_role": "Other", "start_date": ago(10)})
+        page = self.page(f"/people/{pid}")
+        box = self.input_box(page, "status-date")
+        self.assertNotIn("min=", box)
+        self.assertIn(f'max="{TODAY.isoformat()}"', box)
+        self.assertIn('aria-describedby="status-date-hint"', box)
+        self.assertIn(f'min="{ago(10)}"', self.input_box(page, "family-date"))  # the Family form keeps its rule
+        self.assertIn('<p class="hint" id="status-date-hint">An earlier date adds to the past. Nothing old is removed.'
+                      "</p>", section(page, "status"))
+
+    def test_status_post_past_date(self):
+        pid = self.new_person("Đinh Văn Đã Nghỉ", "visitor", start="2010-01-01")
+        left, visitor = self.status_item("left"), self.status_item("visitor")
+        headers, _ = self.post(f"/people/{pid}/status", {"status_id": left["id"], "start_date": "2018-06-30"})
+        self.assertEqual(flash_of(headers), f"Status changed to {left['name']} from 30/06/2018.")
+        self.assertEqual(self.status_lines(pid), [("visitor", "2010-01-01", "2018-06-30"), ("left", "2018-06-30", None)])
+        self.assertEqual(people.current_status(self.db(), pid)["code"], "left")
+        page = self.page(f"/people/{pid}")
+        self.assertEqual(parse_panels(page).rows["status"], 2)
+        status_html = section(page, "status")
+        for name in (visitor["name"], left["name"]):
+            self.assertIn(f"<td>{name}</td>", status_html)
+        for day in ("01/01/2010", "30/06/2018"):
+            self.assertIn(day, status_html)
+
+    def test_status_post_inside_closed_line(self):
+        pid = self.new_person("Đinh Văn Giữa Chừng", "visitor", start="2010-01-01")
+        self.post(f"/people/{pid}/status", {"status_id": self.status_item("member")["id"], "start_date": "2024-03-15"})
+        open_id = people.current_status(self.db(), pid)["id"]
+        left = self.status_item("left")
+        headers, _ = self.post(f"/people/{pid}/status", {"status_id": left["id"], "start_date": "2018-06-30"})
+        self.assertEqual(flash_of(headers), f"Status changed to {left['name']} from 30/06/2018.")
+        self.assertEqual(self.status_lines(pid), [("visitor", "2010-01-01", "2018-06-30"),
+                                                  ("left", "2018-06-30", "2024-03-15"),
+                                                  ("member", "2024-03-15", None)])
+        now = people.current_status(self.db(), pid)
+        self.assertEqual((now["id"], now["code"]), (open_id, "member"))  # the current Status stays
+        self.assertEqual(parse_panels(self.page(f"/people/{pid}")).rows["status"], 3)
+
+    def test_status_post_same_as_covering(self):
+        pid = self.new_person("Đinh Văn Vẫn Thế", "visitor", start="2010-01-01")
+        self.post(f"/people/{pid}/status", {"status_id": self.status_item("member")["id"], "start_date": "2024-03-15"})
+        before = [tuple(r) for r in people.status_history(self.db(), pid)]
+        visitor = self.status_item("visitor")
+        headers, _ = self.post(f"/people/{pid}/status", {"status_id": visitor["id"], "start_date": "2018-06-30"})
+        self.assertEqual(flash_of(headers), f"Status is already {visitor['name']}. Nothing changed.")
+        self.assertEqual([tuple(r) for r in people.status_history(self.db(), pid)], before)
+
+    def test_status_post_existing_start_date(self):
+        pid = self.new_person("Đinh Văn Cùng Ngày", "visitor", start="2010-01-01")
+        self.post(f"/people/{pid}/status", {"status_id": self.status_item("member")["id"], "start_date": "2024-03-15"})
+        before = [tuple(r) for r in people.status_history(self.db(), pid)]
+        _h, page = self.post(f"/people/{pid}/status", {"status_id": self.status_item("left")["id"],
+                                                       "start_date": "2010-01-01"}, expect=400)
+        status_html = section(page, "status")
+        self.assertIn('<p class="error" id="status-date-error">Start date 01/01/2010: a Status already starts on that '
+                      "day. Pick another date.</p>", status_html)
+        self.assertIn('<details class="change" open>', status_html)
+        self.assertIn('value="2010-01-01"', self.input_box(page, "status-date"))  # the date as typed
+        self.assertEqual([tuple(r) for r in people.status_history(self.db(), pid)], before)
+
+    def test_status_post_after_today(self):
+        tomorrow = (TODAY + dt.timedelta(days=1)).isoformat()
+        pid = self.new_person("Đinh Văn Ngày Mai", "visitor", start="2010-01-01")
+        before = [tuple(r) for r in people.status_history(self.db(), pid)]
+        _h, page = self.post(f"/people/{pid}/status", {"status_id": self.status_item("left")["id"],
+                                                       "start_date": tomorrow}, expect=400)
+        m = re.search(r'<p class="error" id="status-date-error">([^<]*)</p>', page)
+        self.assertIsNotNone(m)
+        self.assertTrue(m.group(1).startswith("Start date cannot be after today"), m.group(1))
+        self.assertEqual([tuple(r) for r in people.status_history(self.db(), pid)], before)
 
     def test_move_person_to_another_family_keeps_the_old_link(self):
         conn = self.db()

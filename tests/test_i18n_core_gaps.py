@@ -231,17 +231,36 @@ class CoreGapsScreensTest(ScreensBase):
 
     def test_history_error_on_a_vietnamese_page(self):
         pid, member, attender = self.plain["vi"], self.member["vi"], self.attender["vi"]
-        self.post("vi", f"/people/{pid}/status", {"status_id": member, "start_date": TODAY.isoformat()})
+        # The Family form keeps the old rule (SP-2 lets only the Status form take an earlier date).
+        conn = db.connect(self.roots["vi"] / "fake" / db.DB_NAME)
+        try:
+            first, second = (f["id"] for f in people.list_families(conn)[:2])
+        finally:
+            conn.close()
+        self.post("vi", f"/people/{pid}/family", {"family_id": first, "family_role": "Other",
+                                                  "start_date": TODAY.isoformat()})
         early = TODAY - dt.timedelta(days=5)
-        page = self.post("vi", f"/people/{pid}/status", {"status_id": attender, "start_date": early.isoformat()},
-                         400)[1]
-        m = re.search(r'<p class="error" id="status-date-error">([^<]*)</p>', page)
+        page = self.post("vi", f"/people/{pid}/family", {"family_id": second, "family_role": "Other",
+                                                         "start_date": early.isoformat()}, 400)[1]
+        m = re.search(r'<p class="error" id="family-date-error">([^<]*)</p>', page)
         assert m is not None, page[-3000:]
         self.assertEqual(m.group(1), f"Ngày bắt đầu {shown(early)} sớm hơn {shown(TODAY)}, ngày của lần thay đổi "
                                      "gần nhất. Những gì đã qua không bao giờ bị viết lại; hãy dùng ngày "
                                      f"{shown(TODAY)} hoặc sau đó.")
         self.assertNotRegex(m.group(1), ISO_DATE)
-        self.assert_screen("vi", page, "status before the last change")
+        self.assert_screen("vi", page, "family before the last change")
+        # The Status form refuses a day a Status already starts on (people.err_status_day).
+        older = TODAY - dt.timedelta(days=10)
+        self.post("vi", f"/people/{pid}/status", {"status_id": member, "start_date": older.isoformat()})
+        self.post("vi", f"/people/{pid}/status", {"status_id": attender, "start_date": early.isoformat()})
+        page = self.post("vi", f"/people/{pid}/status", {"status_id": attender, "start_date": older.isoformat()},
+                         400)[1]
+        m = re.search(r'<p class="error" id="status-date-error">([^<]*)</p>', page)
+        assert m is not None, page[-3000:]
+        self.assertEqual(m.group(1), f"Ngày bắt đầu {shown(older)}: đã có một Trạng thái bắt đầu vào ngày đó. "
+                                     "Hãy chọn ngày khác.")
+        self.assertNotRegex(m.group(1), ISO_DATE)
+        self.assert_screen("vi", page, "status on a day a Status starts")
 
 
 class HistoryErrorTest(_support.CopyTestCase):
