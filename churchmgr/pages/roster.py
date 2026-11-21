@@ -516,7 +516,8 @@ ROLE_PLACES = {
     "month_start": ("calendar.roster_month_start",),
     "month_start_from": ("calendar.err_month_form", "calendar.err_month_years"),
 }
-SKIPPED_PLACES = {"date": ("calendar.roster_skipped_date",), "reason": ("calendar.roster_reason",)}
+SKIPPED_PLACES = {"date": ("calendar.roster_skipped_date", "calendar.roster_err_skipped_year"),
+                  "reason": ("calendar.roster_reason",)}
 
 
 def placed(exc, places):
@@ -680,9 +681,14 @@ def _rule_panel(conn, error, vals):
     return _anchored("same-person", t("calendar.roster_rule_title"), form, meta=h(t("calendar.roster_rule_meta")))
 
 
+def _skipped_years(today):
+    """The years the setup lists Skipped dates of: this year and next. The add form takes only these."""
+    return today.year, min(today.year + 1, LAST_YEAR)
+
+
 def _skipped_panel(conn, error, vals, today):
     """The Skipped dates of this year and next (date, reason, Remove) and the add form."""
-    first, last = today.year, min(today.year + 1, LAST_YEAR)
+    first, last = _skipped_years(today)
     rows = []
     for r in roster.skipped_dates(conn, f"{first:04d}-01-01", f"{last:04d}-12-31"):
         day = ui.fmt_date(r["date"])
@@ -869,6 +875,9 @@ def skipped_add_post(req):
     f = req.form
     try:
         day = text.check_date(f.get("date") or "", "calendar.roster_skipped_date")
+        first, last = _skipped_years(_dt.date.today())
+        if not first <= int(day[:4]) <= last:  # the list would not show it, and it could not be removed
+            raise TextError("calendar.roster_err_skipped_year", first=first, last=last)
         old = roster.skipped_reason(req.conn, day)
         roster.add_skipped_date(req.conn, day, f.get("reason"))
     except ValueError as exc:

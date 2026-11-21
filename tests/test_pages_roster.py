@@ -1073,6 +1073,20 @@ class RosterSetupTest(PagesTestBase):
         self.assertEqual(listed, [shown(r["date"]) for r in rows])
         self.assertIn(fake.ROSTER_SKIPPED, box)  # the fake church's Skipped date: a coming Sunday
 
+    def test_a_skipped_date_the_page_does_not_list_is_refused(self):
+        """RO-6R Minor: the add form takes only a date of the years the list shows, so no Skipped date is out of
+        reach of its Remove button."""
+        count = len(roster.skipped_dates(self.db(), "1900-01-01", "9999-12-31"))
+        for year in (TODAY.year - 1, TODAY.year + 2):
+            iso = f"{year}-01-05"
+            _h, page = self.post("/calendar/roster/skipped/add", {"date": iso, "reason": "RO-6R Far"}, expect=400)
+            box = section(page, "skipped-dates")
+            self.assertIn(f'<p class="error" id="add-skipped-date-error">Skipped date must be in {TODAY.year} or '
+                          f'{TODAY.year + 1}, the years this page lists.</p>', box)
+            self.assertIn('value="RO-6R Far"', box)  # what was typed stays
+            self.assertIsNone(roster.skipped_reason(self.db(), iso))
+        self.assertEqual(len(roster.skipped_dates(self.db(), "1900-01-01", "9999-12-31")), count)
+
     def test_the_same_person_rule_is_saved_and_read_back(self):
         self.assertEqual(roster.same_person_rule(self.db()), "service")
         box = section(self.page(SETUP), "same-person")
