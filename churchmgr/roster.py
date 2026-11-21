@@ -381,3 +381,151 @@ def conflicts(conn, item_id, role_id, person_id, rule=None, extra=()):
     found = sorted((scope[i], order[r], by_id[r]["name"]) for i, r in slots
                    if r in by_id and by_id[r]["done_by"] == "person")
     return [(name, day) for day, _order, name in found]
+
+
+# ---------------------------------------------------------------- Auto-fill (decision D5)
+
+def _fill_range(from_date, to_date):
+    """The range of an Auto-fill as ``YYYY-MM-DD`` texts: ``to`` not before ``from``, at most
+    ``MAX_FILL_DAYS`` days after it."""
+    first = text.check_date(from_date, "calendar.start_date")
+    last = text.check_date(to_date, "calendar.end_date")
+    if last < first:
+        raise TextError("calendar.roster_err_fill_before")
+    if (_dt.date.fromisoformat(last) - _dt.date.fromisoformat(first)).days > MAX_FILL_DAYS:
+        raise TextError("calendar.roster_err_fill_long", max=MAX_FILL_DAYS)
+    return first, last
+
+
+def _months(start, day):
+    """Months from ``start`` (``YYYY-MM``) to the month of ``day`` (``YYYY-MM-DD``); negative when before."""
+    return (int(day[:4]) - int(start[:4])) * 12 + int(day[5:7]) - int(start[5:7])
+
+
+def _plan_role(conn, role, services, first, rule, plan, proposed):
+    """D5 steps 1 to 4 for one Service role with a non-empty Rotation. Adds to ``plan`` and to
+    ``proposed`` (the ``(item_id, role_id, person_id)`` not saved yet, for the conflict check)."""
+    by_person = role["done_by"] == "person"
+    places = [r["person_id"] if by_person else r["ministry_id"] for r in rotation(conn, role["id"])]
+    n = len(places)
+    # 1. The role's Services up to `to` (already without the Skipped dates): (item id, date).
+    seq = [(iid, day) for iid, day, weekday in services if weekday == role["weekday"]]
+    held, holder = set(), {}  # held: any link row, open or closed; holder: the open value
+    for r in conn.execute("SELECT calendar_item_id, person_id, ministry_id, end_date FROM service_role_link "
+                          "WHERE service_role_id = ?", (role["id"],)):
+        held.add(r["calendar_item_id"])
+        if r["end_date"] is None:
+            holder[r["calendar_item_id"]] = r["person_id"] if by_person else r["ministry_id"]
+    before = [i for i, (_iid, day) in enumerate(seq) if day < first]
+    inside = [i for i, (_iid, day) in enumerate(seq) if day >= first]
+    if not inside:
+        return
+    # 2. every-step: count from the last Service before `from` with an open link, else from the first one in range.
+    linked = [i for i in before if seq[i][0] in holder]
+    anchor = linked[-1] if linked else inside[0]
+    beat = [i for i in range(len(seq)) if (i - anchor) % role["every"] == 0]
+    steps = [i for i in beat if seq[i][1] >= first]
+    # 3. The queue starts right after the last holder (in the Rotation) before `from`.
+    queue = list(places)
+    last_holder = next((holder[seq[i][0]] for i in reversed(before) if holder.get(seq[i][0]) in places), None)
+    if last_holder is not None:
+        k = places.index(last_holder) + 1
+        queue = places[k:] + places[:k]
+    # The first step Service of each month, counted over ALL the role's Services (also before `from`), so a
+    # range that starts mid-month does not give that month's starter to a later Service.
+    month_first = {}
+    for i in beat:
+        month_first.setdefault(seq[i][1][:7], i)
+    firsts = set(month_first.values())
+    start_month = role["month_start_from"] or first[:7]
+
+    def starter(i):
+        return places[_months(start_month, seq[i][1]) % n]
+
+    def free(item_id, who, memo):
+        """No conflicts for ``who`` in this slot (a role done by a Ministry has none). ``memo``: one slot."""
+        if not by_person:
+            return True
+        if who not in memo:
+            memo[who] = not conflicts(conn, item_id, role["id"], who, rule, proposed)
+        return memo[who]
+
+    # 4. Each step Service in date order.
+    for at, i in enumerate(steps):
+        item_id = seq[i][0]
+        if item_id in held:  # never changed; its holder had a turn
+            if holder.get(item_id) in queue:
+                queue.remove(holder[item_id])
+                queue.append(holder[item_id])
+            continue
+        memo = {}
+        pick = None
+        if role["month_start"] and i in firsts and free(item_id, starter(i), memo):
+            pick = starter(i)
+        if pick is None:
+            reserved = set()
+            if role["month_start"]:  # the starters of the month-first Services among the next n-1 step Services
+                reserved = {starter(j) for j in steps[at + 1:at + n] if j in firsts}
+            pick = next((who for who in queue if who not in reserved and free(item_id, who, memo)), None)
+            if pick is None:
+                pick = next((who for who in queue if free(item_id, who, memo)), None)
+        if pick is None:
+            plan["nobody_free"].append((item_id, role["id"]))
+            continue
+        queue.remove(pick)
+        queue.append(pick)
+        if by_person:
+            plan["proposals"].append((item_id, role["id"], pick, None))
+            proposed.append((item_id, role["id"], pick))
+        else:
+            plan["proposals"].append((item_id, role["id"], None, pick))
+
+
+def fill_plan(conn, from_date, to_date):
+    """The Auto-fill of the empty Service roles from ``from_date`` to ``to_date`` (both included, at most
+    ``MAX_FILL_DAYS`` days apart), from each Rotation. Reads only: nothing is saved.
+
+    Returns ``{"proposals": [(item_id, role_id, person_id, ministry_id)], "nobody_free": [(item_id, role_id)]}``,
+    by Service role order (:func:`roles`), then date. For each shown Service role with a Rotation of n places:
+
+    - Its Services: Services on the role's weekday up to ``to_date``, by start, without the Skipped dates.
+    - ``every``: the step Services are every ``every``-th one, counted from the last Service before
+      ``from_date`` with an open link of this role, else from the first Service of the range.
+    - The queue is the Rotation, started right after the last holder before ``from_date``.
+    - A step Service with any link of this role (open or closed) is held: never changed; its open holder goes
+      to the end of the queue. Else, with ``month_start``, the first step Service of a month (counted over all
+      the role's Services, also those before ``from_date``) gets the starter:
+      Rotation place ``k % n``, k = months from ``month_start_from`` (none: the month of ``from_date``). Else
+      (or when the same-person rule refuses the starter) the first one in the queue who is not kept for a
+      coming month start (the next n-1 step Services) and has no :func:`conflicts` with
+      :func:`same_person_rule` (saved links and the proposals so far, all roles). Nobody: the first one with
+      no conflicts. Still nobody: the slot goes to ``nobody_free``. The one picked goes to the end of the queue.
+    - A role done by a Ministry has no conflict check.
+    """
+    first, last = _fill_range(from_date, to_date)
+    skipped = {r["date"] for r in conn.execute("SELECT date FROM skipped_date WHERE date <= ?", (last,))}
+    services = []
+    for r in conn.execute("SELECT id, starts_at FROM calendar_item WHERE kind = 'Service' "
+                          "AND substr(starts_at, 1, 10) <= ? ORDER BY starts_at, id", (last,)):
+        day = r["starts_at"][:10]
+        if day not in skipped:
+            services.append((r["id"], day, _dt.date.fromisoformat(day).weekday()))
+    rule = same_person_rule(conn)
+    plan = {"proposals": [], "nobody_free": []}
+    proposed = []
+    for role in roles(conn):
+        if conn.execute("SELECT 1 FROM rotation_place WHERE service_role_id = ?", (role["id"],)).fetchone():
+            _plan_role(conn, role, services, first, rule, plan, proposed)
+    return plan
+
+
+def save_fill(conn, from_date, to_date, day=None):
+    """Make the :func:`fill_plan` again and save every proposal with :func:`set_link` from ``day`` (default
+    today), all in ONE transaction: a failure saves nothing. Returns the number of links saved."""
+    when = _day(day)
+    saved = 0
+    with transaction(conn):
+        for item_id, role_id, person_id, ministry_id in fill_plan(conn, from_date, to_date)["proposals"]:
+            if set_link(conn, item_id, role_id, person_id, ministry_id, day=when):
+                saved += 1
+    return saved

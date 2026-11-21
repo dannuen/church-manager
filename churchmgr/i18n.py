@@ -442,6 +442,9 @@ TEXT = {
         "chi_phai.title": "Chi phái",
         "chi_phai.add": "Thêm Chi phái",
         # --- calendar
+        "calendar.roster_err_fill_before": "Tự động xếp lịch: ngày kết thúc ở trước ngày bắt đầu.",
+        "calendar.roster_err_fill_long": "Tự động xếp lịch: ngày kết thúc chỉ được sau ngày bắt đầu nhiều nhất "
+                                         "{max} ngày.",
         "calendar.err_service_day_roster": "Giờ thờ phượng này đã có Phần vụ trong Lịch phân công, nên không đổi "
                                            "được ngày trong tuần.",
         "calendar.roster_role": "Phần vụ",
@@ -1550,6 +1553,8 @@ TEXT = {
         "chi_phai.title": "Chi phái",
         "chi_phai.add": "Add a Chi phái",
         # --- calendar
+        "calendar.roster_err_fill_before": "Auto-fill: the end date is before the start date.",
+        "calendar.roster_err_fill_long": "Auto-fill: the end date may be at most {max} days after the start date.",
         "calendar.err_service_day_roster": "This Service has Service roles on the Roster, so its day of the week "
                                            "cannot change.",
         "calendar.roster_role": "Service role",
