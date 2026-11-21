@@ -595,6 +595,8 @@ def _item_view(req, row, error=None, status=200):
     left = ""
     if row["kind"] == "Service":  # the Head count is the Service's own job, so it comes first
         left += _head_count_panel(conn, row, error, vals("head-count"), today)
+        from . import roster as roster_pages  # card RO-4; imported here: pages/roster.py imports this module
+        left += roster_pages.service_roles_panel(conn, row, error, vals(roster_pages.FORM))
     left += _people_panel(conn, row, error, vals("people"), today)
     left += documents_spot(conn, row)
     right = _details_panel(conn, row) + _edit_panel(row, error, vals("edit")) + _delete_panel(conn, row, error)
