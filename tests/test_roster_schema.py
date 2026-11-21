@@ -1,6 +1,7 @@
 """Schema version 2: the Service role tables, their rules, the default Service roles and the move from
 version 1 (card RO-1, decisions D2 and D3)."""
 
+import hashlib
 import sqlite3
 import unittest
 
@@ -54,6 +55,17 @@ def make_v1_copy(test, lang="vi"):
 class NewCopyTest(unittest.TestCase):
     def test_version_numbers(self):
         self.assertEqual((schema.SCHEMA_VERSION, schema.KNOWN_VERSIONS), (2, (1, 2)))
+
+    def test_version_1_statements_are_the_old_ones(self):
+        """make_v1_copy builds with this code, so it is a real version-1 copy only if the old statements did not
+        change. The hashes are of schema.TRIGGERS and schema.TABLES + schema.INDEXES at commit 99cac03
+        (the last version-1 app), joined with a new line."""
+        def sha(statements):
+            return hashlib.sha256("\n".join(statements).encode("utf-8")).hexdigest()
+        self.assertEqual((len(schema.TRIGGERS_V1), sha(schema.TRIGGERS_V1)),
+                         (24, "03b6d2d4d6ea353bb9bd0cba4e75c39fb8209b391ddc0411905e30ad332f4897"))
+        self.assertEqual((len(schema.TABLES + schema.INDEXES), sha(schema.TABLES + schema.INDEXES)),
+                         (36, "52087dfffb16abab090e226de7976768290a7c1d4064b0fdecb354fde83e2de1"))
 
     def test_new_copy_is_version_2_with_the_default_service_roles(self):
         for lang in ("vi", "en"):
