@@ -250,6 +250,8 @@ TEXT = {
         "people.err_history": "Ngày bắt đầu {start:%d/%m/%Y} sớm hơn {latest:%d/%m/%Y}, ngày của lần thay đổi gần "
                               "nhất. Những gì đã qua không bao giờ bị viết lại; hãy dùng ngày {latest:%d/%m/%Y} "
                               "hoặc sau đó.",
+        "people.err_status_day": "Ngày bắt đầu {day:%d/%m/%Y}: đã có một Trạng thái bắt đầu vào ngày đó. "
+                                 "Hãy chọn ngày khác.",
         "people.err_gender": "Giới tính phải là M (Nam) hoặc F (Nữ), hoặc để trống.",
         "people.err_family_role": "Vai trò trong gia đình phải là một trong: Chủ gia đình, Vợ/Chồng, Con, Người thân "
                                   "khác.",
@@ -1324,6 +1326,7 @@ TEXT = {
         "people.err_no_row": "No {what} with id {id}.",
         "people.err_history": "Start date {start:%d/%m/%Y} is before {latest:%d/%m/%Y}, the date of the last change. "
                               "History is never rewritten; use a date on or after it.",
+        "people.err_status_day": "Start date {day:%d/%m/%Y}: a Status already starts on that day. Pick another date.",
         "people.err_gender": "Gender must be M or F, or empty.",
         "people.err_family_role": "Family role must be one of: Head, Spouse, Child, Other.",
         "people.err_ministry_role": "Ministry role must be one of: Leader, Member.",

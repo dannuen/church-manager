@@ -3,10 +3,16 @@
 Rules kept by the database itself:
 - History rows (Status, Family link, Chi phái link, Trưởng Chi phái, Ministry
   link) are never deleted. The only allowed update closes ``end_date`` once:
-  NULL -> a date on or after ``start_date``. One open row per owner.
+  NULL -> a date on or after ``start_date``. One exception, for Status rows only
+  (Rule 4 exception, approved by the pastor): a closed row may also get an earlier
+  end date, still on or after its start date, when an older Status is added inside
+  it (``people.insert_status``). One open row per owner.
 - Money is INTEGER dong only: a CHECK on ``typeof(amount) = 'integer'``.
 - Private notes live only in ``private_note``.
 - List items are never deleted (hide them with ``active = 0``).
+
+A church copy made by an older app gets the triggers of this file when it opens
+(``stale_triggers``, ``renew_triggers``); tables and indexes never change there.
 """
 
 SCHEMA_VERSION = 1
@@ -264,16 +270,24 @@ def _history_triggers():
     out = []
     for table, columns in HISTORY_TABLES.items():
         same = " AND ".join(f"NEW.{c} IS OLD.{c}" for c in ("id", "start_date") + columns)
+        if table == "person_status":
+            # Rule 4 exception: an older Status added inside a closed line cuts it (people.insert_status).
+            # The name stays, so an older copy's trigger is replaced (renew_triggers), not kept beside it.
+            ends = "NEW.end_date IS NOT NULL AND (OLD.end_date IS NULL OR NEW.end_date < OLD.end_date)"
+            rule = "only an open row may be closed, or a closed row cut to an earlier end date"
+        else:  # this text is the same as before card SP-1
+            ends = "OLD.end_date IS NULL AND NEW.end_date IS NOT NULL"
+            rule = "only an open row may be closed once"
         out.append(
             f"CREATE TRIGGER {table}_never_delete BEFORE DELETE ON {table}\n"
             "BEGIN SELECT RAISE(ABORT, 'history is never deleted'); END"
         )
         out.append(
             f"CREATE TRIGGER {table}_close_only BEFORE UPDATE ON {table}\n"
-            f"WHEN NOT (OLD.end_date IS NULL AND NEW.end_date IS NOT NULL\n"
+            f"WHEN NOT ({ends}\n"
             f"          AND NEW.end_date >= OLD.start_date AND {same})\n"
             "BEGIN SELECT RAISE(ABORT, "
-            "'history is never changed: only an open row may be closed once, "
+            f"'history is never changed: {rule}, "
             "with an end date on or after its start date'); END"
         )
     return out
@@ -301,7 +315,8 @@ def _list_triggers():
     return out
 
 
-STATEMENTS = TABLES + INDEXES + tuple(_history_triggers()) + tuple(_list_triggers())
+TRIGGERS = tuple(_history_triggers()) + tuple(_list_triggers())
+STATEMENTS = TABLES + INDEXES + TRIGGERS
 
 
 def create_schema(conn):
@@ -312,6 +327,21 @@ def create_schema(conn):
     for statement in STATEMENTS:
         conn.execute(statement)
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+
+
+def stale_triggers(conn):
+    """``(name, statement)`` of each trigger in ``TRIGGERS`` that the church copy lacks or holds with
+    another text (a copy made by an older app), in ``TRIGGERS`` order. Reads only."""
+    stored = {r[0]: r[1] for r in conn.execute("SELECT name, sql FROM sqlite_master WHERE type = 'trigger'")}
+    named = ((statement.split()[2], statement) for statement in TRIGGERS)  # CREATE TRIGGER <name> ...
+    return [(name, statement) for name, statement in named if stored.get(name) != statement]
+
+
+def renew_triggers(conn, stale):
+    """Make each ``(name, statement)`` from :func:`stale_triggers` again. Run inside a transaction."""
+    for name, statement in stale:
+        conn.execute(f"DROP TRIGGER IF EXISTS {name}")
+        conn.execute(statement)
 
 
 def insert_default_lists(conn, lang):

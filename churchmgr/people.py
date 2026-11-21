@@ -181,6 +181,47 @@ def set_status(conn, person_id, status_id, start_date):
         return _set_history(conn, "person_status", {"person_id": pid}, {"status_id": sid}, start_date)
 
 
+def insert_status(conn, person_id, status_id, day):
+    """Give a Person a Status from ``day``: any date, also before the last change.
+
+    ``day`` on or after the last change: as :func:`set_status`. An earlier ``day`` adds to the past:
+    the line that covers ``day`` is cut there (its end date becomes ``day``) and the new line runs to
+    that line's old end; with no covering line, the new line runs to the next start. No line is
+    deleted, and the current Status (the open line) stays. Two neighbour lines may share a Status.
+    Returns ``True`` when a line was written, ``False`` when the line that covers ``day`` already has
+    this Status. A line that already starts on ``day`` is refused (``people.err_status_day``).
+    """
+    with transaction(conn):
+        pid = _require_row(conn, "person", person_id, "people.person")["id"]
+        sid = lists.require_item(conn, status_id, "status")["id"]
+        day = text.check_date(day, "people.start_date")
+        rows = conn.execute("SELECT * FROM person_status WHERE person_id = ?", (pid,)).fetchall()
+        latest = max((r["end_date"] or r["start_date"] for r in rows), default=None)
+        if latest is None or day >= latest:
+            open_row = next((r for r in rows if r["end_date"] is None), None)
+            if open_row is not None and open_row["status_id"] == sid:
+                return False
+            _set_history(conn, "person_status", {"person_id": pid}, {"status_id": sid}, day)
+            return True
+        # A zero-length line (start = end) never covers a day.
+        cover = next((r for r in rows if r["start_date"] <= day and (r["end_date"] is None or day < r["end_date"])),
+                     None)
+        if cover is not None and cover["status_id"] == sid:
+            return False
+        if any(r["start_date"] == day for r in rows):
+            raise TextError("people.err_status_day", day=_dt.date.fromisoformat(day))
+        if cover is None:  # before the first line, or in a gap
+            end = min(r["start_date"] for r in rows if r["start_date"] > day)
+        else:
+            end = cover["end_date"]
+            conn.execute("UPDATE person_status SET end_date = ? WHERE id = ?", (day, cover["id"]))
+        conn.execute(
+            "INSERT INTO person_status (person_id, status_id, start_date, end_date) VALUES (?, ?, ?, ?)",
+            (pid, sid, day, end),
+        )
+        return True
+
+
 def current_status(conn, person_id):
     """The open Status row (status_id, name, code, start_date), or ``None``."""
     return conn.execute(

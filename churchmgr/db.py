@@ -120,7 +120,8 @@ def create_church_copy(folder, church_name, lang="en"):
 def open_church_copy(folder):
     """Open the church copy in ``folder`` and return a connection.
 
-    Checks that ``church.db`` exists and has the right ``user_version``.
+    Checks that ``church.db`` exists and has the right ``user_version``. A copy made by an older app
+    gets the triggers of this app (``schema.stale_triggers``); an up-to-date copy is not written.
     Makes ``documents/`` if it is missing. The caller must close the connection.
     """
     folder = paths.check_not_onedrive(folder)
@@ -139,6 +140,14 @@ def open_church_copy(folder):
     if version != schema.SCHEMA_VERSION:
         conn.close()
         raise ChurchCopyError("errors.copy_version", path=db_path, version=version, needed=schema.SCHEMA_VERSION)
+    try:
+        stale = schema.stale_triggers(conn)
+        if stale:
+            with transaction(conn):
+                schema.renew_triggers(conn, stale)
+    except BaseException:
+        conn.close()
+        raise
     (folder / DOCUMENTS_DIR).mkdir(exist_ok=True)
     return conn
 

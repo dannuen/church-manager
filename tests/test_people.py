@@ -3,7 +3,8 @@ import unicodedata
 import unittest
 
 from _support import CopyTestCase
-from churchmgr import lists, people, search
+from churchmgr import i18n, lists, people, search, text
+from churchmgr.i18n import TextError
 
 NAME = "Nguyễn Hải Đăng"
 
@@ -135,6 +136,156 @@ class StatusHistoryTest(CopyTestCase):
         self.assertEqual(people.set_status(self.conn, str(self.pid), str(self.status("visitor")), "2025-01-01"), open_id)
 
 
+class InsertStatusTest(CopyTestCase):
+    """people.insert_status: a Status change at any past date, in any order (card SP-1)."""
+
+    def person(self, *lines):
+        """A Person with these Status lines, oldest first: (code, start date); the last one stays open."""
+        (code, start), *rest = lines
+        pid = people.add_person(self.conn, NAME, status_id=self.status(code), start_date=start)
+        for code, start in rest:
+            people.set_status(self.conn, pid, self.status(code), start)
+        return pid
+
+    def hist(self, pid):
+        return [(r["code"], r["start_date"], r["end_date"]) for r in people.status_history(self.conn, pid)]
+
+    def open_count(self, pid):
+        return self.conn.execute(
+            "SELECT COUNT(*) FROM person_status WHERE person_id = ? AND end_date IS NULL", (pid,)
+        ).fetchone()[0]
+
+    def insert(self, pid, code, day):
+        return people.insert_status(self.conn, pid, self.status(code), day)
+
+    def test_insert_status_inside_open_line(self):
+        pid = self.person(("visitor", "2010-01-01"))
+        self.assertIs(self.insert(pid, "left", "2018-06-30"), True)
+        self.assertEqual(self.hist(pid), [("visitor", "2010-01-01", "2018-06-30"), ("left", "2018-06-30", None)])
+        self.assertEqual(people.current_status(self.conn, pid)["code"], "left")
+        self.assertEqual(self.open_count(pid), 1)
+
+    def test_insert_status_inside_closed_line(self):
+        pid = self.person(("visitor", "2010-01-01"), ("member", "2024-01-01"))
+        open_id = people.current_status(self.conn, pid)["id"]
+        self.assertIs(self.insert(pid, "left", "2018-06-30"), True)
+        self.assertEqual(self.hist(pid), [
+            ("visitor", "2010-01-01", "2018-06-30"),
+            ("left", "2018-06-30", "2024-01-01"),
+            ("member", "2024-01-01", None),
+        ])
+        now = people.current_status(self.conn, pid)
+        self.assertEqual((now["id"], now["code"]), (open_id, "member"))
+        self.assertEqual(self.open_count(pid), 1)
+
+    def test_insert_status_before_first(self):
+        pid = self.person(("visitor", "2024-03-15"))
+        open_id = people.current_status(self.conn, pid)["id"]
+        self.assertIs(self.insert(pid, "member", "2010-01-01"), True)
+        self.assertEqual(self.hist(pid), [("member", "2010-01-01", "2024-03-15"), ("visitor", "2024-03-15", None)])
+        now = people.current_status(self.conn, pid)
+        self.assertEqual((now["id"], now["code"]), (open_id, "visitor"))
+        self.assertEqual(self.open_count(pid), 1)
+
+    def test_insert_status_spec_example(self):
+        """Visitor from 15/03/2024; add Member from 01/01/2010, then Left from 30/06/2018."""
+        pid = self.person(("visitor", "2024-03-15"))
+        self.assertIs(self.insert(pid, "member", "2010-01-01"), True)
+        self.assertIs(self.insert(pid, "left", "2018-06-30"), True)
+        self.assertEqual(self.hist(pid), [
+            ("member", "2010-01-01", "2018-06-30"),
+            ("left", "2018-06-30", "2024-03-15"),
+            ("visitor", "2024-03-15", None),
+        ])
+        self.assertEqual(people.current_status(self.conn, pid)["code"], "visitor")
+        self.assertEqual(self.open_count(pid), 1)
+
+    def test_insert_status_same_as_covering_returns_false(self):
+        pid = self.person(("visitor", "2010-01-01"), ("member", "2024-01-01"))
+        before = self.hist(pid)
+        for code, day in (("visitor", "2018-06-30"),   # inside the closed line
+                          ("visitor", "2010-01-01"),   # on the start of the closed line
+                          ("member", "2024-01-01"),    # on the start of the open line
+                          ("member", "2025-05-05")):   # inside the open line
+            self.assertIs(self.insert(pid, code, day), False, msg=(code, day))
+            self.assertEqual(self.hist(pid), before, msg=(code, day))
+            self.assertEqual(self.open_count(pid), 1)
+
+    def test_insert_status_on_existing_start_refused(self):
+        pid = self.person(("visitor", "2010-01-01"), ("member", "2024-01-01"))
+        before = self.hist(pid)
+        with self.assertRaises(TextError) as caught:
+            self.insert(pid, "left", "2010-01-01")
+        self.assertEqual(caught.exception.key, "people.err_status_day")
+        self.assertEqual(str(caught.exception),
+                         "Start date 01/01/2010: a Status already starts on that day. Pick another date.")
+        self.assertEqual(i18n.error_text(caught.exception, "vi"),
+                         "Ngày bắt đầu 01/01/2010: đã có một Trạng thái bắt đầu vào ngày đó. Hãy chọn ngày khác.")
+        self.assertEqual(self.hist(pid), before)
+        self.assertEqual(self.open_count(pid), 1)
+
+    def test_insert_status_same_day_forward_as_set_status(self):
+        today = text.today_text()
+        a = self.person(("visitor", today))
+        b = self.person(("visitor", today))
+        self.assertIs(self.insert(a, "member", today), True)
+        people.set_status(self.conn, b, self.status("member"), today)
+        self.assertEqual(self.hist(a), [("visitor", today, today), ("member", today, None)])
+        self.assertEqual(self.hist(a), self.hist(b))
+        self.assertEqual(people.current_status(self.conn, a)["code"], "member")
+        self.assertEqual(self.open_count(a), 1)
+
+    def test_insert_status_open_row_stays_unique(self):
+        """Every case on one Person, in turn: one open line after each, the current Status kept."""
+        pid = self.person(("visitor", "2024-03-15"))
+        steps = (
+            ("member", "2010-01-01", True),    # before the first line
+            ("left", "2018-06-30", True),      # inside a closed line
+            ("member", "2019-01-01", True),    # inside a closed line again
+            ("visitor", "2020-01-01", True),   # inside a closed line, the next line has this Status too
+            ("member", "2012-05-05", False),   # same as the covering line
+            ("attender", "2018-06-30", None),  # a line starts that day: refused
+            ("member", "2024-03-15", True),    # on the last change: as set_status
+            ("member", "2025-01-01", False),   # same as the open line
+            ("attender", "2026-01-01", True),  # after the last change: as set_status
+        )
+        for code, day, result in steps:
+            if result is None:
+                with self.assertRaises(TextError, msg=(code, day)):
+                    self.insert(pid, code, day)
+            else:
+                self.assertIs(self.insert(pid, code, day), result, msg=(code, day))
+            self.assertEqual(self.open_count(pid), 1, msg=(code, day))
+        self.assertEqual(self.hist(pid), [
+            ("member", "2010-01-01", "2018-06-30"),
+            ("left", "2018-06-30", "2019-01-01"),
+            ("member", "2019-01-01", "2020-01-01"),
+            ("visitor", "2020-01-01", "2024-03-15"),  # two neighbour lines with one Status: kept, not merged
+            ("visitor", "2024-03-15", "2024-03-15"),
+            ("member", "2024-03-15", "2026-01-01"),
+            ("attender", "2026-01-01", None),
+        ])
+
+    def test_insert_status_bad_input_changes_nothing(self):
+        pid = self.person(("visitor", "2010-01-01"), ("member", "2024-01-01"))
+        before = self.hist(pid)
+        bad = (
+            (pid, self.item("ministry", name="Youth"), "2018-06-30"),  # not a Status
+            (pid, 99999, "2018-06-30"),
+            (pid, "abc", "2018-06-30"),
+            (99999, self.status("left"), "2018-06-30"),                 # no such Person
+            (pid, self.status("left"), "2018-13-01"),                   # bad dates
+            (pid, self.status("left"), "30/06/2018"),
+            (pid, self.status("left"), ""),
+        )
+        for person_id, status_id, day in bad:
+            with self.assertRaises(TextError, msg=(person_id, status_id, day)):
+                people.insert_status(self.conn, person_id, status_id, day)
+            self.assertEqual(self.hist(pid), before)
+            self.assertEqual(self.open_count(pid), 1)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM person_status").fetchone()[0], 2)
+
+
 class HistoryRulesInDatabaseTest(CopyTestCase):
     """The database itself refuses to delete or rewrite history."""
 
@@ -168,6 +319,35 @@ class HistoryRulesInDatabaseTest(CopyTestCase):
                 self.conn.execute(sql, (closed,))
         row = self.conn.execute("SELECT start_date, end_date FROM person_status WHERE id = ?", (closed,)).fetchone()
         self.assertEqual(tuple(row), ("2024-01-07", "2024-06-02"))
+
+    def test_closed_status_row_may_only_be_cut_earlier(self):
+        """SP-1, the Rule 4 exception: a closed Status row may get an earlier end date, on or after its
+        start date (people.insert_status cuts it). Its Status and start date never change."""
+        closed = self.conn.execute(
+            "SELECT id FROM person_status WHERE person_id = ? AND end_date IS NOT NULL", (self.pid,)
+        ).fetchone()["id"]
+        left = self.status("left")
+        for sql, params in (
+            ("UPDATE person_status SET end_date = '2024-01-06' WHERE id = ?", (closed,)),  # before its start
+            ("UPDATE person_status SET end_date = '2024-06-03' WHERE id = ?", (closed,)),  # later
+            ("UPDATE person_status SET end_date = NULL WHERE id = ?", (closed,)),
+            ("UPDATE person_status SET end_date = '2024-03-01', status_id = ? WHERE id = ?", (left, closed)),
+            ("UPDATE person_status SET end_date = '2024-03-01', start_date = '2024-01-08' WHERE id = ?", (closed,)),
+        ):
+            with self.assertRaisesRegex(sqlite3.IntegrityError, "history is never changed", msg=sql):
+                self.conn.execute(sql, params)
+        self.conn.execute("UPDATE person_status SET end_date = '2024-03-01' WHERE id = ?", (closed,))
+        self.conn.execute("UPDATE person_status SET end_date = '2024-01-07' WHERE id = ?", (closed,))  # = start
+        row = self.conn.execute("SELECT status_id, start_date, end_date FROM person_status WHERE id = ?",
+                                (closed,)).fetchone()
+        self.assertEqual(tuple(row), (self.status("visitor"), "2024-01-07", "2024-01-07"))
+
+    def test_other_closed_history_rows_are_never_cut(self):
+        for table in ("family_link", "chi_phai_link", "truong_chi_phai", "ministry_link"):
+            self.conn.execute(f"UPDATE {table} SET end_date = '2025-01-01'")  # closing once is allowed
+            with self.assertRaisesRegex(sqlite3.IntegrityError, "history is never changed", msg=table):
+                self.conn.execute(f"UPDATE {table} SET end_date = '2024-06-01'")
+            self.assertEqual([r[0] for r in self.conn.execute(f"SELECT end_date FROM {table}")], ["2025-01-01"])
 
     def test_open_row_can_only_be_closed(self):
         open_id = people.current_status(self.conn, self.pid)["id"]
