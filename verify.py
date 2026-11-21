@@ -11,7 +11,11 @@
    Then checks the Hermes door (``python -m churchmgr.agent``): with the door off, ``status`` stops with
    exit 3; the door is turned on through the app (POST /settings); ``status``, ``search``, ``person``,
    ``care-due`` and ``money`` answer ok; a dry run of ``add-person`` saves nothing; no answer holds a
-   Private note.
+   Private note. Then the Roster: Auto-fill through the app (POST /calendar/roster/fill, today to today +
+   56 days); read from the database: every Service in that range holds each Service role it must hold
+   (decision D5, counted here, not by roster.py), no Service on a Skipped date got one, no
+   ``service_role_link`` row changed or went away (the fake swap keeps its closed row and dates); the
+   Roster pages hold no Private note text.
 6. Both languages. First, every Tiếng Việt text (``i18n.TEXT["vi"]``) must be Vietnamese: no ASCII word
    (3 or more letters) of the English texts, outside ``i18n.ALLOW`` and the fixed ``VI_ASCII_OK`` list.
    Then builds a fake church in Tiếng Việt and one in English. On each, every GET page of
@@ -22,7 +26,8 @@
    Tiếng Việt text. Then the switch: POST /language
    to English, the next page is English, a NEW server on the same church copy still shows English, and
    back to Tiếng Việt. Last, a church copy with no ``language`` row (made as before this setting
-   existed) shows Tiếng Việt.
+   existed) shows Tiếng Việt, and a church copy of version 1 (no Roster tables) opens with
+   ``db.open_church_copy`` as version 2 with the 4 default Service roles and all its People.
 7. Stops the server and removes the temp folder (``--keep`` keeps it and prints its path).
 
 Exit code 0 only when every check passes, else 1. Standard library only.
@@ -424,6 +429,93 @@ def check_agent(port, root, source_db, bodies):
     return not failed, "; ".join(steps) + (f"; FAILED: {'; '.join(failed)}" if failed else "")
 
 
+LINK_ROWS = ("SELECT id, calendar_item_id, service_role_id, person_id, ministry_id, start_date, end_date "
+             "FROM service_role_link ORDER BY id")
+
+
+def roster_slots(conn, first, last):
+    """What Auto-fill from ``first`` to ``last`` (ISO dates) must leave, read from the database the way
+    decision D5 says (not from roster.py). For each shown Service role with a Rotation, its Services are the
+    Services on its weekday up to ``last``, by start, without the Skipped dates; the step Services in the range
+    are every ``every``-th one, counted from the last Service before ``first`` with an open link of the role
+    (none: the first Service in the range). Returns ``(slots, skipped)``: ``slots`` = ``[(item id, date, role
+    id, role name)]`` of the step Services, ``skipped`` = the ids of the Services on a Skipped date in the range."""
+    skip_days = {r[0] for r in conn.execute("SELECT date FROM skipped_date")}
+    services = [(iid, start[:10]) for iid, start in conn.execute(
+        "SELECT id, starts_at FROM calendar_item WHERE kind = 'Service' AND substr(starts_at, 1, 10) <= ? "
+        "ORDER BY starts_at, id", (last,))]
+    skipped = {iid for iid, day in services if day >= first and day in skip_days}
+    slots = []
+    for rid, name, weekday, every in conn.execute(
+            "SELECT id, name, weekday, every FROM service_role WHERE active = 1 AND id IN "
+            "(SELECT service_role_id FROM rotation_place) ORDER BY weekday, sort_order, id"):
+        seq = [(iid, day) for iid, day in services
+               if date.fromisoformat(day).weekday() == weekday and day not in skip_days]
+        held = {r[0] for r in conn.execute("SELECT calendar_item_id FROM service_role_link WHERE "
+                                           "service_role_id = ? AND end_date IS NULL", (rid,))}
+        inside = [i for i, (_iid, day) in enumerate(seq) if day >= first]
+        if not inside:
+            continue
+        linked = [i for i, (iid, day) in enumerate(seq) if day < first and iid in held]
+        anchor = linked[-1] if linked else inside[0]
+        slots += [(seq[i][0], seq[i][1], rid, name) for i in inside if (i - anchor) % every == 0]
+    return slots, skipped
+
+
+def check_roster(port, source_db, bodies):
+    """Auto-fill through the app (POST /calendar/roster/fill, today to today + 56 days), then read only: each
+    slot of ``roster_slots`` has an open link (or only closed rows: a cleared Service role, which Auto-fill never
+    changes), no new link is on a Skipped date, every old ``service_role_link`` row is still there unchanged (the
+    fake swap's closed row with its dates too), and the Roster pages hold no Private note text."""
+    today = date.today()
+    first, last = today.isoformat(), date.fromordinal(today.toordinal() + 56).isoformat()
+    with closing(read_only(source_db)) as conn:
+        before = conn.execute(LINK_ROWS).fetchall()
+    closed = [row for row in before if row[6] is not None]
+    status, headers, body = post_form(port, "/calendar/roster/fill", {"from": first, "to": last})
+    location = headers.get("location", "")
+    if status != 303 or not location.startswith("/calendar/roster?"):
+        page = strip_tags(body.decode("utf-8", "replace"))[:300]
+        return False, f"POST /calendar/roster/fill -> {status} {location}: {page}"
+    flash = urllib.parse.parse_qs(urllib.parse.urlsplit(location).query).get("msg", [""])[0]
+    with closing(read_only(source_db)) as conn:
+        after = conn.execute(LINK_ROWS).fetchall()
+        slots, skipped = roster_slots(conn, first, last)
+    problems, kept = [], set(after)
+    new = [row for row in after if row[0] not in {r[0] for r in before}]
+    gone = [row[0] for row in before if row not in kept]
+    if gone or len(after) < len(before):
+        problems.append(f"service_role_link rows changed or gone: ids {gone}; rows {len(before)} -> {len(after)}")
+    if not closed:
+        problems.append("the fake church has no closed service_role_link row (no swap)")
+    told = re.match(r"(\d+) ", flash)
+    if told is None or int(told.group(1)) != len(new):
+        problems.append(f"the page says {flash!r}, but {len(new)} links are new")
+    open_links = {(row[1], row[2]) for row in after if row[6] is None}
+    any_link = {(row[1], row[2]) for row in after}
+    cleared = [s for s in slots if (s[0], s[2]) in any_link and (s[0], s[2]) not in open_links]
+    empty = [f"{name} {day}" for iid, day, rid, name in slots if (iid, rid) not in any_link]
+    if not slots or empty:
+        problems.append(f"{len(slots)} Service roles to hold; EMPTY after Auto-fill: {', '.join(empty) or 'none'}")
+    on_skipped = [row[0] for row in new if row[1] in skipped]
+    if on_skipped:
+        problems.append(f"new links on a Skipped date: ids {on_skipped}")
+    year, month = date.fromisoformat(last).year, date.fromisoformat(last).month
+    paths = ["/calendar/roster", f"/calendar/roster?quarter={year}-{(month - 1) // 3 + 1}",
+             f"/calendar/roster/fill?from={first}&to={last}"]
+    for path in paths:
+        status, _h, page = request(port, "GET", path)
+        if status != 200 or MARKER in page or any(b in page for b in bodies):
+            problems.append(f"GET {path} -> {status}" + (" with PRIVATE NOTE text" if status == 200 else ""))
+    facts = (f"POST /calendar/roster/fill {first} to {last} -> 303, {flash!r}; {len(slots)} Service roles to hold in "
+             f"the range ({len(cleared)} cleared before: kept empty); {len(skipped)} Service on a Skipped date; links "
+             f"{len(before)} -> {len(after)}, {len(closed)} of them closed (the swap); {len(paths)} Roster pages")
+    if problems:
+        return False, f"{facts}; PROBLEMS: {'; '.join(problems)}"
+    return True, (f"{facts}: each Service role held, none new on a Skipped date, no old row changed or gone (the "
+                  "closed rows keep their dates), no Private note text")
+
+
 def start_server(copy, root, state):
     """Start the real server on 127.0.0.1 and a free port, in a thread."""
     httpd = server.make_server(copy, root, 0, remember=False)  # remember=False: never writes current.txt
@@ -753,6 +845,51 @@ def check_no_language_row(folder, root):
                 + ("; ".join(bad) if bad else 'Tiếng Việt (<html lang="vi">, no English left)'))
 
 
+V2_TABLES = ("service_role_link", "rotation_place", "skipped_date", "service_role")  # links first: they point at roles
+
+
+def version_1_copy(folder, people):
+    """A church copy as version 1 of the app left it: a fake church in Tiếng Việt, then the version-2 tables
+    dropped (their indexes and triggers go with them) and ``user_version`` 1. Only this temp copy is changed."""
+    fake.build_fake_church(folder, people=people, lang="vi")
+    conn = db.connect(folder / db.DB_NAME)
+    try:
+        for table in V2_TABLES:
+            conn.execute(f"DROP TABLE {table}")
+        conn.execute("PRAGMA user_version = 1")
+    finally:
+        conn.close()
+
+
+def check_old_copy(folder, people):
+    """A version-1 church copy opens with ``db.open_church_copy``: it is version 2 then, with the 4 default
+    Service roles (Tiếng Việt names) and empty Roster tables, and keeps its People and Private notes."""
+    version_1_copy(folder, people)
+    db_path = folder / db.DB_NAME
+    with closing(read_only(db_path)) as conn:
+        old = conn.execute("PRAGMA user_version").fetchone()[0]
+        left = conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE tbl_name IN (?, ?, ?, ?)",
+                            V2_TABLES).fetchone()[0]
+    persons, notes = count(db_path, "person"), count(db_path, "private_note")
+    conn = db.open_church_copy(folder)
+    try:
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        roles = [tuple(r) for r in conn.execute(
+            "SELECT name, weekday, done_by, every, month_start FROM service_role ORDER BY sort_order")]
+        empty = all(conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] == 0 for t in V2_TABLES[:3])
+        stale = schema.stale_triggers(conn)
+    finally:
+        conn.close()
+    persons_after, notes_after = count(db_path, "person"), count(db_path, "private_note")
+    want = [(vi, weekday, by, every, start) for vi, _en, weekday, by, every, start in schema.DEFAULT_SERVICE_ROLES]
+    ok = ((old, left, version, roles, empty, stale) == (1, 0, 2, want, True, [])
+          and persons == persons_after == people and notes == notes_after > 0)
+    return ok, (f"version {old} with {left} Roster tables -> opened: version {version}, Service roles "
+                f"{', '.join(r[0] for r in roles)}, Roster tables {'empty' if empty else 'NOT EMPTY'}, "
+                f"{len(stale)} stale triggers; People {persons} -> {persons_after}, "
+                f"Private notes {notes} -> {notes_after}")
+
+
 def check_languages(checks, tmp, people):
     """Step 6: every page in Tiếng Việt and in English, the switch, a church copy with no language row."""
     copies = {lang: tmp / f"fake-{lang}" for lang, _name in LANGUAGES}
@@ -765,6 +902,7 @@ def check_languages(checks, tmp, people):
             checks.run(f"6. every page in {name}", check_pages, lang, copies[lang], tmp)
         checks.run("6. language switch, kept after a restart", check_switch, copies["vi"], tmp)
     checks.run("6. church copy with no language row shows Tiếng Việt", check_no_language_row, tmp / "old-copy", tmp)
+    checks.run("6. church copy of version 1 opens as version 2", check_old_copy, tmp / "version-1-copy", people)
 
 
 # ---------------------------------------------------------------- main
@@ -793,6 +931,7 @@ def check_app(checks, port, tmp, source_db, people, state):
         checks.run(f"5. Giving statement of a {kind.title()}", check_statement, port, source_db, kind, bodies)
     checks.run("5. Year report totals, no Giver name, no Private note", check_year_report, port, source_db, bodies)
     checks.run("5. Agent CLI (Hermes door)", check_agent, port, tmp, source_db, bodies)
+    checks.run("5. Roster: Auto-fill through the app", check_roster, port, source_db, bodies)
 
 
 def main(argv=None):
