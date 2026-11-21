@@ -10,6 +10,13 @@ one row per ISO week; a week belongs to the month of its Sunday) and Auto-fill: 
 ``GET /calendar/roster/fill?from=&to=`` (``roster.fill_plan``, never writes) and Save
 ``POST /calendar/roster/fill`` (``roster.save_fill``, then back to the Roster with "N filled").
 
+Card RO-6: the Roster setup ``/calendar/roster/setup`` (the Service roles, the Skipped dates of this year and
+next, the same-person rule) and the page of one Service role ``/calendar/roster/roles/<id>`` (its Rotation and
+its edit form). Every form goes back to its page (POST-redirect-GET); a refused one shows the page again (400)
+with the sentence under its field (or at the top of its form) and saves nothing. The data changes only through
+``roster.*``. Done by is chosen once, when a Service role is added; the weekday stays once the Service role is on
+the Roster (``roster.role_has_links``).
+
 Rules kept here:
 - Rule 4: a link changes only through ``roster.set_link`` and ``roster.clear_link``. The old names stay,
   struck, with their dates.
@@ -24,15 +31,17 @@ Rules kept here:
 import datetime as _dt
 import re
 
-from .. import i18n, lists, roster, text, ui
+from .. import i18n, lists, people, roster, text, ui
 from ..calendar import month_days
 from ..i18n import TextError, t, tn
 from ..server import Response
 from ..ui import clamp2, h, vi
 from . import calendar as cal_pages  # a module import: pages/calendar.py imports this module in _item_view
-from .people import empty, form_error, num, panel, person_link, today_text
+from .people import empty, form_error, not_found, num, panel, person_link, table, today_text
 
 FORM = "service-roles"  # the form key of a refused change, and the id of the panel
+SETUP = "/calendar/roster/setup"  # the Roster setup (card RO-6)
+ROLES = "/calendar/roster/roles"  # the page of one Service role: ROLES/<id>
 QUARTER = re.compile(r"([0-9]{4})-([1-4])")
 FIRST_YEAR, LAST_YEAR = 1900, 9999  # the years of a Roster quarter, as a Calendar month
 ARROW = "\u00a0\u2192 "  # between the names of a swap; the no-break space keeps the arrow after its name
@@ -404,6 +413,7 @@ def roster_page(req):
     first, last = quarter_dates(year, q)
     body = _quarter_bar(year, q, today) + _months(conn, first, last, today, quarter=(year, q))
     actions = (f'<button class="btn secondary" type="button" data-print>{h(t("core.btn_print"))}</button>'
+               + ui.link_button(t("calendar.roster_setup_link"), SETUP)
                + ui.link_button(t("calendar.roster_fill"), _fill_href(*fill_dates(first, last, today)), "primary"))
     return Response.html(ui.page(t("calendar.roster_title"), body, "calendar",
                                  sub=h(t("calendar.roster_quarter", q=q, year=year)), actions=actions))
@@ -495,10 +505,482 @@ def fill_post(req):
     return Response.redirect(ui.url("/calendar/roster", quarter=quarter, msg=tn("calendar.roster_filled", count)))
 
 
+# ---------------------------------------------------------------- the setup: small logic (card RO-6, tested)
+
+# Where a refused form shows its sentence: field -> the error keys and the field labels that belong to it.
+ROLE_PLACES = {
+    "name": ("calendar.roster_role_name", "calendar.roster_err_name_taken"),
+    "weekday": ("calendar.roster_err_weekday", "calendar.roster_err_weekday_kept"),
+    "done_by": ("calendar.roster_err_done_by",),
+    "every": ("calendar.roster_err_every",),
+    "month_start": ("calendar.roster_month_start",),
+    "month_start_from": ("calendar.err_month_form", "calendar.err_month_years"),
+}
+SKIPPED_PLACES = {"date": ("calendar.roster_skipped_date",), "reason": ("calendar.roster_reason",)}
+
+
+def placed(exc, places):
+    """``{field: sentence}`` of a refused form: the field of ``places`` that ``exc`` names by its key or by its
+    ``label``, else ``""`` (the top of the form). The sentence is in the language of the page."""
+    key = getattr(exc, "key", None)
+    label = (getattr(exc, "params", None) or {}).get("label")
+    field = next((name for name, marks in places.items() if key in marks or label in marks), "")
+    return {field: i18n.error_text(exc)}
+
+
+def rotation_order(ids, value, action):
+    """The new order of a Rotation (a list of ids) after ``action`` on ``value``: ``add`` (at the end; a repeat is
+    refused by ``roster.set_rotation``), ``up`` or ``down`` (one place; the first one up or the last one down: no
+    change) or ``remove``. A ``value`` that is not in the Rotation: ``TextError``."""
+    if action == "add":
+        return [*ids, value]
+    if value not in ids:
+        raise TextError("calendar.roster_err_not_in_rotation")
+    k, out = ids.index(value), list(ids)
+    if action == "remove":
+        del out[k]
+    elif action == "up" and k > 0:
+        out[k - 1], out[k] = out[k], out[k - 1]
+    elif action == "down" and k < len(out) - 1:
+        out[k], out[k + 1] = out[k + 1], out[k]
+    return out
+
+
+# ---------------------------------------------------------------- the setup: parts of the pages
+
+def _errors(error, form_key, places, fields):
+    """``{field: sentence}`` of ``error`` (``(form key, exception)``) for the form ``form_key``, or ``{}``. A
+    sentence whose field the form does not show goes to the top of the form (``""``)."""
+    if not error or error[0] != form_key:
+        return {}
+    (field, sentence), = placed(error[1], places).items()
+    return {field if field in fields else "": sentence}
+
+
+def _anchored(name, title, body, meta=""):
+    """A panel inside ``<div id=name>``: a form goes back to it (``#name``)."""
+    return f'<div id="{name}">{panel(name, title, body, meta=meta)}</div>'
+
+
+def _weekday_name(day):
+    return t(f"calendar.roster_weekday_{day}")
+
+
+def _done_by_text(role):
+    return t(f"calendar.roster_by_{role['done_by']}")
+
+
+def _month_start_text(role):
+    """``New round each month, from 01/2027`` (empty: no month start)."""
+    if not role["month_start"]:
+        return ""
+    month = role["month_start_from"]
+    if month:
+        return t("calendar.roster_month_round_from", month=f"{month[5:7]}/{month[:4]}")
+    return t("calendar.roster_month_round")
+
+
+def _places_text(role, n):
+    """``6 People``, ``3 Ministries``, or ``No Rotation yet``."""
+    return tn(f"calendar.roster_places_{role['done_by']}", n) if n else t("calendar.roster_no_places")
+
+
+def _on(value):
+    """A checkbox: not sent is off, ``1`` is on; anything else goes to ``roster`` as it is (refused there)."""
+    return False if value is None else True if value == "1" else value
+
+
+def _choice(kind, name, value, fid, label, hint, checked=False, error=None):
+    """A radio button or a checkbox (``kind``) with its label on its right and one plain sentence under the
+    label (``.choice`` in style.css)."""
+    described = f"{fid}-hint" + (f" {fid}-error" if error else "")
+    marks = (' aria-invalid="true"' if error else "") + (" checked" if checked else "")
+    error_html = f'<p class="error" id="{fid}-error">{h(error)}</p>' if error else ""
+    return (f'<div class="choice"><input type="{kind}" id="{fid}" name="{h(name)}" value="{h(value)}" '
+            f'aria-describedby="{described}"{marks}><label for="{fid}">{h(label)}</label>'
+            f'<p class="hint" id="{fid}-hint">{h(hint)}</p>{error_html}</div>')
+
+
+def _toggle_form(role):
+    """Hide or Show of one Service role: a plain word in the app color, as on the Lists page."""
+    toggle = "show" if not role["active"] else "hide"
+    label = t(f"calendar.roster_{toggle}_aria", name=role["name"])
+    return (f'<form class="row-form" action="{ROLES}/{role["id"]}/{toggle}" method="post">'
+            f'<button class="link-btn" type="submit" aria-label="{h(label)}">{h(t(f"calendar.roster_{toggle}"))}'
+            "</button></form>")
+
+
+def _role_fields(fid, vals, errors, locked=False, add=False):
+    """The fields of the add form (``add``: with Done by) or of the edit form, by field name. ``locked``: no
+    weekday field (the Service role is on the Roster). ``vals``: the texts to show."""
+    fields = {"name": ui.field(t("calendar.roster_role_name"), "name", vals.get("name", ""), id=f"{fid}-name",
+                               required=True, autocomplete="off", lang="vi", error=errors.get("name"))}
+    if not locked:
+        fields["weekday"] = ui.select_field(t("calendar.roster_weekday"), "weekday",
+                                            [(d, _weekday_name(d)) for d in range(7)],
+                                            selected=vals.get("weekday", ""), id=f"{fid}-weekday", required=True,
+                                            error=errors.get("weekday"))
+    if add:
+        fields["done_by"] = ui.select_field(t("calendar.roster_done_by"), "done_by",
+                                            [(d, t(f"calendar.roster_by_{d}")) for d in roster.DONE_BY],
+                                            selected=vals.get("done_by", ""), id=f"{fid}-done_by", required=True,
+                                            error=errors.get("done_by"), hint=t("calendar.roster_done_by_hint"))
+    fields["every"] = ui.field(t("calendar.roster_every_label"), "every", vals.get("every", ""), type="number",
+                               min="1", max=str(roster.MAX_EVERY), step="1", id=f"{fid}-every", required=True,
+                               error=errors.get("every"), hint=t("calendar.roster_every_hint", max=roster.MAX_EVERY))
+    fields["month_start"] = _choice("checkbox", "month_start", "1", f"{fid}-month_start",
+                                    t("calendar.roster_month_start"), t("calendar.roster_month_start_hint"),
+                                    checked=vals.get("month_start") == "1", error=errors.get("month_start"))
+    fields["month_start_from"] = ui.field(t("calendar.roster_month_from"), "month_start_from",
+                                          vals.get("month_start_from", ""), type="month",
+                                          id=f"{fid}-month_start_from", error=errors.get("month_start_from"),
+                                          hint=t("calendar.roster_month_from_hint"))
+    return fields
+
+
+def _roles_panel(conn, error, vals):
+    """The Service roles: a table (name to its page, day, done by, how often, month start, Rotation, Hide/Show)
+    and the add form under it."""
+    rows = []
+    for role in roster.roles(conn, include_hidden=True):
+        tag = "" if role["active"] else f' <span class="tag">{h(t("calendar.roster_hidden_tag"))}</span>'
+        rows.append([f'<a href="{ROLES}/{role["id"]}">{vi(role["name"])}</a>{tag}',
+                     h(_weekday_name(role["weekday"])), h(_done_by_text(role)),
+                     h(tn("calendar.roster_every", role["every"])), h(_month_start_text(role)),
+                     h(_places_text(role, len(roster.rotation(conn, role["id"])))), _toggle_form(role)])
+    head = [(t(key), False) for key in ("calendar.roster_role", "calendar.roster_col_day",
+                                         "calendar.roster_col_done_by", "calendar.roster_col_every",
+                                         "calendar.roster_col_month", "calendar.roster_rotation")]
+    head.append(("", False, "act"))  # Hide or Show: off paper (print.css)
+    body = table(head, rows, cls="roster-roles") if rows else empty(t("calendar.roster_no_roles"))
+    errors = _errors(error, "add-role", ROLE_PLACES, set(ROLE_PLACES))
+    shown = vals if errors else {"weekday": "6", "done_by": "person", "every": "1"}
+    f = _role_fields("add-role", shown, errors, add=True)
+    add = ui.form(f"{ROLES}/add", (
+        f'<fieldset class="group"><legend>{h(t("calendar.roster_add_role"))}</legend>'
+        f'<div class="inline-fields two">{f["name"]}{f["weekday"]}</div>'
+        f'<div class="inline-fields two">{f["done_by"]}{f["every"]}</div>'
+        f'{f["month_start"]}<div class="inline-fields two">{f["month_start_from"]}</div></fieldset>'
+        + form_error(errors) + ui.button(t("core.btn_add"), "secondary")))
+    return _anchored("setup-roles", t("calendar.roster_panel"), body + f'<div class="add-form">{add}</div>',
+                     meta=h(t("calendar.roster_roles_meta")))
+
+
+def _rule_panel(conn, error, vals):
+    """The same-person rule: 3 radio choices, each with one plain sentence."""
+    errors = _errors(error, "rule", {}, ())
+    posted = vals.get("rule") if errors else None
+    current = posted if posted in roster.SAME_PERSON_RULES else roster.same_person_rule(conn)
+    choices = "".join(_choice("radio", "rule", rule, f"rule-{rule}", t(f"calendar.roster_rule_{rule}"),
+                              t(f"calendar.roster_rule_{rule}_hint"), checked=rule == current)
+                      for rule in roster.SAME_PERSON_RULES)
+    form = ui.form("/calendar/roster/rule", (
+        f'<fieldset class="group"><legend>{h(t("calendar.roster_rule_question"))}</legend>{choices}</fieldset>'
+        + form_error(errors) + ui.button(t("core.btn_save"), "secondary")))
+    return _anchored("same-person", t("calendar.roster_rule_title"), form, meta=h(t("calendar.roster_rule_meta")))
+
+
+def _skipped_panel(conn, error, vals, today):
+    """The Skipped dates of this year and next (date, reason, Remove) and the add form."""
+    first, last = today.year, min(today.year + 1, LAST_YEAR)
+    rows = []
+    for r in roster.skipped_dates(conn, f"{first:04d}-01-01", f"{last:04d}-12-31"):
+        day = ui.fmt_date(r["date"])
+        remove = (f'<form class="row-form" action="/calendar/roster/skipped/remove" method="post">'
+                  f'{ui.hidden("date", r["date"])}<button class="link-btn" type="submit" '
+                  f'aria-label="{h(t("calendar.roster_remove_aria", date=day))}">{h(t("calendar.roster_remove"))}'
+                  "</button></form>")
+        weekday = _weekday_name(_dt.date.fromisoformat(r["date"]).weekday())
+        rows.append([num(f"{weekday} {day}"), vi(r["reason"]), remove])
+    head = [(t("calendar.roster_date"), False), (t("calendar.roster_reason"), False), ("", False, "act")]
+    body = (table(head, rows, cls="skipped-dates") if rows
+            else empty(t("calendar.roster_skipped_none", first=first, last=last)))
+    top = _errors(error, "skipped", {}, ())  # a refused Remove
+    errors = _errors(error, "add-skipped", SKIPPED_PLACES, set(SKIPPED_PLACES))
+    shown = vals if errors else {}
+    add = ui.form("/calendar/roster/skipped/add", (
+        f'<fieldset class="group"><legend>{h(t("calendar.roster_add_skipped"))}</legend><div class="inline-fields">'
+        + ui.field(t("calendar.roster_date"), "date", shown.get("date", ""), type="date", id="add-skipped-date",
+                   required=True, error=errors.get("date"))
+        + ui.field(t("calendar.roster_reason"), "reason", shown.get("reason", ""), id="add-skipped-reason",
+                   required=True, autocomplete="off", lang="vi", error=errors.get("reason"),
+                   hint=t("calendar.roster_reason_hint"))
+        + "</div></fieldset>" + form_error(errors) + ui.button(t("core.btn_add"), "secondary")))
+    return _anchored("skipped-dates", t("calendar.roster_skipped_dates"),
+                     form_error(top) + body + f'<div class="add-form">{add}</div>',
+                     meta=h(t("calendar.roster_skipped_meta", first=first, last=last)))
+
+
+def _setup_view(req, error=None, vals=None, status=200):
+    """The setup page. ``error``: ``(form key, exception)`` of a refused form; ``vals``: that form."""
+    conn, vals = req.conn, vals or {}
+    body = (f'<div class="grid lists roster-setup"><div class="span-12 stack">{_roles_panel(conn, error, vals)}'
+            '</div>'
+            f'<div class="span-7 stack">{_skipped_panel(conn, error, vals, _dt.date.today())}</div>'
+            f'<div class="span-5 stack">{_rule_panel(conn, error, vals)}</div></div>')
+    actions = ui.link_button(t("calendar.roster_title"), "/calendar/roster")
+    return Response.html(ui.page(t("calendar.roster_setup"), body, "calendar",
+                                 sub=h(t("calendar.roster_setup_sub")), actions=actions), status)
+
+
+def _move_form(rid, action, field, value, name):
+    word, aria = {"up": ("calendar.roster_up", "calendar.roster_up_aria"),
+                  "down": ("calendar.roster_down", "calendar.roster_down_aria"),
+                  "remove": ("calendar.roster_take_out", "calendar.roster_take_out_aria")}[action]
+    return (f'<form class="row-form" action="{ROLES}/{rid}/rotation/{action}" method="post">'
+            f'{ui.hidden(field, value)}<button class="link-btn" type="submit" aria-label="{h(t(aria, name=name))}">'
+            f'{h(t(word))}</button></form>')
+
+
+def _field_of(role):
+    return "person_id" if role["done_by"] == "person" else "ministry_id"
+
+
+def _rotation_panel(conn, role, error, vals):
+    """The Rotation of a Service role: its places in order (Move up, Move down, Take out) and a select to add a
+    Person (a role done by a Person) or a Ministry (a role done by a Ministry) at the end."""
+    rid, field = role["id"], _field_of(role)
+    places = roster.rotation(conn, rid)
+    lines = []
+    for k, place in enumerate(places, start=1):
+        value, name = place[field], place["name"]
+        lines.append([f'{num(f"{k}.")} {vi(name)}', _move_form(rid, "up", field, value, name) if k > 1 else "",
+                      _move_form(rid, "down", field, value, name) if k < len(places) else "",
+                      _move_form(rid, "remove", field, value, name)])
+    what = t("calendar.person" if field == "person_id" else "calendar.roster_ministry")
+    head = [(what, False)] + [("", False, "act")] * 3
+    body = table(head, lines, cls="rotation") if lines else empty(t("calendar.roster_rotation_empty"))
+    taken = {place[field] for place in places}
+    if field == "person_id":
+        options = [("", t("calendar.choose_person"))] + [(p["id"], p["full_name"])
+                                                         for p in people.list_persons(conn) if p["id"] not in taken]
+        label = t("calendar.roster_add_person")
+    else:
+        options = [("", t("calendar.roster_choose_ministry"))] + [(m["id"], m["name"])
+                                                                  for m in lists.get_list(conn, "ministry")
+                                                                  if m["id"] not in taken]
+        label = t("calendar.roster_add_ministry")
+    add_error = i18n.error_text(error[1]) if error and error[0] == "rotation-add" else None
+    add = ui.form(f"{ROLES}/{rid}/rotation/add", (
+        '<div class="inline-add">'
+        + ui.select_field(label, field, options, selected=vals.get(field, "") if add_error else "",
+                          id="rotation-add", lang="vi", required=True, error=add_error)
+        + ui.button(t("core.btn_add"), "secondary") + "</div>"))
+    top = _errors(error, "rotation", {}, ())  # a refused Move up, Move down or Take out
+    return _anchored("rotation", t("calendar.roster_rotation"),
+                     form_error(top) + body + f'<div class="add-form">{add}</div>',
+                     meta=h(t("calendar.roster_rotation_meta")))
+
+
+def _edit_panel(conn, role, error, vals):
+    """The edit form of a Service role. Done by is shown, never changed; the weekday is shown with the reason
+    once the Service role is on the Roster."""
+    locked = roster.role_has_links(conn, role["id"])
+    fields = {"name", "every", "month_start", "month_start_from"} | (set() if locked else {"weekday"})
+    errors = _errors(error, "edit", ROLE_PLACES, fields)
+    shown = vals if errors else {"name": role["name"], "weekday": str(role["weekday"]),
+                                 "every": str(role["every"]), "month_start": "1" if role["month_start"] else "",
+                                 "month_start_from": role["month_start_from"] or ""}
+    f = _role_fields("edit-role", shown, errors, locked=locked)
+    facts = [(t("calendar.roster_done_by"), _done_by_text(role))]
+    notes = [t("calendar.roster_done_by_hint")]
+    if locked:
+        facts.append((t("calendar.roster_weekday"), _weekday_name(role["weekday"])))
+        notes.append(t("calendar.roster_weekday_locked"))
+    kv = '<dl class="kv wide">' + "".join(f"<div><dt>{h(a)}</dt><dd>{h(b)}</dd></div>" for a, b in facts) + "</dl>"
+    form = ui.form(f"{ROLES}/{role['id']}", (
+        kv + f'<p class="hint">{h(" ".join(notes))}</p>' + f["name"] + f.get("weekday", "") + f["every"]
+        + f["month_start"] + f["month_start_from"] + form_error(errors) + ui.button(t("core.btn_save"))))
+    return _anchored("role-edit", t("calendar.roster_edit_role"), form)
+
+
+def _role_view(req, role, error=None, vals=None, status=200):
+    """The page of one Service role: its Rotation, then its edit form."""
+    conn, vals = req.conn, vals or {}
+    body = (f'<div class="grid lists roster-setup"><div class="span-7 stack">'
+            f'{_rotation_panel(conn, role, error, vals)}</div>'
+            f'<div class="span-5 stack">{_edit_panel(conn, role, error, vals)}</div></div>')
+    sub = [_weekday_name(role["weekday"]), _done_by_text(role)] + ([] if role["active"] else
+                                                                  [t("calendar.roster_hidden_tag")])
+    actions = ui.link_button(t("calendar.roster_setup"), f"{SETUP}#setup-roles")
+    return Response.html(ui.page(role["name"], body, "calendar", sub=h(" · ".join(sub)), actions=actions,
+                                 lang="vi"), status)
+
+
+# ---------------------------------------------------------------- /calendar/roster/setup and its forms
+
+def _to_setup(anchor, msg):
+    return Response.redirect(ui.url(SETUP, msg=msg) + f"#{anchor}")
+
+
+def _to_role(rid, anchor, msg):
+    return Response.redirect(ui.url(f"{ROLES}/{rid}", msg=msg) + f"#{anchor}")
+
+
+def _role_or_none(req):
+    return roster.get_role(req.conn, req.params["id"])
+
+
+def _no_role():
+    return not_found("calendar.roster_role", SETUP, "calendar.roster_setup")
+
+
+def setup_page(req):
+    return _setup_view(req)
+
+
+def role_add_post(req):
+    f = req.form
+    try:
+        rid = roster.add_role(req.conn, f.get("name"), f.get("weekday"), f.get("done_by"), every=f.get("every"),
+                              month_start=_on(f.get("month_start")), month_start_from=f.get("month_start_from"))
+    except ValueError as exc:
+        return _setup_view(req, ("add-role", exc), f, 400)
+    return _to_setup("setup-roles", t("calendar.roster_role_added", name=roster.get_role(req.conn, rid)["name"]))
+
+
+def _set_active(req, active):
+    role = _role_or_none(req)
+    if role is None:
+        return _no_role()
+    roster.set_role_active(req.conn, role["id"], active)
+    return _to_setup("setup-roles", t("calendar.roster_role_shown" if active else "calendar.roster_role_hidden",
+                                      name=role["name"]))
+
+
+def role_hide_post(req):
+    return _set_active(req, False)
+
+
+def role_show_post(req):
+    return _set_active(req, True)
+
+
+def rule_post(req):
+    rule = req.form.get("rule") or ""
+    try:
+        roster.set_same_person_rule(req.conn, rule)
+    except ValueError as exc:
+        return _setup_view(req, ("rule", exc), req.form, 400)
+    return _to_setup("same-person", t("calendar.roster_rule_saved", rule=t(f"calendar.roster_rule_{rule}")))
+
+
+def skipped_add_post(req):
+    f = req.form
+    try:
+        day = text.check_date(f.get("date") or "", "calendar.roster_skipped_date")
+        old = roster.skipped_reason(req.conn, day)
+        roster.add_skipped_date(req.conn, day, f.get("reason"))
+    except ValueError as exc:
+        return _setup_view(req, ("add-skipped", exc), f, 400)
+    new, shown = roster.skipped_reason(req.conn, day), ui.fmt_date(day)
+    if old is None:
+        msg = t("calendar.roster_skipped_added", date=shown, reason=new)
+    elif old == new:
+        msg = t("calendar.roster_skipped_unchanged", date=shown)
+    else:
+        msg = t("calendar.roster_skipped_replaced", date=shown, reason=new)
+    return _to_setup("skipped-dates", msg)
+
+
+def skipped_remove_post(req):
+    try:
+        day = text.check_date(req.form.get("date") or "", "calendar.roster_skipped_date")
+    except ValueError as exc:
+        return _setup_view(req, ("skipped", exc), req.form, 400)
+    removed = roster.remove_skipped_date(req.conn, day)
+    key = "calendar.roster_skipped_removed" if removed else "calendar.roster_skipped_not_there"
+    return _to_setup("skipped-dates", t(key, date=ui.fmt_date(day)))
+
+
+# ---------------------------------------------------------------- /calendar/roster/roles/<id> and its forms
+
+def role_page(req):
+    role = _role_or_none(req)
+    return _no_role() if role is None else _role_view(req, role)
+
+
+def role_post(req):
+    """Save the edit form. Done by is never sent (it never changes); a weekday that is not sent stays."""
+    role = _role_or_none(req)
+    if role is None:
+        return _no_role()
+    f = req.form
+    changes = {"name": f.get("name"), "every": f.get("every"), "month_start": _on(f.get("month_start")),
+               "month_start_from": f.get("month_start_from")}
+    if f.get("weekday") is not None:
+        changes["weekday"] = f["weekday"]
+    try:
+        roster.update_role(req.conn, role["id"], **changes)
+    except ValueError as exc:
+        return _role_view(req, role, ("edit", exc), f, 400)
+    name = roster.get_role(req.conn, role["id"])["name"]
+    return _to_role(role["id"], "role-edit", t("calendar.roster_role_saved", name=name))
+
+
+def _rotation_post(req, action):
+    """One change of a Rotation (``action``: see :func:`rotation_order`), saved with ``roster.set_rotation``.
+    Refused: the page of the Service role again (400), the sentence in its Rotation card, nothing saved."""
+    role = _role_or_none(req)
+    if role is None:
+        return _no_role()
+    conn, rid, field = req.conn, role["id"], _field_of(role)
+    by_person = field == "person_id"
+    before = roster.rotation(conn, rid)
+    ids = [place[field] for place in before]
+    try:
+        raw = (req.form.get(field) or "").strip()
+        if not raw:
+            raise TextError("calendar.err_choose_person" if by_person else "calendar.roster_err_choose_ministry")
+        value = text.to_id(raw, "calendar.person" if by_person else "calendar.roster_ministry")
+        order = rotation_order(ids, value, action)
+        if order != ids:
+            roster.set_rotation(conn, rid, order)
+    except ValueError as exc:
+        return _role_view(req, role, ("rotation-add" if action == "add" else "rotation", exc), req.form, 400)
+    if order == ids:
+        return _to_role(rid, "rotation", t("calendar.roster_rotation_unchanged"))
+    after = roster.rotation(conn, rid)
+    name = next(place["name"] for place in [*after, *before] if place[field] == value)
+    if action == "remove":
+        return _to_role(rid, "rotation", t("calendar.roster_rotation_taken_out", name=name))
+    key = "calendar.roster_rotation_added" if action == "add" else "calendar.roster_rotation_moved"
+    return _to_role(rid, "rotation", t(key, name=name, place=order.index(value) + 1))
+
+
+def rotation_add_post(req):
+    return _rotation_post(req, "add")
+
+
+def rotation_up_post(req):
+    return _rotation_post(req, "up")
+
+
+def rotation_down_post(req):
+    return _rotation_post(req, "down")
+
+
+def rotation_remove_post(req):
+    return _rotation_post(req, "remove")
+
+
 ROUTES = [
     ("GET", "/calendar/roster", roster_page),
     ("GET", "/calendar/roster/fill", fill_page),
     ("POST", "/calendar/roster/fill", fill_post),
     ("POST", "/calendar/<int:id>/roles", roles_post),
     ("POST", "/calendar/<int:id>/roles/clear", roles_clear_post),
+    ("GET", SETUP, setup_page),
+    ("POST", "/calendar/roster/rule", rule_post),
+    ("POST", "/calendar/roster/skipped/add", skipped_add_post),
+    ("POST", "/calendar/roster/skipped/remove", skipped_remove_post),
+    ("POST", f"{ROLES}/add", role_add_post),
+    ("GET", f"{ROLES}/<int:id>", role_page),
+    ("POST", f"{ROLES}/<int:id>", role_post),
+    ("POST", f"{ROLES}/<int:id>/hide", role_hide_post),
+    ("POST", f"{ROLES}/<int:id>/show", role_show_post),
+    ("POST", f"{ROLES}/<int:id>/rotation/add", rotation_add_post),
+    ("POST", f"{ROLES}/<int:id>/rotation/up", rotation_up_post),
+    ("POST", f"{ROLES}/<int:id>/rotation/down", rotation_down_post),
+    ("POST", f"{ROLES}/<int:id>/rotation/remove", rotation_remove_post),
 ]

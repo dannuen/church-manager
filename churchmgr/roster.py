@@ -130,7 +130,7 @@ def update_role(conn, role_id, *, name=_KEEP, weekday=_KEEP, every=_KEEP, month_
         if weekday is not _KEEP:
             day = _whole(weekday, 0, 6, "calendar.roster_err_weekday")
             if day != role["weekday"]:
-                if conn.execute("SELECT 1 FROM service_role_link WHERE service_role_id = ?", (role["id"],)).fetchone():
+                if role_has_links(conn, role["id"]):
                     raise TextError("calendar.roster_err_weekday_kept", name=role["name"])
                 changes["weekday"] = day
         if every is not _KEEP:
@@ -150,6 +150,14 @@ def set_role_active(conn, role_id, active):
     with transaction(conn):
         role = _require_role(conn, role_id)
         conn.execute("UPDATE service_role SET active = ? WHERE id = ?", (value, role["id"]))
+
+
+def role_has_links(conn, role_id):
+    """``True`` when the Service role has a link (open or closed) on any Service: it is on the Roster, so its
+    weekday stays (:func:`update_role`)."""
+    rid = text.to_id(role_id, "calendar.roster_role")
+    found = conn.execute("SELECT 1 FROM service_role_link WHERE service_role_id = ? LIMIT 1", (rid,)).fetchone()
+    return found is not None
 
 
 def get_role(conn, role_id):

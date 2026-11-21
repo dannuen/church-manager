@@ -717,5 +717,481 @@ class RosterPageTest(PagesTestBase):
                 self.assertNotIn(body, page)
 
 
+# ---------------------------------------------------------------- card RO-6: the Roster setup
+
+SETUP = "/calendar/roster/setup"
+
+
+def role_href(rid):
+    return f"/calendar/roster/roles/{rid}"
+
+
+def list_rows(box):
+    """The cells of each data row of the (first) table in ``box``: a list of lists of inner HTML."""
+    tbody = box.split("<tbody>", 1)[1].split("</tbody>", 1)[0]
+    return [re.findall(r"<td[^>]*>(.*?)</td>", row, re.S) for row in re.findall(r"<tr data-row[^>]*>(.*?)</tr>", tbody, re.S)]
+
+
+def plain(cell):
+    """The text of a cell, its tags removed."""
+    return re.sub(r"<[^>]+>", "", cell)
+
+
+def option_values(box, name):
+    """The values of the options of the select ``name`` in ``box``."""
+    m = re.search(rf'<select [^>]*name="{name}"[^>]*>(.*?)</select>', box, re.S)
+    assert m is not None, f"no select {name!r}"
+    return re.findall(r'<option value="([^"]*)"', m.group(1))
+
+
+def gone_to(test, headers, path, fragment):
+    """A POST-redirect-GET back to ``path#fragment``."""
+    where = urllib.parse.urlsplit(headers["location"])
+    test.assertEqual((where.path, where.fragment), (path, fragment))
+
+
+class SetupLogicTest(unittest.TestCase):
+    """The small logic of the setup pages: where a refused form shows its sentence, and a Rotation's new order."""
+
+    def test_a_refusal_goes_under_its_field(self):
+        cases = [(TextError("errors.required", label="calendar.roster_role_name"), "name"),
+                 (TextError("calendar.roster_err_name_taken", name="X"), "name"),
+                 (TextError("calendar.roster_err_weekday"), "weekday"),
+                 (TextError("calendar.roster_err_weekday_kept", name="X"), "weekday"),
+                 (TextError("calendar.roster_err_done_by"), "done_by"),
+                 (TextError("calendar.roster_err_every"), "every"),
+                 (TextError("calendar.roster_err_on_off", label="calendar.roster_month_start"), "month_start"),
+                 (TextError("calendar.err_month_form"), "month_start_from"),
+                 (TextError("calendar.err_month_years"), "month_start_from"),
+                 (TextError("calendar.roster_err_twice"), ""),  # no field of its own: the top of the form
+                 (ValueError("plain words"), "")]
+        for exc, field in cases:
+            self.assertEqual(list(roster_pages.placed(exc, roster_pages.ROLE_PLACES)), [field], exc)
+        self.assertEqual(roster_pages.placed(ValueError("plain words"), {}), {"": "plain words"})
+        self.assertEqual(list(roster_pages.placed(TextError("errors.date", label="calendar.roster_skipped_date"),
+                                                  roster_pages.SKIPPED_PLACES)), ["date"])
+
+    def test_rotation_order(self):
+        order = roster_pages.rotation_order
+        self.assertEqual(order([1, 2, 3], 4, "add"), [1, 2, 3, 4])
+        self.assertEqual(order([1, 2, 3], 3, "up"), [1, 3, 2])
+        self.assertEqual(order([1, 2, 3], 1, "down"), [2, 1, 3])
+        self.assertEqual(order([1, 2, 3], 1, "up"), [1, 2, 3])  # the first one up: no change
+        self.assertEqual(order([1, 2, 3], 3, "down"), [1, 2, 3])  # the last one down: no change
+        self.assertEqual(order([1, 2, 3], 2, "remove"), [1, 3])
+        self.assertEqual(order([], 7, "add"), [7])
+        for action in ("up", "down", "remove"):
+            with self.assertRaises(TextError) as ctx:
+                order([1, 2], 5, action)
+            self.assertEqual(ctx.exception.key, "calendar.roster_err_not_in_rotation")
+
+
+class RosterSetupTest(PagesTestBase):
+    """Card RO-6 (decision D6): the Roster setup on an English fake church: Service roles, each Rotation, Skipped
+    dates and the same-person rule. Every form goes back to its page (POST-redirect-GET); a refused one shows its
+    sentence in the page's error style and saves nothing. Each test adds its own Service roles."""
+
+    def setUp(self):
+        conn = self.db()
+        self.by_name = {r["name"]: r["id"] for r in roster.roles(conn, include_hidden=True)}
+        self.persons = people.list_persons(conn)
+        self.names = {p["id"]: p["full_name"] for p in self.persons}
+
+    def role_rows(self):
+        return [tuple(r) for r in self.db().execute("SELECT * FROM service_role ORDER BY id")]
+
+    def add_role(self, expect=303, **form):
+        values = {"weekday": "6", "done_by": "person", "every": "1", "month_start_from": "", **form}
+        headers, page = self.post("/calendar/roster/roles/add", values, expect=expect)
+        if expect == 303:
+            gone_to(self, headers, SETUP, "setup-roles")
+        return headers, page
+
+    def new_role(self, name, **form):
+        self.add_role(name=name, **form)
+        return next(r["id"] for r in roster.roles(self.db(), include_hidden=True) if r["name"] == name)
+
+    def role_row(self, rid):
+        return next(r for r in list_rows(section(self.page(SETUP), "setup-roles")) if role_href(rid) in r[0])
+
+    def rotation(self, rid):
+        return [r["person_id"] or r["ministry_id"] for r in roster.rotation(self.db(), rid)]
+
+    def test_the_setup_page_lists_the_service_roles_like_the_lists_page(self):
+        page = self.page(SETUP)
+        self.assertIn(">Roster setup</h1>", page)
+        self.assertIn('aria-current="page">Calendar</a>', page)  # the Calendar menu item
+        self.assertIn('<a class="btn secondary" href="/calendar/roster">Roster</a>', page)
+        box = section(page, "setup-roles")
+        self.assertEqual(headers(box), ["Service role", "Day", "Done by", "How often", "Month start", "Rotation", ""])
+        rows = [r for r in list_rows(box) if not plain(r[0]).startswith("RO-6")]  # other tests add some
+        expect = {"Bồi linh": ["Thursday", "A Person", "Every Service", "", "6 People"],
+                  "Service leader": ["Sunday", "A Person", "Every Service", "New round each month", "6 People"],
+                  "Offering leader": ["Sunday", "A Person", "Every Service", "", "6 People"],
+                  "Ministry in charge": ["Sunday", "A Ministry", "Every 2 Services", "", "3 Ministries"]}
+        self.assertEqual([plain(r[0]) for r in rows], list(expect))  # by weekday, then their order
+        for row, (name, cells) in zip(rows, expect.items()):
+            self.assertEqual(row[0], f'<a href="{role_href(self.by_name[name])}"><span lang="vi">{name}</span></a>')
+            self.assertEqual(row[1:6], cells)
+            self.assertIn(f'<button class="link-btn" type="submit" aria-label="Hide {name}">Hide</button>', row[6])
+        self.assertIn('<legend>Add a Service role</legend>', box)
+        self.assertIn('action="/calendar/roster/roles/add"', box)
+        for fid in ("name", "weekday", "done_by", "every", "month_start", "month_start_from"):
+            self.assertIn(f'<label for="add-role-{fid}">', box)  # every control has a visible label
+        self.assertRegex(box, r'<option value="6" selected>Sunday</option>')
+        self.assertIn('<option value="ministry">A Ministry</option>', box)
+        self.assertNotIn('class="btn primary"', page)  # many small forms, as on the Lists page: no filled button
+
+    def test_add_a_role_edit_it_hide_and_show_it(self):
+        headers, _ = self.add_role(name="RO-6 Ushers", every="2", month_start="1", month_start_from="2027-01")
+        self.assertEqual(flash_of(headers), "Added the Service role RO-6 Ushers. Click its name to set its Rotation.")
+        rid = next(r["id"] for r in roster.roles(self.db()) if r["name"] == "RO-6 Ushers")
+        role = roster.get_role(self.db(), rid)
+        self.assertEqual(tuple(role[k] for k in ("weekday", "done_by", "every", "month_start", "month_start_from",
+                                                 "active")), (6, "person", 2, 1, "2027-01", 1))
+        self.assertEqual(self.role_row(rid)[1:6], ["Sunday", "A Person", "Every 2 Services",
+                                                   "New round each month, from 01/2027", "No Rotation yet"])
+        # edit: a new name, Thursday, every Service, no month start
+        page = self.page(role_href(rid))
+        self.assertIn('<h1 lang="vi">RO-6 Ushers</h1>', page)
+        self.assertRegex(section(page, "role-edit"), r'<input type="checkbox" id="edit-role-month_start" '
+                                                     r'name="month_start" value="1"[^>]* checked>')
+        headers, _ = self.post(role_href(rid), {"name": "RO-6 Greeters", "weekday": "3", "every": "1",
+                                                "month_start_from": ""})
+        gone_to(self, headers, role_href(rid), "role-edit")
+        self.assertEqual(flash_of(headers), "Saved the Service role RO-6 Greeters.")
+        role = roster.get_role(self.db(), rid)
+        self.assertEqual(tuple(role[k] for k in ("name", "weekday", "every", "month_start", "month_start_from")),
+                         ("RO-6 Greeters", 3, 1, 0, None))
+        box = section(self.page(role_href(rid)), "role-edit")
+        self.assertRegex(box, r'<option value="3" selected>Thursday</option>')
+        self.assertNotRegex(box, r'name="month_start" value="1"[^>]* checked')
+        # hide: kept, with the Hidden tag and a Show button; its column leaves the Roster
+        headers, _ = self.post(f"{role_href(rid)}/hide", {})
+        gone_to(self, headers, SETUP, "setup-roles")
+        self.assertEqual(flash_of(headers), "RO-6 Greeters is hidden now. Its history is kept.")
+        self.assertEqual(roster.get_role(self.db(), rid)["active"], 0)
+        row = self.role_row(rid)
+        self.assertIn('<span class="tag">Hidden</span>', row[0])
+        self.assertIn(f'action="{role_href(rid)}/show"', row[6])
+        self.assertIn('<p class="sub">Thursday · A Person · Hidden</p>', self.page(role_href(rid)))
+        self.assertNotIn("RO-6 Greeters", self.page("/calendar/roster"))
+        headers, _ = self.post(f"{role_href(rid)}/show", {})
+        self.assertEqual(flash_of(headers), "RO-6 Greeters is shown again.")
+        self.assertEqual(roster.get_role(self.db(), rid)["active"], 1)
+        self.assertIn('<th scope="col" lang="vi">RO-6 Greeters</th>', self.page("/calendar/roster"))
+
+    def test_a_bad_role_form_saves_nothing(self):
+        before = self.role_rows()
+        cases = [  # (form, the field that shows the sentence, the sentence)
+            ({"name": ""}, "name", "Service role name is required."),
+            ({"name": "bồi LINH"}, "name", "There is already a Service role named “bồi LINH”. Choose another name."),
+            ({"weekday": "7"}, "weekday", "The day of the week must be one from Monday to Sunday."),
+            ({"done_by": "robot"}, "done_by", "A Service role is done by a Person or by a Ministry."),
+            ({"every": "9"}, "every", "A Service role comes every 1 to 8 Services: use a whole number from 1 to 8."),
+            ({"every": ""}, "every", "A Service role comes every 1 to 8 Services: use a whole number from 1 to 8."),
+            ({"month_start_from": "2026-13"}, "month_start_from", "Month must be written YYYY-MM, for example 2026-11."),
+            ({"month_start": "maybe"}, "month_start", "The first Service of a month starts a round must be on or off."),
+        ]
+        for change, field, words in cases:
+            _h, page = self.add_role(expect=400, **{"name": "RO-6 Bad", **change})
+            box = section(page, "setup-roles")
+            self.assertIn(f'<p class="error" id="add-role-{field}-error">{words}</p>', box, change)
+            self.assertRegex(box, rf'id="add-role-{field}"[^>]*aria-invalid="true"')
+        self.assertEqual(self.role_rows(), before)
+        _h, page = self.add_role(expect=400, name="RO-6 Kept", weekday="3", every="9")
+        box = section(page, "setup-roles")  # the form keeps what was typed
+        self.assertIn('value="RO-6 Kept"', box)
+        self.assertRegex(box, r'<option value="3" selected>Thursday</option>')
+        self.assertEqual(self.role_rows(), before)
+
+    def test_the_weekday_stays_once_on_the_roster_and_done_by_never_changes(self):
+        leader = self.by_name["Service leader"]  # the fake church has it on the Roster
+        self.assertTrue(roster.role_has_links(self.db(), leader))
+        box = section(self.page(role_href(leader)), "role-edit")
+        self.assertNotIn('name="weekday"', box)  # shown as text, with the reason
+        self.assertIn("<dt>Day of the week</dt><dd>Sunday</dd>", box)
+        self.assertIn("This Service role is on the Roster already, so its day of the week cannot change.", box)
+        self.assertNotIn('name="done_by"', box)  # chosen once, when the role was added
+        self.assertIn("<dt>Done by</dt><dd>A Person</dd>", box)
+        self.assertIn("Chosen once, when the Service role is added: it cannot change later.", box)
+        before = self.role_rows()
+        form = {"name": "Service leader", "every": "1", "month_start": "1", "month_start_from": ""}
+        _h, page = self.post(role_href(leader), {**form, "weekday": "3"}, expect=400)
+        self.assertIn('<p class="error" role="alert">The Service role “Service leader” is on the Roster already, so its '
+                      "day of the week cannot change. Add a new Service role instead.</p>", section(page, "role-edit"))
+        for change, field, words in (({"every": "0"}, "every", "A Service role comes every 1 to 8 Services"),
+                                     ({"name": " "}, "name", "Service role name is required."),
+                                     ({"name": "Bồi linh"}, "name", "There is already a Service role named “Bồi linh”"),
+                                     ({"month_start_from": "1899-12"}, "month_start_from",
+                                      "Month: use a year from 1900 to 9999.")):
+            _h, page = self.post(role_href(leader), {**form, **change}, expect=400)
+            self.assertIn(f'<p class="error" id="edit-role-{field}-error">{words}', section(page, "role-edit"), change)
+            self.assertIn(f'value="{change.get("name", "Service leader")}"', section(page, "role-edit"))
+        self.assertEqual(self.role_rows(), before)
+        headers, _ = self.post(role_href(leader), {**form, "done_by": "ministry"})  # not a field here: ignored
+        self.assertEqual(flash_of(headers), "Saved the Service role Service leader.")
+        self.assertEqual(self.role_rows(), before)
+        # a role with no link yet has the weekday select
+        rid = self.new_role("RO-6 New")
+        self.assertFalse(roster.role_has_links(self.db(), rid))
+        self.assertIn('name="weekday"', section(self.page(role_href(rid)), "role-edit"))
+
+    def test_rotation_add_move_up_and_down_take_out_and_a_repeat_refused(self):
+        rid = self.new_role("RO-6 Readers")
+        url = role_href(rid)
+        self.assertIn("No one in the Rotation yet. Auto-fill skips this Service role.", section(self.page(url), "rotation"))
+        a, b, c = (p["id"] for p in self.persons[30:33])
+        for pid, place in ((a, 1), (b, 2), (c, 3)):
+            headers, _ = self.post(f"{url}/rotation/add", {"person_id": pid})
+            gone_to(self, headers, url, "rotation")
+            self.assertEqual(flash_of(headers), f"Added {self.names[pid]} at place {place} of the Rotation.")
+        self.assertEqual(self.rotation(rid), [a, b, c])
+        rows = list_rows(section(self.page(url), "rotation"))
+        self.assertEqual([plain(r[0]) for r in rows], [f"{k}. {self.names[p]}" for k, p in ((1, a), (2, b), (3, c))])
+        self.assertEqual(rows[0][1], "")  # the first place has no Move up
+        self.assertIn(f'action="{url}/rotation/up"', rows[1][1])
+        self.assertIn(f'aria-label="Move {self.names[b]} up">Move up</button>', rows[1][1])
+        self.assertEqual(rows[2][2], "")  # the last place has no Move down
+        self.assertIn(f'<input type="hidden" name="person_id" value="{c}">', rows[2][3])
+        self.assertIn(">Take out</button>", rows[2][3])
+        self.assertEqual(self.role_row(rid)[5], "3 People")
+        headers, _ = self.post(f"{url}/rotation/up", {"person_id": c})
+        self.assertEqual(flash_of(headers), f"Moved {self.names[c]} to place 2.")
+        self.assertEqual(self.rotation(rid), [a, c, b])
+        headers, _ = self.post(f"{url}/rotation/down", {"person_id": a})
+        self.assertEqual(flash_of(headers), f"Moved {self.names[a]} to place 2.")
+        self.assertEqual(self.rotation(rid), [c, a, b])
+        headers, _ = self.post(f"{url}/rotation/remove", {"person_id": a})
+        self.assertEqual(flash_of(headers), f"Took {self.names[a]} out of the Rotation.")
+        self.assertEqual(self.rotation(rid), [c, b])
+        headers, _ = self.post(f"{url}/rotation/up", {"person_id": c})  # the first one up
+        self.assertEqual(flash_of(headers), "The Rotation did not change.")
+        # refused, nothing changes: a repeat, no choice, an unknown Person, one not in the Rotation
+        for path, form, field_error, words in (
+                ("add", {"person_id": b}, True, "Rotation: each Person or Ministry has one place only."),
+                ("add", {"person_id": ""}, True, "Person: choose a Person."),
+                ("add", {"person_id": "999999"}, True, "No Person with id 999999."),
+                ("up", {"person_id": a}, False, "This Person or Ministry is not in the Rotation."),
+                ("remove", {"person_id": a}, False, "This Person or Ministry is not in the Rotation."),
+                ("down", {}, False, "Person: choose a Person.")):
+            _h, page = self.post(f"{url}/rotation/{path}", form, expect=400)
+            box = section(page, "rotation")
+            where = '<p class="error" id="rotation-add-error">' if field_error else '<p class="error" role="alert">'
+            self.assertIn(where + words + "</p>", box, (path, form))
+        self.assertEqual(self.rotation(rid), [c, b])
+        # the select offers only the People not in the Rotation yet
+        offered = option_values(section(self.page(url), "rotation"), "person_id")
+        self.assertEqual(offered[0], "")
+        self.assertNotIn(str(b), offered)
+        self.assertIn(str(a), offered)
+
+    def test_a_person_role_offers_people_and_a_ministry_role_offers_ministries(self):
+        conn = self.db()
+        leader, in_charge = self.by_name["Service leader"], self.by_name["Ministry in charge"]
+        held = set(self.rotation(leader))
+        box = section(self.page(role_href(leader)), "rotation")
+        self.assertIn('<label for="rotation-add">Add a Person at the end</label>', box)
+        self.assertEqual(option_values(box, "person_id"),
+                         [""] + [str(p["id"]) for p in people.list_persons(conn) if p["id"] not in held])
+        self.assertNotIn('name="ministry_id"', box)
+        mheld = set(self.rotation(in_charge))
+        box = section(self.page(role_href(in_charge)), "rotation")
+        self.assertIn('<label for="rotation-add">Add a Ministry at the end</label>', box)
+        self.assertIn("<th scope=\"col\">Ministry</th>", box)
+        self.assertEqual(option_values(box, "ministry_id"),
+                         [""] + [str(m["id"]) for m in lists.get_list(conn, "ministry") if m["id"] not in mheld])
+        self.assertIn(">Youth</option>", box)
+        self.assertNotIn('name="person_id"', box)
+        self.assertEqual([plain(r[0]) for r in list_rows(box)],
+                         [f"{k}. {name}" for k, name in enumerate(fake.ROSTER_MINISTRIES, start=1)])
+        before = self.rotation(in_charge)
+        for form, words in (({"person_id": self.persons[0]["id"]}, "Ministry: choose a Ministry."),
+                            ({"ministry_id": "999999"}, "No Ministry with id 999999.")):
+            _h, page = self.post(f"{role_href(in_charge)}/rotation/add", form, expect=400)
+            self.assertIn(f'<p class="error" id="rotation-add-error">{words}</p>', section(page, "rotation"))
+        self.assertEqual(self.rotation(in_charge), before)
+        youth = lists.find_item(conn, "ministry", name="Youth")["id"]
+        headers, _ = self.post(f"{role_href(in_charge)}/rotation/add", {"ministry_id": youth})
+        self.assertEqual(flash_of(headers), f"Added Youth at place {len(before) + 1} of the Rotation.")
+        self.assertEqual(self.rotation(in_charge), before + [youth])
+        self.post(f"{role_href(in_charge)}/rotation/remove", {"ministry_id": youth})
+        self.assertEqual(self.rotation(in_charge), before)
+
+    def test_skipped_date_add_replace_the_reason_and_remove(self):
+        iso = dt.date(TODAY.year + 1, 2, 17).isoformat()
+        day = shown(iso)
+        weekday = dt.date.fromisoformat(iso).strftime("%A")
+
+        def add(reason, expect=303):
+            got, page = self.post("/calendar/roster/skipped/add", {"date": iso, "reason": reason}, expect=expect)
+            if expect == 303:
+                gone_to(self, got, SETUP, "skipped-dates")
+            return got, page
+
+        got, _ = add("RO-6 Nghỉ Tết")
+        self.assertEqual(flash_of(got), f"Added the Skipped date {day}: RO-6 Nghỉ Tết.")
+        self.assertEqual(roster.skipped_reason(self.db(), iso), "RO-6 Nghỉ Tết")
+        box = section(self.page(SETUP), "skipped-dates")
+        self.assertEqual(headers(box), ["Date", "Reason", ""])
+        row = next(r for r in list_rows(box) if day in r[0])
+        self.assertEqual(row[:2], [f'<span class="num">{weekday} {day}</span>', '<span lang="vi">RO-6 Nghỉ Tết</span>'])
+        self.assertIn(f'aria-label="Remove the Skipped date {day}">Remove</button>', row[2])
+        got, _ = add("RO-6 Hội đồng bồi linh")
+        self.assertEqual(flash_of(got), f"{day} was a Skipped date already. Its new reason: RO-6 Hội đồng bồi linh.")
+        self.assertEqual(roster.skipped_reason(self.db(), iso), "RO-6 Hội đồng bồi linh")
+        got, _ = add("RO-6 Hội đồng bồi linh")
+        self.assertEqual(flash_of(got), f"{day} is a Skipped date with this reason already. Nothing changed.")
+        # refused, nothing saved: no reason, a date that is not real
+        count = len(roster.skipped_dates(self.db(), "1900-01-01", "9999-12-31"))
+        _h, page = add("  ", expect=400)
+        self.assertIn('<p class="error" id="add-skipped-reason-error">Reason is required.</p>', section(page, "skipped-dates"))
+        _h, page = self.post("/calendar/roster/skipped/add", {"date": "2027-02-30", "reason": "RO-6 x"}, expect=400)
+        box = section(page, "skipped-dates")
+        self.assertIn('<p class="error" id="add-skipped-date-error">Skipped date must be a real date written YYYY-MM-DD',
+                      box)
+        self.assertIn('value="RO-6 x"', box)  # what was typed stays
+        self.assertEqual(len(roster.skipped_dates(self.db(), "1900-01-01", "9999-12-31")), count)
+        self.assertEqual(roster.skipped_reason(self.db(), iso), "RO-6 Hội đồng bồi linh")
+        # remove, then remove again
+        got, _ = self.post("/calendar/roster/skipped/remove", {"date": iso})
+        gone_to(self, got, SETUP, "skipped-dates")
+        self.assertEqual(flash_of(got), f"Removed the Skipped date {day}.")
+        self.assertIsNone(roster.skipped_reason(self.db(), iso))
+        got, _ = self.post("/calendar/roster/skipped/remove", {"date": iso})
+        self.assertEqual(flash_of(got), f"{day} is not a Skipped date. Nothing changed.")
+        _h, page = self.post("/calendar/roster/skipped/remove", {"date": "nope"}, expect=400)
+        self.assertIn('<p class="error" role="alert">Skipped date must be a real date', section(page, "skipped-dates"))
+        self.assertEqual(len(roster.skipped_dates(self.db(), "1900-01-01", "9999-12-31")), count - 1)
+
+    def test_the_skipped_dates_of_this_year_and_next_are_listed(self):
+        conn = self.db()
+        box = section(self.page(SETUP), "skipped-dates")
+        self.assertIn(f"{TODAY.year} and {TODAY.year + 1}. Auto-fill gives these dates no Service role.", box)
+        listed = [plain(r[0]).split()[-1] for r in list_rows(box)]
+        rows = roster.skipped_dates(conn, f"{TODAY.year}-01-01", f"{TODAY.year + 1}-12-31")
+        self.assertEqual(listed, [shown(r["date"]) for r in rows])
+        self.assertIn(fake.ROSTER_SKIPPED, box)  # the fake church's Skipped date: a coming Sunday
+
+    def test_the_same_person_rule_is_saved_and_read_back(self):
+        self.assertEqual(roster.same_person_rule(self.db()), "service")
+        box = section(self.page(SETUP), "same-person")
+        self.assertIn("<legend>How many Service roles may one Person have?</legend>", box)
+        self.assertEqual(re.findall(r'<input type="radio" id="rule-(\w+)" name="rule" value="(\w+)"', box),
+                         [("service", "service"), ("week", "week"), ("any", "any")])
+        self.assertRegex(box, r'value="service" [^>]* checked>')
+        sentences = {"service": ("One Service role per Service", "A Person never has two Service roles in the same Service."),
+                     "week": ("One Service role per week", "A Person has at most one Service role from Monday to Sunday."),
+                     "any": ("No limit", "A Person may have many Service roles, even in the same Service.")}
+        for rule, (label, hint) in sentences.items():
+            self.assertIn(f'<label for="rule-{rule}">{label}</label><p class="hint" id="rule-{rule}-hint">{hint}</p>', box)
+        for rule in ("week", "any", "service"):
+            headers, _ = self.post("/calendar/roster/rule", {"rule": rule})
+            gone_to(self, headers, SETUP, "same-person")
+            self.assertEqual(flash_of(headers), f"Saved the same-person rule: {sentences[rule][0]}.")
+            self.assertEqual(roster.same_person_rule(self.db()), rule)
+            self.assertRegex(section(self.page(SETUP), "same-person"), rf'value="{rule}" [^>]* checked>')
+        for form in ({"rule": "nope"}, {}):
+            _h, page = self.post("/calendar/roster/rule", form, expect=400)
+            self.assertIn('<p class="error" role="alert">The same-person rule must be one of: one Service role per Service, '
+                          "one Service role per week, no limit.</p>", section(page, "same-person"))
+        self.assertEqual(roster.same_person_rule(self.db()), "service")
+
+    def test_the_roster_links_to_its_setup_and_an_unknown_role_is_not_found(self):
+        self.assertIn(f'<a class="btn secondary" href="{SETUP}">Setup</a>', self.page("/calendar/roster"))
+        status, _h, page = self.get_text(role_href(999999))
+        self.assertEqual(status, 404)
+        self.assertIn("There is no Service role with this number.", page)
+        before = self.role_rows()
+        for path in ("", "/hide", "/show", "/rotation/add", "/rotation/up", "/rotation/down", "/rotation/remove"):
+            status, _h, _data = self.request("POST", role_href(999999) + path, {"person_id": "1"})
+            self.assertEqual(status, 404, path)
+        self.assertEqual(self.role_rows(), before)
+
+    def test_no_private_note_text_on_the_setup_pages(self):
+        conn = self.db()
+        notes = [r[0] for r in conn.execute("SELECT body FROM private_note")]
+        self.assertTrue(notes)
+        pid = conn.execute("SELECT id FROM person WHERE full_name = ?", (fake.FIRST_PERSON,)).fetchone()[0]
+        rid = self.new_role("RO-6 Private")
+        self.post(f"{role_href(rid)}/rotation/add", {"person_id": pid})  # a Person with a Private note
+        pages = [self.page(SETUP), self.page(role_href(rid)), self.page(role_href(self.by_name["Service leader"]))]
+        self.assertIn(fake.FIRST_PERSON, pages[1])
+        for page in pages:
+            self.assertNotIn(fake.MARKER, page)
+            for body in notes:
+                self.assertNotIn(body, page)
+
+
+class VietnameseRosterSetupTest(LiveServer, unittest.TestCase):
+    """The setup pages on a Tiếng Việt fake church: no English left, also on a refused form and in a flash."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory(prefix="cm-test-")
+        root = pathlib.Path(cls.tmp.name)
+        assert "onedrive" not in str(root.resolve()).lower()
+        cls.copy = root / "fake"
+        fake.build_fake_church(cls.copy, people=20, lang="vi")
+        cls.start(cls.copy, root, remember=False)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.stop()
+        cls.tmp.cleanup()
+
+    def setUp(self):
+        self.conn = db.connect(self.copy / db.DB_NAME)
+        self.addCleanup(self.conn.close)
+
+    def assert_vietnamese(self, page):
+        self.assertIn('<html lang="vi">', page)
+        self.assertEqual(english_left(page), [])
+
+    def post(self, path, form, expect):
+        status, headers, data = self.request("POST", path, form)
+        self.assertEqual(status, expect, data.decode("utf-8")[:1500])
+        return headers, data.decode("utf-8")
+
+    def test_the_setup_pages_in_vietnamese(self):
+        roles = roster.roles(self.conn)
+        for path in [SETUP] + [role_href(r["id"]) for r in roles]:
+            status, _h, page = self.get_text(path)
+            self.assertEqual(status, 200, path)
+            self.assert_vietnamese(page)
+        _s, _h, page = self.get_text(SETUP)
+        for words in (">Thiết lập Lịch phân công</h1>", ">Phần vụ</h2>", ">Quy tắc trùng người</h2>",
+                      ">Ngày nghỉ phân công</h2>", "<legend>Thêm một Phần vụ</legend>",
+                      '<label for="rule-service">Một Phần vụ mỗi Giờ thờ phượng</label>', "Chúa Nhật", "Một Ban ngành",
+                      "2 Giờ thờ phượng một lần", "Vòng mới mỗi đầu tháng"):
+            self.assertIn(words, page)
+        _s, _h, page = self.get_text("/calendar/roster")
+        self.assertIn(f'<a class="btn secondary" href="{SETUP}">Thiết lập</a>', page)
+        leader = next(r for r in roles if r["name"] == "Hướng dẫn chương trình")
+        _s, _h, page = self.get_text(role_href(leader["id"]))
+        self.assertIn(">Thứ tự luân phiên</h2>", page)
+        self.assertIn(">Chỉnh sửa Phần vụ</h2>", page)
+        self.assertIn("Phần vụ này đã có trong Lịch phân công, nên không đổi được ngày trong tuần.", page)
+
+    def test_refusals_and_a_flash_in_vietnamese(self):
+        leader = next(r for r in roster.roles(self.conn) if r["name"] == "Bồi linh")
+        held = roster.rotation(self.conn, leader["id"])[0]["person_id"]
+        cases = (("/calendar/roster/roles/add", {"name": "", "weekday": "6", "done_by": "person", "every": "1"},
+                  "Cần nhập Tên Phần vụ."),
+                 (f"{role_href(leader['id'])}/rotation/add", {"person_id": held},
+                  "Thứ tự luân phiên: mỗi Người hoặc Ban ngành chỉ có một chỗ."),
+                 ("/calendar/roster/rule", {"rule": "nope"}, "Quy tắc trùng người phải là một trong"),
+                 ("/calendar/roster/skipped/add", {"date": "2027-02-17", "reason": ""}, "Cần nhập Lý do."))
+        for path, form, words in cases:
+            _h, page = self.post(path, form, 400)
+            self.assert_vietnamese(page)
+            self.assertIn(words, page)
+        headers, _ = self.post("/calendar/roster/rule", {"rule": "week"}, 303)
+        self.assertEqual(flash_of(headers), "Đã lưu quy tắc trùng người: Một Phần vụ mỗi tuần.")
+        _s, _h, page = self.get_text(headers["location"])
+        self.assert_vietnamese(page)
+        self.post("/calendar/roster/rule", {"rule": "service"}, 303)
+
+
 if __name__ == "__main__":
     unittest.main()

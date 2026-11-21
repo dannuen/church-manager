@@ -854,3 +854,23 @@ table.documents td:last-child a { color: var(--accent-text); font-weight: 400; }
    under it in --accent-text, so it shows without its color too; bold stays the paper's month start. The
    legend in the Save card shows the same mark */
 .roster-new { padding: 0 4px; border-radius: 4px; background: var(--active); color: var(--text); text-decoration: underline 2px var(--accent-text); text-underline-offset: 4px; }
+
+/* ---------- RO-6: the Roster setup (Thiết lập Lịch phân công) and the page of one Service role ----------
+   The Lists page look: cards with a table and the add form under a line (.add-form), Hide / Show and the
+   Rotation moves as plain words in the app color (.link-btn). New here only: a radio button or a checkbox with
+   its label on its right and one plain sentence under the label (.choice: the same-person rule, the month
+   start), the box as big as the checkbox of style.css. */
+.roster-setup .choice { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 2px 12px; align-items: start; }
+.roster-setup .choice input { margin: 0; }
+.roster-setup .choice input[type="radio"] { width: 20px; height: 20px; accent-color: var(--accent-text); cursor: pointer; }
+.roster-setup .choice label { font-size: var(--fs-meta); font-weight: 500; line-height: 20px; cursor: pointer; }
+.roster-setup .choice .hint, .roster-setup .choice .error { grid-column: 2; }
+.roster-setup .inline-fields > .field { align-content: start; }   /* a field beside one with a hint keeps its label on top */
+/* From 641px (a phone has the two-line rows of table.list): the row words sit together at the right; the
+   Service roles table keeps 760px, its day and done-by cells one line each, and scrolls inside its card when the
+   card is narrower (900px to 1080px with the menu), never the page */
+@media screen and (min-width: 641px) {
+  .roster-setup td.act { width: 1%; white-space: nowrap; }
+  .roster-setup table.roster-roles { min-width: 760px; }
+  .roster-setup table.roster-roles td:nth-child(2), .roster-setup table.roster-roles td:nth-child(3) { white-space: nowrap; }
+}
