@@ -5,7 +5,7 @@ import unittest
 
 import _support  # noqa: F401  (puts the repo on sys.path)
 from _support import CopyTestCase
-from churchmgr import calendar, documents, i18n, people, roster, settings, text
+from churchmgr import calendar, documents, i18n, lists, people, roster, settings, text
 from churchmgr.i18n import TextError
 
 SUNDAY = "2026-05-03"  # a Sunday
@@ -162,6 +162,24 @@ class RotationTest(RosterCase):
             roster.set_rotation(self.conn, self.leader, "12")
         self.assertEqual([r["person_id"] for r in roster.rotation(self.conn, self.leader)], [self.p1, self.p2])
         self.assertEqual(roster.rotation(self.conn, self.in_charge), [])
+
+    def test_a_hidden_ministry_does_not_join_a_rotation(self):
+        """RO-6R Minor: the page's select hides a hidden Ministry; ``set_rotation`` refuses one too. A Ministry that
+        is in the Rotation already and is hidden later can still move or be taken out."""
+        hidden = lists.add_item(self.conn, "ministry", "Old ministry")
+        lists.set_active(self.conn, hidden, False)
+        exc = self.refused("calendar.roster_err_ministry_hidden", roster.set_rotation, self.in_charge,
+                           [self.youth, hidden])
+        self.assertEqual(i18n.error_text(exc, "en"), "The Ministry “Old ministry” is hidden. Show it on the Lists "
+                                                     "page first.")
+        self.assertEqual(roster.rotation(self.conn, self.in_charge), [])
+        roster.set_rotation(self.conn, self.in_charge, [self.youth, self.worship])
+        lists.set_active(self.conn, self.worship, False)  # hidden while in the Rotation
+        roster.set_rotation(self.conn, self.in_charge, [self.worship, self.youth])  # move: allowed
+        roster.set_rotation(self.conn, self.in_charge, [self.youth])  # take out: allowed
+        self.refused("calendar.roster_err_ministry_hidden", roster.set_rotation, self.in_charge,
+                     [self.youth, self.worship])  # back in: refused
+        self.assertEqual([r["ministry_id"] for r in roster.rotation(self.conn, self.in_charge)], [self.youth])
 
 
 class SkippedDateTest(RosterCase):

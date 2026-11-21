@@ -442,6 +442,7 @@ TEXT = {
         "chi_phai.title": "Chi phái",
         "chi_phai.add": "Thêm Chi phái",
         # --- calendar
+        "calendar.roster_err_ministry_hidden": "Ban ngành “{name}” đang ẩn. Hãy hiện nó trên trang Danh mục trước.",
         "calendar.roster_setup": "Thiết lập Lịch phân công",
         "calendar.roster_skipped_dates": "Ngày nghỉ phân công",
         "calendar.roster_setup_link": "Thiết lập",
@@ -1687,6 +1688,7 @@ TEXT = {
         "chi_phai.title": "Chi phái",
         "chi_phai.add": "Add a Chi phái",
         # --- calendar
+        "calendar.roster_err_ministry_hidden": "The Ministry “{name}” is hidden. Show it on the Lists page first.",
         "calendar.roster_setup": "Roster setup",
         "calendar.roster_skipped_dates": "Skipped dates",
         "calendar.roster_setup_link": "Setup",

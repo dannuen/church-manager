@@ -85,6 +85,15 @@ def _ministry(conn, ministry_id):
     return mid
 
 
+def _shown_ministry(conn, ministry_id, held):
+    """:func:`_ministry`, and a hidden Ministry is refused unless it is in ``held`` (the Rotation as it is)."""
+    mid = _ministry(conn, ministry_id)
+    item = conn.execute("SELECT name, active FROM list_item WHERE id = ?", (mid,)).fetchone()
+    if not item["active"] and mid not in held:
+        raise TextError("calendar.roster_err_ministry_hidden", name=item["name"])
+    return mid
+
+
 def _check_name_free(conn, name, except_id=None):
     """Refuse a name another Service role has (hidden ones too), upper or lower case aside."""
     key = name.casefold()
@@ -188,13 +197,16 @@ def rotation(conn, role_id):
 def set_rotation(conn, role_id, ids):
     """Replace the whole Rotation of a Service role with ``ids``, in that order: Person ids for a role done
     by a Person, Ministry (list item) ids for a role done by a Ministry. No one twice; an empty list
-    empties it."""
+    empties it. A hidden Ministry cannot join (one already in the Rotation may move or be taken out)."""
     if isinstance(ids, str):
         raise TypeError("ids must be a list of ids, not text")
     with transaction(conn):
         role = _require_role(conn, role_id)
-        check = _person if role["done_by"] == "person" else _ministry
-        clean = [check(conn, value) for value in ids]
+        if role["done_by"] == "person":
+            clean = [_person(conn, value) for value in ids]
+        else:
+            held = {place["ministry_id"] for place in rotation(conn, role["id"])}
+            clean = [_shown_ministry(conn, value, held) for value in ids]
         if len(set(clean)) != len(clean):
             raise TextError("calendar.roster_err_twice")
         column = "person_id" if role["done_by"] == "person" else "ministry_id"
