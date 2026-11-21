@@ -6,7 +6,7 @@ import unittest
 
 import _support
 from _support import CopyTestCase, temp_folder
-from churchmgr import db, lists, paths, schema, settings
+from churchmgr import db, lists, paths, people, schema, settings
 
 
 def nfc(s):
@@ -153,6 +153,54 @@ class CreateOpenTest(unittest.TestCase):
         conn.close()
         with self.assertRaises(db.ChurchCopyError):
             db.open_church_copy(self.folder)
+
+    # The Status trigger of a church copy made before card SP-1: a closed Status row is never cut.
+    OLD_STATUS_TRIGGER = (
+        "CREATE TRIGGER person_status_close_only BEFORE UPDATE ON person_status\n"
+        "WHEN NOT (OLD.end_date IS NULL AND NEW.end_date IS NOT NULL\n"
+        "          AND NEW.end_date >= OLD.start_date AND NEW.id IS OLD.id AND NEW.start_date IS OLD.start_date"
+        " AND NEW.person_id IS OLD.person_id AND NEW.status_id IS OLD.status_id)\n"
+        "BEGIN SELECT RAISE(ABORT, 'history is never changed: only an open row may be closed once, "
+        "with an end date on or after its start date'); END"
+    )
+
+    def test_up_to_date_copy_opens_with_no_schema_write(self):
+        conn = db.create_church_copy(self.folder, "Hội Thánh")
+        self.addCleanup(conn.close)
+        self.assertEqual(schema.stale_triggers(conn), [])
+        before = conn.execute("PRAGMA schema_version").fetchone()[0]
+        conn.close()
+        conn = db.open_church_copy(self.folder)
+        self.addCleanup(conn.close)
+        self.assertEqual(conn.execute("PRAGMA schema_version").fetchone()[0], before)
+
+    def test_open_brings_the_triggers_of_an_older_copy_up_to_date(self):
+        conn = db.create_church_copy(self.folder, "Hội Thánh")
+        self.addCleanup(conn.close)
+        conn.execute("DROP TRIGGER person_status_close_only")
+        conn.execute(self.OLD_STATUS_TRIGGER)
+        conn.execute("DROP TRIGGER family_link_never_delete")  # a missing trigger is made again too
+        code = "SELECT id FROM list_item WHERE list_name = 'status' AND code = ?"
+        pid = people.add_person(conn, "Lê Văn An", status_id=conn.execute(code, ("visitor",)).fetchone()[0],
+                                start_date="2010-01-01")
+        people.set_status(conn, pid, conn.execute(code, ("member",)).fetchone()[0], "2024-01-01")
+        closed = conn.execute("SELECT id FROM person_status WHERE end_date IS NOT NULL").fetchone()[0]
+        cut = "UPDATE person_status SET end_date = '2018-06-30' WHERE id = ?"
+        with self.assertRaisesRegex(sqlite3.IntegrityError, "history is never changed"):
+            conn.execute(cut, (closed,))  # the old rule
+        self.assertEqual([name for name, _ in schema.stale_triggers(conn)],
+                         ["person_status_close_only", "family_link_never_delete"])
+        conn.close()
+        conn = db.open_church_copy(self.folder)
+        self.addCleanup(conn.close)
+        self.assertEqual(schema.stale_triggers(conn), [])
+        stored = dict(tuple(r) for r in conn.execute("SELECT name, sql FROM sqlite_master WHERE type = 'trigger'"))
+        self.assertEqual(sorted(stored.values()), sorted(schema.TRIGGERS))
+        conn.execute(cut, (closed,))  # the new rule
+        self.assertEqual(conn.execute("SELECT end_date FROM person_status WHERE id = ?", (closed,)).fetchone()[0],
+                         "2018-06-30")
+        with self.assertRaisesRegex(sqlite3.IntegrityError, "history is never deleted"):
+            conn.execute("DELETE FROM person_status")
 
     def test_open_not_a_database(self):
         self.folder.mkdir()

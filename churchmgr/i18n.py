@@ -250,6 +250,8 @@ TEXT = {
         "people.err_history": "Ngày bắt đầu {start:%d/%m/%Y} sớm hơn {latest:%d/%m/%Y}, ngày của lần thay đổi gần "
                               "nhất. Những gì đã qua không bao giờ bị viết lại; hãy dùng ngày {latest:%d/%m/%Y} "
                               "hoặc sau đó.",
+        "people.err_status_day": "Ngày bắt đầu {day:%d/%m/%Y}: đã có một Trạng thái bắt đầu vào ngày đó. "
+                                 "Hãy chọn ngày khác.",
         "people.err_gender": "Giới tính phải là M (Nam) hoặc F (Nữ), hoặc để trống.",
         "people.err_family_role": "Vai trò trong gia đình phải là một trong: Chủ gia đình, Vợ/Chồng, Con, Người thân "
                                   "khác.",
@@ -282,6 +284,7 @@ TEXT = {
         "people.go_person": "Quay lại trang của Người",
         "people.new_status": "Trạng thái mới",
         "people.change_status": "Đổi Trạng thái",
+        "people.status_hint": "Ngày sớm hơn sẽ thêm vào quá khứ. Không có gì cũ bị xóa.",
         "people.no_status_yet": "Chưa có Trạng thái.",
         "people.leave_family": "— Rời Gia đình —",
         "people.no_family_option": "— Không ở trong Gia đình nào —",
@@ -1324,6 +1327,7 @@ TEXT = {
         "people.err_no_row": "No {what} with id {id}.",
         "people.err_history": "Start date {start:%d/%m/%Y} is before {latest:%d/%m/%Y}, the date of the last change. "
                               "History is never rewritten; use a date on or after it.",
+        "people.err_status_day": "Start date {day:%d/%m/%Y}: a Status already starts on that day. Pick another date.",
         "people.err_gender": "Gender must be M or F, or empty.",
         "people.err_family_role": "Family role must be one of: Head, Spouse, Child, Other.",
         "people.err_ministry_role": "Ministry role must be one of: Leader, Member.",
@@ -1355,6 +1359,7 @@ TEXT = {
         "people.go_person": "Go back to the Person",
         "people.new_status": "New Status",
         "people.change_status": "Change Status",
+        "people.status_hint": "An earlier date adds to the past. Nothing old is removed.",
         "people.no_status_yet": "No Status yet.",
         "people.leave_family": "— Leave the Family —",
         "people.no_family_option": "— Not in a Family —",

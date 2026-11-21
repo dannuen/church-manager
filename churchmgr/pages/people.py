@@ -466,7 +466,7 @@ def _status_panel(conn, pid, error, vals):
                         selected=vals.get("status_id") or (current["status_id"] if current else None),
                         error=errors.get("status_id"))
         + date_field(t("people.start_date"), "start_date", "status-date", vals.get("start_date"),
-                     errors.get("start_date"), min_date=latest_change(rows))
+                     errors.get("start_date"), hint=t("people.status_hint"))  # any date up to today (SP-2)
         + form_error(errors) + ui.button(t("people.change_status"), "secondary")))
     lines = [[h(r["name"]), *period(r["start_date"], r["end_date"])] for r in newest_first(rows)]
     body = (table(history_headers("people.status"), lines, "history")
@@ -696,14 +696,14 @@ def _history_post(req, key, change):
 
 
 def status_post(req):
+    """Change Status at any date up to today (``people.insert_status``). The "nothing changed" check is on
+    the line that covers the date, which may be an old line, so the data layer makes it."""
     def change(conn, pid):
         day = past_or_today(req.form.get("start_date"), "people.start_date")
-        before = people.current_status(conn, pid)
-        new_id = list_choice(conn, req.form.get("status_id"), "status", "people.status")["id"]
-        if before is not None and before["status_id"] == new_id:
-            return same_change(t("people.status_same", name=before["name"]))
-        people.set_status(conn, pid, new_id, day)
-        return t("people.status_changed", name=people.current_status(conn, pid)["name"], date=ui.fmt_date(day))
+        new = list_choice(conn, req.form.get("status_id"), "status", "people.status")
+        if not people.insert_status(conn, pid, new["id"], day):
+            return same_change(t("people.status_same", name=new["name"]))
+        return t("people.status_changed", name=new["name"], date=ui.fmt_date(day))
     return _history_post(req, "status", change)
 
 
