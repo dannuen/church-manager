@@ -75,7 +75,8 @@ class _Parser(argparse.ArgumentParser):
 def connect_ro(db_path):
     """Open ``church.db`` read-only, the way the Handover reads it (SQLite ``mode=ro``): every write
     fails with ``sqlite3.OperationalError``. Rows are ``sqlite3.Row``. A OneDrive path, a missing file
-    or a file that is not a Church Manager database of this version raises ``AgentError`` no_copy."""
+    or a file that is not a Church Manager database of a version this app knows (``schema.KNOWN_VERSIONS``)
+    raises ``AgentError`` no_copy. A version-1 copy is read as it is (read commands read only old tables)."""
     try:
         path = paths.check_not_onedrive(db_path)
     except paths.CopyPathError as exc:
@@ -89,7 +90,7 @@ def connect_ro(db_path):
     except sqlite3.DatabaseError as exc:
         conn.close()
         raise AgentError("no_copy", f"{path} is not a Church Manager database ({exc}).") from exc
-    if version != schema.SCHEMA_VERSION:
+    if version not in schema.KNOWN_VERSIONS:
         conn.close()
         raise AgentError("no_copy", f"{path} has database version {version}; "
                                     f"this app needs version {schema.SCHEMA_VERSION}.")

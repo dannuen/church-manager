@@ -104,7 +104,7 @@ class CreateOpenTest(unittest.TestCase):
         self.addCleanup(conn.close)
         self.assertTrue((self.folder / "church.db").is_file())
         self.assertTrue((self.folder / "documents").is_dir())
-        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 1)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], schema.SCHEMA_VERSION)
         self.assertEqual(conn.execute("PRAGMA foreign_keys").fetchone()[0], 1)
         self.assertEqual(conn.execute("PRAGMA journal_mode").fetchone()[0].lower(), "delete")
         self.assertIs(conn.row_factory, sqlite3.Row)
@@ -358,7 +358,7 @@ class SchemaRulesTest(CopyTestCase):
 
     def test_no_float_column_anywhere(self):
         tables = [r["name"] for r in self.conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")]
-        self.assertEqual(len(tables), 18)
+        self.assertEqual(len(tables), 22)
         for table in tables:
             for col in self.conn.execute(f"PRAGMA table_info({table})"):
                 self.assertNotRegex(col["type"].upper(), r"REAL|FLOA|DOUB|NUMERIC|DECIMAL", (table, col["name"]))
@@ -424,7 +424,8 @@ class CodeRulesTest(unittest.TestCase):
     AVOID = ("household", "donation", "tithe", "income", "attachment", "upload", "instance", "install",
              "tenant", "contact", "user", "appointment", "schedule", "activity", "attendance record",
              "area", "zone", "cell group", "department", "team", "secret", "letter", "outgoing mail",
-             "receipt", "tax letter", "cost", "payment", "pastoral call", "home visit", "mass")
+             "receipt", "tax letter", "cost", "payment", "pastoral call", "home visit", "mass",
+             "rota", "duty", "holiday")
 
     TESTS = pathlib.Path(_support.ROOT) / "tests"
     # Names from outside this project that hold an Avoid word. They cannot be renamed.

@@ -1,21 +1,23 @@
-"""The whole Church Manager database schema (version 1) and the default lists.
+"""The whole Church Manager database schema (version 2), the default lists and the default Service roles.
 
 Rules kept by the database itself:
 - History rows (Status, Family link, Chi phái link, Trưởng Chi phái, Ministry
-  link) are never deleted. The only allowed update closes ``end_date`` once:
+  link, Service role link) are never deleted. The only allowed update closes ``end_date`` once:
   NULL -> a date on or after ``start_date``. One exception, for Status rows only
   (Rule 4 exception, approved by the pastor): a closed row may also get an earlier
   end date, still on or after its start date, when an older Status is added inside
   it (``people.insert_status``). One open row per owner.
 - Money is INTEGER dong only: a CHECK on ``typeof(amount) = 'integer'``.
 - Private notes live only in ``private_note``.
-- List items are never deleted (hide them with ``active = 0``).
+- List items and Service roles are never deleted (hide them with ``active = 0``).
 
 A church copy made by an older app gets the triggers of this file when it opens
-(``stale_triggers``, ``renew_triggers``); tables and indexes never change there.
+(``stale_triggers``, ``renew_triggers``). A version-1 copy also gets ``STATEMENTS_V2`` and the default
+Service roles (``db.open_church_copy``). Old tables and indexes never change.
 """
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+KNOWN_VERSIONS = (1, 2)  # versions this app opens; version 1 is brought to 2 when it opens
 
 # New church setup keeps only these. Tuples of (code, Vietnamese name, English name): a new church
 # copy stores the name in its language (``default_name``). Status codes never change.
@@ -46,6 +48,18 @@ def default_name(item, lang):
     return item[{"vi": 1, "en": 2}[lang]]
 
 
+# New church setup and the move to version 2 add these Service roles (sort_order 1, 2, 3, 4). Tuples of
+# (Vietnamese name, English name, weekday, done_by, every, month_start); weekday is Python's
+# date.weekday() (3 Thursday, 6 Sunday). The copy stores the name of its language. Names are data:
+# shown as stored, never translated.
+DEFAULT_SERVICE_ROLES = (
+    ("Bồi linh", "Bồi linh", 3, "person", 1, 0),
+    ("Hướng dẫn chương trình", "Service leader", 6, "person", 1, 1),
+    ("Hướng dẫn dâng hiến", "Offering leader", 6, "person", 1, 0),
+    ("Ban phụ trách", "Ministry in charge", 6, "ministry", 2, 0),
+)
+
+
 DEFAULT_SETTINGS = {"care_reminder_months": "3"}
 
 FAMILY_ROLES = ("Head", "Spouse", "Child", "Other")
@@ -60,7 +74,9 @@ HISTORY_TABLES = {
     "chi_phai_link": ("family_id", "chi_phai_id"),
     "truong_chi_phai": ("chi_phai_id", "person_id"),
     "ministry_link": ("person_id", "ministry_id", "ministry_role"),
+    "service_role_link": ("calendar_item_id", "service_role_id", "person_id", "ministry_id"),  # version 2
 }
+_V2_HISTORY = ("service_role_link",)
 
 # (table, column, list_name): the column must point at an item of that list.
 LIST_COLUMNS = (
@@ -71,6 +87,12 @@ LIST_COLUMNS = (
     ("sent_document", "recipient_id", "recipient"),
     ("sent_document", "purpose_id", "purpose"),
 )
+# Version 2, the same rule for a column that may be empty (NULL). Kept apart so the text of every
+# LIST_COLUMNS trigger stays as it was.
+OPTIONAL_LIST_COLUMNS = (
+    ("rotation_place", "ministry_id", "ministry"),
+    ("service_role_link", "ministry_id", "ministry"),
+)
 
 _D = "'[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'"
 _DT = "'[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]'"
@@ -80,7 +102,7 @@ def _in(values):
     return "(" + ", ".join(f"'{v}'" for v in values) + ")"
 
 
-def _history(name, columns_sql):
+def _history(name, columns_sql, checks=""):
     return f"""
 CREATE TABLE {name} (
     id         INTEGER PRIMARY KEY,
@@ -88,7 +110,7 @@ CREATE TABLE {name} (
     start_date TEXT NOT NULL,
     end_date   TEXT,
     CHECK (start_date GLOB {_D}),
-    CHECK (end_date IS NULL OR (end_date GLOB {_D} AND end_date >= start_date))
+    CHECK (end_date IS NULL OR (end_date GLOB {_D} AND end_date >= start_date)){checks}
 )"""
 
 
@@ -265,10 +287,57 @@ INDEXES = (
     "CREATE INDEX expense_date ON expense (date)",
 )
 
+# Version 2: the Service role Roster. A version-1 copy gets these when it opens (``STATEMENTS_V2``).
+TABLES_V2 = (
+    """
+CREATE TABLE service_role (
+    id               INTEGER PRIMARY KEY,
+    name             TEXT NOT NULL UNIQUE CHECK (length(trim(name)) > 0),
+    -- weekday: Python date.weekday(), 0 Monday .. 3 Thursday .. 6 Sunday
+    weekday          INTEGER NOT NULL CHECK (typeof(weekday) = 'integer' AND weekday BETWEEN 0 AND 6),
+    done_by          TEXT NOT NULL CHECK (done_by IN ('person', 'ministry')),
+    -- every: every Nth Service. month_start: the first Service of a month starts a round.
+    every            INTEGER NOT NULL DEFAULT 1 CHECK (typeof(every) = 'integer' AND every BETWEEN 1 AND 8),
+    month_start      INTEGER NOT NULL DEFAULT 0 CHECK (month_start IN (0, 1)),
+    -- month_start_from: the month Rotation place 1 starts (YYYY-MM)
+    month_start_from TEXT CHECK (month_start_from IS NULL OR month_start_from GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'),
+    sort_order       INTEGER NOT NULL DEFAULT 0,
+    active           INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1))
+)""",
+    """
+CREATE TABLE rotation_place (
+    service_role_id INTEGER NOT NULL REFERENCES service_role (id),
+    position        INTEGER NOT NULL CHECK (typeof(position) = 'integer' AND position >= 1),
+    person_id       INTEGER REFERENCES person (id),
+    ministry_id     INTEGER REFERENCES list_item (id),
+    CHECK ((person_id IS NULL) + (ministry_id IS NULL) = 1),
+    PRIMARY KEY (service_role_id, position)
+)""",
+    _history("service_role_link", """\
+    calendar_item_id INTEGER NOT NULL REFERENCES calendar_item (id),
+    service_role_id  INTEGER NOT NULL REFERENCES service_role (id),
+    person_id        INTEGER REFERENCES person (id),
+    ministry_id      INTEGER REFERENCES list_item (id),""",
+             ",\n    CHECK ((person_id IS NULL) + (ministry_id IS NULL) = 1)"),
+    f"""
+CREATE TABLE skipped_date (
+    date   TEXT NOT NULL PRIMARY KEY CHECK (date GLOB {_D}),
+    reason TEXT NOT NULL CHECK (length(trim(reason)) > 0)
+)""",
+)
 
-def _history_triggers():
+INDEXES_V2 = (
+    "CREATE UNIQUE INDEX service_role_link_one_open ON service_role_link (calendar_item_id, service_role_id) "
+    "WHERE end_date IS NULL",
+    "CREATE INDEX service_role_link_item ON service_role_link (calendar_item_id)",
+    "CREATE INDEX service_role_link_person ON service_role_link (person_id)",
+)
+
+
+def _history_triggers(tables):
     out = []
-    for table, columns in HISTORY_TABLES.items():
+    for table in tables:
+        columns = HISTORY_TABLES[table]
         same = " AND ".join(f"NEW.{c} IS OLD.{c}" for c in ("id", "start_date") + columns)
         if table == "person_status":
             # Rule 4 exception: an older Status added inside a closed line cuts it (people.insert_status).
@@ -293,16 +362,23 @@ def _history_triggers():
     return out
 
 
+def _list_check(table, column, list_name, optional=False):
+    """The insert and update triggers that keep ``table.column`` on an item of ``list_name``.
+    ``optional``: an empty (NULL) column is allowed too."""
+    empty_ok = f"NEW.{column} IS NOT NULL AND " if optional else ""
+    check = (
+        f"WHEN {empty_ok}NOT EXISTS (SELECT 1 FROM list_item WHERE id = NEW.{column} "
+        f"AND list_name = '{list_name}')\n"
+        f"BEGIN SELECT RAISE(ABORT, '{column} must be an item of the {list_name} list'); END"
+    )
+    return [f"CREATE TRIGGER {table}_{column}_list_insert BEFORE INSERT ON {table}\n{check}",
+            f"CREATE TRIGGER {table}_{column}_list_update BEFORE UPDATE OF {column} ON {table}\n{check}"]
+
+
 def _list_triggers():
     out = []
     for table, column, list_name in LIST_COLUMNS:
-        check = (
-            f"WHEN NOT EXISTS (SELECT 1 FROM list_item WHERE id = NEW.{column} "
-            f"AND list_name = '{list_name}')\n"
-            f"BEGIN SELECT RAISE(ABORT, '{column} must be an item of the {list_name} list'); END"
-        )
-        out.append(f"CREATE TRIGGER {table}_{column}_list_insert BEFORE INSERT ON {table}\n{check}")
-        out.append(f"CREATE TRIGGER {table}_{column}_list_update BEFORE UPDATE OF {column} ON {table}\n{check}")
+        out += _list_check(table, column, list_name)
     out.append(
         "CREATE TRIGGER list_item_never_delete BEFORE DELETE ON list_item\n"
         "BEGIN SELECT RAISE(ABORT, 'list items are never deleted; hide them instead'); END"
@@ -315,8 +391,28 @@ def _list_triggers():
     return out
 
 
-TRIGGERS = tuple(_history_triggers()) + tuple(_list_triggers())
-STATEMENTS = TABLES + INDEXES + TRIGGERS
+def _service_role_triggers():
+    out = []
+    for table, column, list_name in OPTIONAL_LIST_COLUMNS:
+        out += _list_check(table, column, list_name, optional=True)
+    out.append(
+        "CREATE TRIGGER service_role_never_delete BEFORE DELETE ON service_role\n"
+        "BEGIN SELECT RAISE(ABORT, 'Service roles are never deleted; hide them instead'); END"
+    )
+    out.append(
+        "CREATE TRIGGER service_role_keep_done_by BEFORE UPDATE OF done_by ON service_role\n"
+        "WHEN NEW.done_by IS NOT OLD.done_by\n"
+        "BEGIN SELECT RAISE(ABORT, 'the done_by of a Service role never changes'); END"
+    )
+    return out
+
+
+TRIGGERS_V1 = (tuple(_history_triggers(t for t in HISTORY_TABLES if t not in _V2_HISTORY))
+               + tuple(_list_triggers()))
+TRIGGERS_V2 = tuple(_history_triggers(_V2_HISTORY)) + tuple(_service_role_triggers())
+TRIGGERS = TRIGGERS_V1 + TRIGGERS_V2  # every trigger of a version-2 copy
+STATEMENTS_V2 = TABLES_V2 + INDEXES_V2 + TRIGGERS_V2  # what a version-1 copy gets when it opens
+STATEMENTS = TABLES + INDEXES + TRIGGERS_V1 + STATEMENTS_V2
 
 
 def create_schema(conn):
@@ -352,3 +448,15 @@ def insert_default_lists(conn, lang):
                 "INSERT INTO list_item (list_name, code, name, sort_order, active) VALUES (?, ?, ?, ?, 1)",
                 (list_name, item[0], default_name(item, lang), order),
             )
+
+
+def insert_default_service_roles(conn, lang):
+    """Insert ``DEFAULT_SERVICE_ROLES`` into ``service_role`` with the names of ``lang`` (``vi`` or ``en``),
+    sort_order 1, 2, 3, 4."""
+    name = {"vi": 0, "en": 1}[lang]
+    for order, role in enumerate(DEFAULT_SERVICE_ROLES, start=1):
+        conn.execute(
+            "INSERT INTO service_role (name, weekday, done_by, every, month_start, sort_order) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (role[name], *role[2:], order),
+        )
