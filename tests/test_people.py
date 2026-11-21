@@ -200,6 +200,22 @@ class InsertStatusTest(CopyTestCase):
         self.assertEqual(people.current_status(self.conn, pid)["code"], "visitor")
         self.assertEqual(self.open_count(pid), 1)
 
+    def test_insert_status_in_a_gap(self):
+        """A day between two lines that do not touch (only a test copy has one): the new line runs to
+        the next start. The lines are made with plain INSERTs in this test copy."""
+        pid = people.add_person(self.conn, NAME)
+        sql = "INSERT INTO person_status (person_id, status_id, start_date, end_date) VALUES (?, ?, ?, ?)"
+        self.conn.execute(sql, (pid, self.status("visitor"), "2020-01-01", "2020-06-01"))
+        self.conn.execute(sql, (pid, self.status("member"), "2021-01-01", None))
+        self.assertIs(self.insert(pid, "left", "2020-08-01"), True)
+        self.assertEqual(self.hist(pid), [
+            ("visitor", "2020-01-01", "2020-06-01"),
+            ("left", "2020-08-01", "2021-01-01"),
+            ("member", "2021-01-01", None),
+        ])
+        self.assertEqual(people.current_status(self.conn, pid)["code"], "member")
+        self.assertEqual(self.open_count(pid), 1)
+
     def test_insert_status_same_as_covering_returns_false(self):
         pid = self.person(("visitor", "2010-01-01"), ("member", "2024-01-01"))
         before = self.hist(pid)
