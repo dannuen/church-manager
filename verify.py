@@ -519,6 +519,7 @@ def page_paths(db_path):
                       "GROUP BY 1 ORDER BY COUNT(*) DESC, 1")
         giver_family = first("SELECT giver_family_id FROM offering WHERE giver_family_id IS NOT NULL "
                              "GROUP BY 1 ORDER BY COUNT(*) DESC, 1")
+        roles = [first("SELECT MIN(id) FROM service_role WHERE done_by = ?", kind) for kind in ("person", "ministry")]
     found_none = "zzzzqqq"  # a search that finds no one
     out = ["/", "/search", "/search?q=nguyen", f"/search?q={found_none}",
            "/people", "/people?q=nguyen", "/people/new", "/people/file", f"/people/{person}/edit",
@@ -529,7 +530,8 @@ def page_paths(db_path):
             "/calendar", f"/calendar?month={today:%Y-%m}", f"/calendar?month={today.year + 4}-01",
             f"/calendar?from={today}", "/calendar/new", f"/calendar/new?date={today}",
             "/calendar/roster", f"/calendar/roster?quarter={today.year}-1",
-            f"/calendar/roster/fill?from={today}&to={date.fromordinal(today.toordinal() + 56)}"]
+            f"/calendar/roster/fill?from={today}&to={date.fromordinal(today.toordinal() + 56)}",
+            "/calendar/roster/setup"] + [f"/calendar/roster/roles/{rid}" for rid in roles]
     out += [f"/calendar/{iid}" for iid in items]
     out += ["/care", "/care?log=all",
             "/money", f"/money?month={today:%Y-%m}", "/money/offerings/new", "/money/expenses/new",
@@ -545,7 +547,7 @@ def page_paths(db_path):
     listed += [("/no-such-page", 404, "page"), ("/people/999999", 404, "page"),
                ("/copies/handovers/handover-none-2001-01-01.zip", 404, "page"),
                ("/money?month=nope", 400, "page"), ("/documents/new", 400, "page"),  # a Document needs one link
-               ("/calendar/roster?quarter=nope", 400, "page"),
+               ("/calendar/roster?quarter=nope", 400, "page"), ("/calendar/roster/roles/999999", 404, "page"),
                ("/language", 405, "page"),
                ("/api/search?q=nguyen", 200, "answer"), (f"/documents/{document}/file", 200, "answer"),
                ("/people/file/empty.xlsx", 200, "answer")]
