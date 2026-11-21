@@ -55,8 +55,8 @@ def default_name(item, lang):
 DEFAULT_SERVICE_ROLES = (
     ("Bồi linh", "Bồi linh", 3, "person", 1, 0),
     ("Hướng dẫn chương trình", "Service leader", 6, "person", 1, 1),
-    ("Hướng dẫn dâng hiến", "Offering leader", 6, "person", 1, 0),
-    ("Ban phụ trách", "Ministry in charge", 6, "ministry", 2, 0),
+    ("Dâng hiến", "Offering leader", 6, "person", 1, 0),  # the pastor's word: the same as the money Offering
+    ("Ban ngành", "Ministry in charge", 6, "ministry", 2, 0),  # the pastor's word: the same as Ministry
 )
 
 

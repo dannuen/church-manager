@@ -6,16 +6,16 @@ Pastor's sample (read it, do not copy it into the repo): `D:\Obsidian\dannuenobs
 
 Branch `wt/roster`, worktree `C:\Users\danng\OneDrive\Desktop\Church Manager Hermes\.worktrees\roster`, base `main` at `99cac03`. Main has dirty files from another session (`AGENTS.md` modified, untracked `docs/GOAL-2.md`, `docs/superpowers/...`, `docs/vietnamese-words-*`): never change, stash or commit them; no card changes `AGENTS.md`.
 
-### D1. New glossary words (Calendar section of GLOSSARY.md, after Head count). The Vietnamese words are PROPOSED; the pastor may change them on the last coder card (RO-7). Until then use them exactly.
+### D1. New glossary words (Calendar section of GLOSSARY.md, after Head count). The Vietnamese words were PROPOSED; the pastor answered (card RO-ASK) and RO-7 applied the answers: Service role, Offering leader, Ministry in charge and Skipped date have new words; Roster, Rotation and Auto-fill keep the proposed ones. Use these words exactly.
 
 | English | Tiếng Việt | Meaning | Avoid |
 |---|---|---|---|
-| Service role | Phần vụ | A task done in a Service by one Person (such as Bồi linh, Hướng dẫn chương trình, Offering leader) or by one Ministry (Ministry in charge). The list is editable. | Duty |
-| Offering leader | Hướng dẫn dâng hiến | The Service role of the person who leads the offering time. Not an Offering (money), not a Giver. | Vietnamese: "Dâng hiến" alone (that is the money Offering) |
-| Ministry in charge | Ban phụ trách | The Service role done by a Ministry (such as Ban Trung niên, Ban Thanh tráng, Ban Tráng niên). The Roster shows it in the Notes column. | |
+| Service role | Phân công | A task done in a Service by one Person (such as Bồi linh, Hướng dẫn chương trình, Offering leader) or by one Ministry (Ministry in charge). The list is editable. | Duty |
+| Offering leader | Dâng hiến | The Service role of the person who leads the offering time. Not an Offering (money), not a Giver. On screen it has the same Vietnamese word as Offering (the pastor's choice); in code it stays the offering leader role. | |
+| Ministry in charge | Ban ngành | The Service role done by a Ministry (such as Ban Trung niên, Ban Thanh tráng, Ban Tráng niên). The Roster shows it in the Notes column. On screen it has the same Vietnamese word as Ministry (the pastor's choice). | |
 | Roster | Lịch phân công | The table of who does each Service role in each Service, one row per week, one table per month, one page per quarter. | Rota, duty list |
 | Rotation | Thứ tự luân phiên | The fixed order of people (or Ministries) for one Service role. Auto-fill gives the next turn in this order, so each one gets an equal share. | Rota |
-| Skipped date | Ngày nghỉ phân công | A date auto-fill gives no Service role, such as Tết or a Sunday led by a guest group or the Hội đồng bồi linh. It has a reason the Roster shows. | Holiday |
+| Skipped date | Bỏ qua | A date auto-fill gives no Service role, such as Tết or a Sunday led by a guest group or the Hội đồng bồi linh. It has a reason the Roster shows. In a Vietnamese sentence it is "ngày Bỏ qua". | Holiday |
 | Auto-fill | Tự động xếp lịch | Filling the empty Service roles of a date range from each Rotation. It never changes a Service role that already has a name. | |
 
 Add `"rota", "duty", "holiday"` to `AVOID` in `tests/test_db.py` (CodeRulesTest). Add a "Words on screen" group "Service role (default list)" with the 4 defaults (D3). "Notes" on the Roster page is the plain column header "Ghi chú"/"Notes"; it is NOT a Private note and NOT the person `note`.
@@ -53,13 +53,13 @@ Migration: `db.open_church_copy` on a version-1 copy runs, in ONE transaction: t
 ### D3. Default Service roles (New church setup and migration; `(vi name, en name, weekday, done_by, every, month_start)`)
 1. `("Bồi linh", "Bồi linh", 3, "person", 1, 0)`
 2. `("Hướng dẫn chương trình", "Service leader", 6, "person", 1, 1)` (month_start_from NULL)
-3. `("Hướng dẫn dâng hiến", "Offering leader", 6, "person", 1, 0)`
-4. `("Ban phụ trách", "Ministry in charge", 6, "ministry", 2, 0)`
+3. `("Dâng hiến", "Offering leader", 6, "person", 1, 0)`
+4. `("Ban ngành", "Ministry in charge", 6, "ministry", 2, 0)`
 sort_order 1..4. Names are data: shown as stored, never translated.
 
 ### D4. Module `churchmgr/roster.py` (API names are fixed; later cards call them)
 Errors are `TextError` with keys in the `calendar` section of `i18n.py` (prefix `calendar.roster_`), added in BOTH dicts directly after `# --- calendar` (MERGE RULE in i18n.py).
-- Constants: `DONE_BY = ("person", "ministry")`, `SAME_PERSON_RULES = ("service", "week", "any")`, `SAME_PERSON_SETTING = "roster_same_person"`, `SAME_PERSON_DEFAULT = "service"` (RO-7 may change it after the pastor answers), `MAX_FILL_DAYS = 366`.
+- Constants: `DONE_BY = ("person", "ministry")`, `SAME_PERSON_RULES = ("service", "week", "any")`, `SAME_PERSON_SETTING = "roster_same_person"`, `SAME_PERSON_DEFAULT = "service"` (the pastor's answer: two Service roles in one week are fine, never two in one day), `MAX_FILL_DAYS = 366`.
 - Service roles: `add_role(conn, name, weekday, done_by, every=1, month_start=False, month_start_from=None) -> id`; `update_role(conn, role_id, *, name=_KEEP, weekday=_KEEP, every=_KEEP, month_start=_KEEP, month_start_from=_KEEP)` (done_by never changes; weekday may change only while the role has no `service_role_link` row); `set_role_active(conn, role_id, active)`; `get_role(conn, role_id)`; `roles(conn, include_hidden=False)` ordered by weekday, sort_order, id.
 - Rotation: `rotation(conn, role_id)` -> rows `(position, person_id, ministry_id, name)` by position; `set_rotation(conn, role_id, ids)` replaces the whole order (person ids for a person role, ministry list ids for a ministry role; no repeats; an empty list is allowed).
 - Skipped dates: `add_skipped_date(conn, date, reason)` (a date already there: new reason replaces), `remove_skipped_date(conn, date)`, `skipped_dates(conn, start, end)`, `skipped_reason(conn, date)` -> text or None.

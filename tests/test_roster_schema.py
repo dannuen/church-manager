@@ -15,8 +15,8 @@ V2_TABLES = ("service_role_link", "rotation_place", "skipped_date", "service_rol
 DEFAULTS = {
     "vi": [("Bồi linh", 3, "person", 1, 0, None, 1, 1),
            ("Hướng dẫn chương trình", 6, "person", 1, 1, None, 2, 1),
-           ("Hướng dẫn dâng hiến", 6, "person", 1, 0, None, 3, 1),
-           ("Ban phụ trách", 6, "ministry", 2, 0, None, 4, 1)],
+           ("Dâng hiến", 6, "person", 1, 0, None, 3, 1),  # the pastor's words (card RO-ASK)
+           ("Ban ngành", 6, "ministry", 2, 0, None, 4, 1)],
     "en": [("Bồi linh", 3, "person", 1, 0, None, 1, 1),
            ("Service leader", 6, "person", 1, 1, None, 2, 1),
            ("Offering leader", 6, "person", 1, 0, None, 3, 1),

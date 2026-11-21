@@ -328,8 +328,8 @@ class VietnameseRosterPanelTest(LiveServer, unittest.TestCase):
         page = self.page(f"/calendar/{iid}")
         self.assert_vietnamese(page)
         box = section(page, PANEL)
-        self.assertIn(">Phần vụ</h2>", box)
-        for name in ("Hướng dẫn chương trình", "Hướng dẫn dâng hiến", "Ban phụ trách"):
+        self.assertIn(">Phân công</h2>", box)
+        for name in ("Hướng dẫn chương trình", "Dâng hiến", "Ban ngành"):
             self.assertIn(f'<dt lang="vi">{name}</dt>', box)
         closed = [r for r in roster.item_links(self.conn, iid) if r["service_role_id"] == rid and r["end_date"]]
         self.assertIn(struck(closed[0]["name"], closed[0]["start_date"], closed[0]["end_date"], "vi"), block(box, rid))
@@ -339,7 +339,7 @@ class VietnameseRosterPanelTest(LiveServer, unittest.TestCase):
                                 "ON sd.date = substr(ci.starts_at, 1, 10) WHERE ci.kind = 'Service'").fetchone()[0]
         page = self.page(f"/calendar/{iid}")
         self.assert_vietnamese(page)
-        self.assertIn(f'<span class="meta">Ngày nghỉ phân công: <strong lang="vi">{fake.ROSTER_SKIPPED}</strong>'
+        self.assertIn(f'<span class="meta">Bỏ qua: <strong lang="vi">{fake.ROSTER_SKIPPED}</strong>'
                       "</span>", section(page, PANEL).split("</header>", 1)[0])
 
     def test_a_save_a_warning_a_refusal_and_a_confirm_in_vietnamese(self):
@@ -347,22 +347,22 @@ class VietnameseRosterPanelTest(LiveServer, unittest.TestCase):
         iid = cal.add_calendar_item(self.conn, "Service", "RO-4 Thờ phượng", f"{day.isoformat()} 08:00")[0]
         pid = people.list_persons(self.conn)[2]["id"]
         name = people.get_person(self.conn, pid)["full_name"]
-        leader, offering = self.roles["Hướng dẫn chương trình"], self.roles["Hướng dẫn dâng hiến"]
+        leader, offering = self.roles["Hướng dẫn chương trình"], self.roles["Dâng hiến"]
         page = self.page(f"/calendar/{iid}")
         self.assert_vietnamese(page)
         self.assertEqual(section(page, PANEL).count('<p class="faint">chưa có</p>'), 3)
         self.post(f"/calendar/{iid}/roles", {"role_id": leader, "person_id": pid})
         headers, _ = self.post(f"/calendar/{iid}/roles", {"role_id": offering, "person_id": pid})
-        self.assertEqual(flash_of(headers), f"Đã lưu: {name} làm Hướng dẫn dâng hiến.")
+        self.assertEqual(flash_of(headers), f"Đã lưu: {name} làm Dâng hiến.")
         page = self.page(headers["location"])
         self.assert_vietnamese(page)
-        self.assertIn(f'Lưu ý: <span lang="vi">{name}</span> cũng có Phần vụ <span lang="vi">Hướng dẫn chương '
+        self.assertIn(f'Lưu ý: <span lang="vi">{name}</span> cũng có Phân công <span lang="vi">Hướng dẫn chương '
                       f'trình</span> ngày <span class="num">{shown(day.isoformat())}</span>.',
                       block(section(page, PANEL), offering))
         _h, page = self.post(f"/calendar/{iid}/roles", {"role_id": self.roles["Bồi linh"], "person_id": pid},
                              expect=400)
         self.assert_vietnamese(page)
-        self.assertIn("Phần vụ “Bồi linh” là của một ngày khác trong tuần.", section(page, PANEL))
+        self.assertIn("Phân công “Bồi linh” là của một ngày khác trong tuần.", section(page, PANEL))
         # a past Service: Bỏ trống asks first
         past = cal.add_calendar_item(self.conn, "Service", "RO-4 Thờ phượng", f"{sunday(-2).isoformat()} 08:00")[0]
         self.post(f"/calendar/{past}/roles", {"role_id": leader, "person_id": pid})
@@ -387,7 +387,7 @@ class VietnameseRosterPanelTest(LiveServer, unittest.TestCase):
         box = section(page, f"roster-{year}-{month:02d}")
         self.assertIn(f">Tháng {month}</h2>", box)
         self.assertEqual(headers(box), ["Thứ Năm", "Bồi linh", "Chúa Nhật", "Hướng dẫn chương trình",
-                                        "Hướng dẫn dâng hiến", "Ghi chú"])
+                                        "Dâng hiến", "Ghi chú"])
         self.assertIn('href="/calendar/roster/fill?from=', page)
         self.assertIn(">Tự động xếp lịch</a>", page)
         # the 400 page of a bad quarter, in Tiếng Việt
@@ -1174,9 +1174,9 @@ class VietnameseRosterSetupTest(LiveServer, unittest.TestCase):
             self.assertEqual(status, 200, path)
             self.assert_vietnamese(page)
         _s, _h, page = self.get_text(SETUP)
-        for words in (">Thiết lập Lịch phân công</h1>", ">Phần vụ</h2>", ">Quy tắc trùng người</h2>",
-                      ">Ngày nghỉ phân công</h2>", "<legend>Thêm một Phần vụ</legend>",
-                      '<label for="rule-service">Một Phần vụ mỗi Giờ thờ phượng</label>', "Chúa Nhật", "Một Ban ngành",
+        for words in (">Thiết lập Lịch phân công</h1>", ">Phân công</h2>", ">Quy tắc trùng người</h2>",
+                      ">Ngày Bỏ qua</h2>", "<legend>Thêm một Phân công</legend>", "<legend>Thêm một ngày Bỏ qua</legend>",
+                      '<label for="rule-service">Một Phân công mỗi Giờ thờ phượng</label>', "Chúa Nhật", "Một Ban ngành",
                       "2 Giờ thờ phượng một lần", "Vòng mới mỗi đầu tháng"):
             self.assertIn(words, page)
         _s, _h, page = self.get_text("/calendar/roster")
@@ -1184,24 +1184,26 @@ class VietnameseRosterSetupTest(LiveServer, unittest.TestCase):
         leader = next(r for r in roles if r["name"] == "Hướng dẫn chương trình")
         _s, _h, page = self.get_text(role_href(leader["id"]))
         self.assertIn(">Thứ tự luân phiên</h2>", page)
-        self.assertIn(">Chỉnh sửa Phần vụ</h2>", page)
-        self.assertIn("Phần vụ này đã có trong Lịch phân công, nên không đổi được ngày trong tuần.", page)
+        self.assertIn(">Chỉnh sửa Phân công</h2>", page)
+        self.assertIn("Phân công này đã có trong Lịch phân công, nên không đổi được ngày trong tuần.", page)
 
     def test_refusals_and_a_flash_in_vietnamese(self):
         leader = next(r for r in roster.roles(self.conn) if r["name"] == "Bồi linh")
         held = roster.rotation(self.conn, leader["id"])[0]["person_id"]
         cases = (("/calendar/roster/roles/add", {"name": "", "weekday": "6", "done_by": "person", "every": "1"},
-                  "Cần nhập Tên Phần vụ."),
+                  "Cần nhập Tên Phân công."),
                  (f"{role_href(leader['id'])}/rotation/add", {"person_id": held},
                   "Thứ tự luân phiên: mỗi Người hoặc Ban ngành chỉ có một chỗ."),
                  ("/calendar/roster/rule", {"rule": "nope"}, "Quy tắc trùng người phải là một trong"),
-                 ("/calendar/roster/skipped/add", {"date": "2027-02-17", "reason": ""}, "Cần nhập Lý do."))
+                 ("/calendar/roster/skipped/add", {"date": "2027-02-17", "reason": ""}, "Cần nhập Lý do."),
+                 ("/calendar/roster/skipped/add", {"date": "2030-01-05", "reason": "Xa"},
+                  f"Ngày Bỏ qua phải trong năm {TODAY.year} hoặc {TODAY.year + 1}, những năm trang này liệt kê."))
         for path, form, words in cases:
             _h, page = self.post(path, form, 400)
             self.assert_vietnamese(page)
             self.assertIn(words, page)
         headers, _ = self.post("/calendar/roster/rule", {"rule": "week"}, 303)
-        self.assertEqual(flash_of(headers), "Đã lưu quy tắc trùng người: Một Phần vụ mỗi tuần.")
+        self.assertEqual(flash_of(headers), "Đã lưu quy tắc trùng người: Một Phân công mỗi tuần.")
         _s, _h, page = self.get_text(headers["location"])
         self.assert_vietnamese(page)
         self.post("/calendar/roster/rule", {"rule": "service"}, 303)

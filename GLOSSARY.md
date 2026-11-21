@@ -81,17 +81,16 @@ _Avoid_: Attendance record
 
 **Service role**:
 A task done in a Service by one Person (such as Bồi linh, Hướng dẫn chương trình, Offering leader) or by one Ministry (Ministry in charge). The list is editable.
-_Tiếng Việt_: Phần vụ
+_Tiếng Việt_: Phân công
 _Avoid_: Duty
 
 **Offering leader**:
-The Service role of the person who leads the offering time. Not an Offering (money), not a Giver.
-_Tiếng Việt_: Hướng dẫn dâng hiến
-_Tránh (tiếng Việt)_: "Dâng hiến" đứng một mình (đó là tiền Dâng hiến)
+The Service role of the person who leads the offering time. Not an Offering (money), not a Giver. On screen it has the same Vietnamese word as Offering (the pastor's choice); in code it stays the offering leader role.
+_Tiếng Việt_: Dâng hiến
 
 **Ministry in charge**:
-The Service role done by a Ministry (such as Ban Trung niên, Ban Thanh tráng, Ban Tráng niên). The Roster shows it in the Notes column.
-_Tiếng Việt_: Ban phụ trách
+The Service role done by a Ministry (such as Ban Trung niên, Ban Thanh tráng, Ban Tráng niên). The Roster shows it in the Notes column. On screen it has the same Vietnamese word as Ministry (the pastor's choice).
+_Tiếng Việt_: Ban ngành
 
 **Roster**:
 The table of who does each Service role in each Service, one row per week, one table per month, one page per quarter.
@@ -104,8 +103,8 @@ _Tiếng Việt_: Thứ tự luân phiên
 _Avoid_: Rota
 
 **Skipped date**:
-A date auto-fill gives no Service role, such as Tết or a Sunday led by a guest group or the Hội đồng bồi linh. It has a reason the Roster shows.
-_Tiếng Việt_: Ngày nghỉ phân công
+A date auto-fill gives no Service role, such as Tết or a Sunday led by a guest group or the Hội đồng bồi linh. It has a reason the Roster shows. In a Vietnamese sentence it is "ngày Bỏ qua".
+_Tiếng Việt_: Bỏ qua
 _Avoid_: Holiday
 
 **Auto-fill**:
@@ -247,11 +246,11 @@ The words the app shows on screen, in Vietnamese. Bold rows name the group.
 | Notice | Thông báo |
 | Certificate | Giấy chứng nhận |
 | Report | Báo cáo |
-| **Service role (default list)** | **Phần vụ (danh sách có sẵn)** |
+| **Service role (default list)** | **Phân công (danh sách có sẵn)** |
 | Bồi linh | Bồi linh |
 | Service leader | Hướng dẫn chương trình |
-| Offering leader | Hướng dẫn dâng hiến |
-| Ministry in charge | Ban phụ trách |
+| Offering leader | Dâng hiến |
+| Ministry in charge | Ban ngành |
 | **Menu** | **Menu** |
 | Dashboard | Trang chủ |
 | People | Mọi người |
