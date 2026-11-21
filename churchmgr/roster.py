@@ -529,3 +529,76 @@ def save_fill(conn, from_date, to_date, day=None):
             if set_link(conn, item_id, role_id, person_id, ministry_id, day=when):
                 saved += 1
     return saved
+
+
+# ---------------------------------------------------------------- the Roster page (decision D6; reads only)
+
+def _plus_days(day, n):
+    """``day`` plus ``n`` days, or ``None`` after 9999-12-31 (Python has no such date)."""
+    try:
+        return day + _dt.timedelta(days=n)
+    except OverflowError:
+        return None
+
+
+def roster_weeks(conn, first_date, last_date):
+    """The Roster from the week of ``first_date`` to the week of ``last_date``: one entry per ISO week
+    (Monday to Sunday), oldest first. Reads only.
+
+    A week is ``{"monday": date, "days": {weekday: day}}``, with one ``day`` for each weekday that has a
+    shown Service role (a day after 9999-12-31 is left out). A day is a dict:
+
+    - ``date``: its ``datetime.date``.
+    - ``service``: the id of its first Service (by start, then id), or ``None``; ``others``: rows
+      ``(id, starts_at)`` of the other Services of that date, in the same order.
+    - ``skipped``: the reason of a Skipped date, or ``None``.
+    - ``month_first``: ``True`` when ``service`` is the first Service of its month on that weekday, not
+      counting the Services on a Skipped date (the Service where a ``month_start`` role starts a round).
+    - ``links``: ``{service_role_id: [rows]}`` of ``service``, every link open or closed, oldest first:
+      ``(id, service_role_id, person_id, ministry_id, name, start_date, end_date)``.
+    """
+    first = _dt.date.fromisoformat(text.check_date(first_date, "calendar.start_date"))
+    last = _dt.date.fromisoformat(text.check_date(last_date, "calendar.end_date"))
+    if last < first:
+        raise TextError("calendar.err_end_date_before")
+    weekdays = sorted({r["weekday"] for r in roles(conn)})
+    monday = first - _dt.timedelta(days=first.weekday())
+    end = _plus_days(last, 6 - last.weekday()) or _dt.date.max
+    since = monday.replace(day=1).isoformat()  # the month-first test needs the whole month
+    until = end.isoformat()
+    skipped = {r["date"]: r["reason"] for r in conn.execute(
+        "SELECT date, reason FROM skipped_date WHERE date >= ? AND date <= ?", (since, until))}
+    services = {}  # date text -> [(id, starts_at)] by start, then id
+    for r in conn.execute("SELECT id, starts_at FROM calendar_item WHERE kind = 'Service' AND substr(starts_at, 1, 10) "
+                          ">= ? AND substr(starts_at, 1, 10) <= ? ORDER BY starts_at, id", (since, until)):
+        services.setdefault(r["starts_at"][:10], []).append((r["id"], r["starts_at"]))
+    firsts, seen = set(), set()
+    for day in sorted(services):
+        place = (day[:7], _dt.date.fromisoformat(day).weekday())
+        if day not in skipped and place not in seen:
+            seen.add(place)
+            firsts.add(day)
+    links = {}  # calendar item id -> {role id: [rows]}
+    for r in conn.execute(
+            "SELECT sl.id, sl.calendar_item_id, sl.service_role_id, sl.person_id, sl.ministry_id, "
+            "COALESCE(p.full_name, li.name) AS name, sl.start_date, sl.end_date FROM service_role_link sl "
+            "JOIN calendar_item ci ON ci.id = sl.calendar_item_id LEFT JOIN person p ON p.id = sl.person_id "
+            "LEFT JOIN list_item li ON li.id = sl.ministry_id WHERE substr(ci.starts_at, 1, 10) >= ? "
+            "AND substr(ci.starts_at, 1, 10) <= ? ORDER BY sl.id", (monday.isoformat(), until)):
+        links.setdefault(r["calendar_item_id"], {}).setdefault(r["service_role_id"], []).append(r)
+    weeks = []
+    while monday is not None and monday <= last:
+        days = {}
+        for weekday in weekdays:
+            day = _plus_days(monday, weekday)
+            if day is None:
+                continue
+            key = day.isoformat()
+            held = services.get(key, [])
+            service = held[0][0] if held else None
+            days[weekday] = {"date": day, "service": service, "others": held[1:], "skipped": skipped.get(key),
+                             "month_first": service is not None and key in firsts,
+                             "links": links.get(service, {})}
+        weeks.append({"monday": monday, "days": days})
+        monday = _plus_days(monday, 7)
+    return weeks

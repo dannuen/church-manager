@@ -59,4 +59,15 @@
   th.n { text-align: right; }
   tr.total > * { border-top: 0.5mm solid #000; border-bottom: 0; font-weight: 700; }
   .statement-head .kv dd { text-align: left; }
+
+  /* the Roster (RO-5): the 3 month tables of a quarter on one A4 sheet, portrait: smaller type and tight
+     rows, a month never split over two sheets; the Auto-fill link, the quarter chips and the Print button
+     are gone with the other actions */
+  .roster.stack { gap: 4mm; }
+  .roster-month { break-inside: avoid; }
+  .roster-month > header { margin-bottom: 1mm; }
+  .roster-table { table-layout: fixed; }   /* one column grid for the 3 months, as on screen */
+  .roster-table .roster-date { width: 19mm; }
+  .roster-table th, .roster-table td { padding: 1.2mm 1.5mm; font-size: 9.5pt; line-height: 1.3; }
+  .roster-table td { height: 7mm; }   /* a week with no Service is a whole line, to write in by hand */
 }

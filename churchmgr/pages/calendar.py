@@ -329,7 +329,8 @@ def calendar_page(req):
     body = (_toolbar(mode, first, today)
             + f'<div class="grid calendar"><div class="span-8 stack">{main}</div>'
             f'<div class="side-4 stack">{_to_record_panel(conn, today)}</div></div>')
-    actions = ui.link_button(t("calendar.add"), "/calendar/new", "primary")
+    actions = (ui.link_button(t("calendar.roster_title"), "/calendar/roster")  # card RO-5: the Roster
+               + ui.link_button(t("calendar.add"), "/calendar/new", "primary"))
     return Response.html(ui.page(t("calendar.title"), body, "calendar", sub=finding, actions=actions))
 
 
