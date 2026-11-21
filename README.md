@@ -118,6 +118,48 @@ Bạn có danh sách người trong một bảng tính? Bạn có thể thêm t�
 
 ---
 
+## Lịch phân công (Roster)
+
+Lịch phân công cho biết ai làm từng **Phân công** (Service role) trong mỗi Giờ thờ phượng: mỗi tuần một
+dòng, mỗi tháng một bảng, mỗi trang một quý. Bấm **Lịch** ở thanh menu, rồi bấm **Lịch phân công**.
+
+### Thiết lập (làm một lần)
+
+Trên trang Lịch phân công, bấm **Thiết lập**.
+
+1. **Phân công.** Có sẵn 4 Phân công: **Bồi linh** (Thứ Năm), **Hướng dẫn chương trình**, **Dâng hiến**
+   và **Ban ngành** (Chúa Nhật). Ban ngành do một Ban ngành làm, 2 Giờ thờ phượng một lần, và hiện ở cột
+   **Ghi chú**. Bạn có thể thêm một Phân công, đổi tên, hoặc **Ẩn** nó (lịch sử vẫn được giữ).
+2. **Thứ tự luân phiên.** Bấm vào tên một Phân công. Thêm từng Người (hoặc Ban ngành) theo thứ tự.
+   Bấm **Lên** hoặc **Xuống** để đổi chỗ, **Bỏ ra** để bỏ một người ra. Mỗi người có lượt bằng nhau.
+3. **Ngày Bỏ qua.** Thêm một ngày không xếp Phân công (ví dụ Nghỉ Tết, Hội đồng bồi linh) và lý do.
+   Lịch phân công hiện lý do ở ngày đó.
+4. **Quy tắc trùng người.** Chọn một Người được làm bao nhiêu Phân công. Mặc định: **Một Phân công mỗi Giờ
+   thờ phượng** (một tuần có thể làm hai Phân công, nhưng không làm hai Phân công trong cùng một Giờ thờ phượng).
+
+### Tự động xếp lịch (Auto-fill)
+
+1. Trên trang Lịch phân công, bấm **Tự động xếp lịch**.
+2. Trang mới cho xem trước các tên mới của quý đang xem. **Chưa có gì được lưu.** Muốn khoảng ngày
+   khác: đổi ngày ở ô **Khoảng ngày**, rồi bấm **Xem trước**.
+3. Bấm **Lưu các tên mới** để lưu.
+
+Tự động xếp lịch **chỉ điền Phân công còn trống**. Tên đã có không bao giờ bị đổi.
+
+### Đổi người
+
+Trên Lịch phân công, bấm vào ngày của một Giờ thờ phượng. Ở phần **Phân công**, chọn người khác rồi
+bấm **Lưu**, hoặc bấm **Bỏ trống**. Tên cũ vẫn được giữ, gạch ngang, kèm ngày bắt đầu và ngày kết thúc.
+Không có gì bị xoá.
+
+### Dữ liệu Hội Thánh từ phần mềm cũ
+
+Dữ liệu Hội Thánh lập bằng phần mềm cũ (chưa có Lịch phân công) được nâng cấp **tự động, lần đầu mở**
+bằng phần mềm mới: phần mềm thêm Lịch phân công và 4 Phân công có sẵn. Thông tin cũ không bị thay đổi.
+Nên sao lưu trước khi mở (xem "Sao lưu" ở dưới).
+
+---
+
 ## Dữ liệu được lưu ở đâu
 
 Toàn bộ dữ liệu của một Hội Thánh nằm trong **một thư mục** (gọi là **dữ liệu Hội Thánh**):
@@ -266,7 +308,8 @@ Tệp `current.txt` trong thư mục chứa ghi dữ liệu Hội Thánh nào đ
 **Kiểm tra toàn bộ:** `python verify.py`. Lệnh này chạy mọi bài kiểm tra, tạo một Hội Thánh giả
 50 người trong thư mục tạm, mở phần mềm, kiểm tra mọi ô trên Trang chủ và ô Tìm kiếm, tạo một
 bản bàn giao và chứng minh không có ghi chú cá nhân, kiểm tra hai bản Tổng kết dâng hiến và các lệnh
-Cổng Hermes (`python -m churchmgr.agent`). Sau đó lệnh mở mọi trang bằng Tiếng Việt và bằng English,
-kiểm tra nút đổi ngôn ngữ, và kiểm tra trang Tiếng Việt không còn chữ tiếng Anh. In PASS hoặc FAIL cho
+Cổng Hermes (`python -m churchmgr.agent`), chạy Tự động xếp lịch và kiểm tra Lịch phân công. Sau đó lệnh
+mở mọi trang bằng Tiếng Việt và bằng English, kiểm tra nút đổi ngôn ngữ, kiểm tra trang Tiếng Việt không
+còn chữ tiếng Anh, và mở một dữ liệu Hội Thánh từ phần mềm cũ. In PASS hoặc FAIL cho
 từng mục; trả về 0 chỉ khi tất cả đều đạt. Không bao giờ mở dữ liệu thật của bạn. `--keep` giữ thư mục
 tạm; `--people N` đặt số người (20 đến 1000).
