@@ -15,7 +15,7 @@ import random
 import shutil
 import sys
 
-from . import calendar, care, db, documents, lists, money, paths, schema, sent, text
+from . import calendar, care, db, documents, lists, money, paths, roster, schema, sent, text
 from . import people as people_data
 from .db import transaction
 
@@ -36,6 +36,8 @@ STREETS = ("Lê Lợi", "Trần Hưng Đạo", "Nguyễn Trãi", "Hai Bà Trưng
            "Lý Thường Kiệt", "Quang Trung", "Võ Thị Sáu")
 WARDS = ("Phường 1", "Phường 4", "Phường 7", "Phường 9")
 CHI_PHAI_NAMES = ("Chi phái Hòa Bình", "Chi phái Phước Thành", "Chi phái Đông Hải")
+ROSTER_MINISTRIES = ("Ban Trung niên", "Ban Thanh tráng", "Ban Tráng niên")  # the Ministry in charge Rotation
+ROSTER_SKIPPED = "Hội đồng bồi linh"  # the reason of the Skipped date
 AMOUNTS = (50_000, 100_000, 200_000, 300_000, 500_000, 1_000_000, 2_000_000)
 CARE_NOTES = ("Thăm hỏi sức khỏe, cầu nguyện chung.", "Chia sẻ Lời Chúa với cả nhà.",
               "Động viên sau khi nằm viện.", "Mừng em bé mới sinh.", "Hỏi thăm việc làm mới.",
@@ -110,6 +112,7 @@ class _Fake:
         self.make_money()
         self.make_documents_and_sent()
         self.make_private_notes()
+        self.make_roster()  # last: its random draws leave the data of every step before it as it was
         return self.counts
 
     def make_families(self):
@@ -395,6 +398,52 @@ class _Fake:
         for n, (pid, words) in enumerate(zip(targets, PRIVATE_TEXTS), start=1):
             people_data.add_private_note(self.conn, pid, f"{MARKER}{n}: {words}")
         self.add_count("private_notes", len(PRIVATE_TEXTS))
+
+    def make_roster(self):
+        """The Service role Roster: 3 more Ministries (the Ministry in charge Rotation), a Thursday Service
+        "Bồi linh" in the weeks of the Sunday Service, the Rotations, and links on the past Services only (the
+        future ones stay empty for Auto-fill): turn by turn, one swap and one cleared link. A future Sunday
+        is a Skipped date."""
+        rng, conn, today = self.rng, self.conn, self.today
+        ministries = [lists.add_item(conn, "ministry", name) for name in ROSTER_MINISTRIES]  # end of the list
+        active = set(self.active)
+        grown = [p["id"] for p in self.people if p["id"] in active and (today - p["birth"]).days >= 18 * 365]
+        rng.shuffle(grown)
+        pool = grown + [pid for pid in self.active if pid not in grown]  # grown-ups first; 18 or more People
+        for mid in ministries:
+            for k, pid in enumerate(rng.sample(pool[:max(len(grown), 3)], 3)):
+                people_data.set_ministry(conn, pid, mid, "Leader" if k == 0 else "Member",
+                                         self.ago(rng.randint(100, 900)))
+        week, first_thursday = _dt.timedelta(weeks=1), self.sundays[0] - _dt.timedelta(days=3)
+        thursdays = calendar.add_calendar_item(conn, "Service", "Bồi linh", f"{first_thursday} 19:30",
+                                               ends_at=f"{first_thursday} 21:00", place="Nhà thờ", repeat="weekly",
+                                               repeat_until=(self.sundays[-1] - _dt.timedelta(days=3)).isoformat())
+        boi_linh, leader, offering, in_charge = roster.roles(conn)  # Thursday first, then the Sunday roles
+        turns = {boi_linh["id"]: rng.sample(pool[:max(len(grown), 6)], 6),
+                 leader["id"]: pool[:6], offering["id"]: pool[6:12],  # no one twice in one Sunday Service
+                 in_charge["id"]: ministries}
+        for role_id, ids in turns.items():
+            roster.set_rotation(conn, role_id, ids)
+        services = {3: [(iid, first_thursday + k * week) for k, iid in enumerate(thursdays)],
+                    6: list(zip(self.services, self.sundays))}
+        for role in (boi_linh, leader, offering, in_charge):
+            column = "person_id" if role["done_by"] == "person" else "ministry_id"
+            past = [s for s in services[role["weekday"]] if s[1] < today][::role["every"]]
+            for k, (iid, day) in enumerate(past):  # made two weeks before the Service
+                roster.set_link(conn, iid, role["id"], day=(day - 2 * week).isoformat(),
+                                **{column: turns[role["id"]][k % len(turns[role["id"]])]})
+        sundays = [s for s in services[6] if s[1] < today]
+        k = len(sundays) - 2
+        iid, day = sundays[k]  # a swap: someone else leads that Sunday, changed 3 days before it
+        roster.set_link(conn, iid, leader["id"], turns[leader["id"]][(k + 3) % 6],
+                        day=(day - _dt.timedelta(days=3)).isoformat())
+        iid, day = sundays[k - 2]  # cleared: the Offering leader could not come and no one took it
+        roster.clear_link(conn, iid, offering["id"], day=(day - _dt.timedelta(days=1)).isoformat())
+        roster.add_skipped_date(conn, self.sundays[-2], ROSTER_SKIPPED)  # a future Sunday
+        self.add_count("calendar_items", len(thursdays))
+        self.add_count("ministry_people", 3 * len(ministries))
+        self.add_count("service_role_links", conn.execute("SELECT COUNT(*) FROM service_role_link").fetchone()[0])
+        self.add_count("skipped_dates", 1)
 
 
 def _check_people(value):
