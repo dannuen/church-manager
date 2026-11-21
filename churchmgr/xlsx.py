@@ -1,8 +1,11 @@
 """Read the first sheet of a .xlsx file and write a simple .xlsx, standard library only. Knows nothing about people.
 
 A .xlsx file is a zip of XML files (an open ISO standard). Reading takes only the cell values of the
-first sheet: no styles, no formulas (a formula cell gives the value saved with it). Text comes back NFC.
-Tags are matched by their local name, so both namespaces of the standard (transitional and strict) work.
+first sheet, no formulas (a formula cell gives the value saved with it). Text comes back NFC. Of the
+styles it reads one thing: a number cell with a date style (such as 31/12/1980 typed into Excel) comes
+back as a :class:`DateNumber`, so a day count is never taken for a year. No styles part, or a broken one,
+marks no date. Tags are matched by their local name, so both namespaces of the standard (transitional and
+strict) work.
 
 Limits (a file comes from outside the app): the file at most ``MAX_FILE`` bytes, each XML part at most
 ``MAX_MEMBER`` bytes once unpacked (a zip bomb stops there), at most ``MAX_ROWS`` rows and
@@ -34,11 +37,23 @@ _YMD = re.compile(r"([0-9]{4})-([0-9]{1,2})-([0-9]{1,2})")
 _NOT_XML = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]")  # characters XML 1.0 cannot hold
 _BROKEN = (zipfile.BadZipFile, zipfile.LargeZipFile, KeyError, IndexError, ElementTree.ParseError, StopIteration,
            NotImplementedError, RuntimeError, EOFError, OSError, zlib.error, UnicodeDecodeError)
+# The built-in number formats (numFmtId) that show a date or a time.
+_DATE_FORMAT_IDS = frozenset([*range(14, 23), *range(27, 37), *range(45, 48), *range(50, 59)])
+_CODE_SKIP = re.compile(r'"[^"]*"|\[[^\]]*\]|\\.')  # "text", [Red] or [$-409], \x: never a day or a year
+_DAY_OR_YEAR = re.compile(r"[dy]", re.IGNORECASE)  # d (day) or y (year) in a number format code
+
+
+class DateNumber(float):
+    """A number cell with a date style: a day count (as :func:`cell_date` reads it), never a year.
+    It is a ``float``, so every other reader takes it as any number."""
+
+    __slots__ = ()
 
 
 class Sheet(NamedTuple):
     """The first sheet: ``rows[0]`` is sheet row 1. Every row has the same length; a cell is text,
-    a number (``float``) or ``None`` (empty). ``date1904``: the file counts date numbers from 1904."""
+    a number (``float``; a :class:`DateNumber` when it has a date style) or ``None`` (empty).
+    ``date1904``: the file counts date numbers from 1904."""
 
     rows: list
     date1904: bool
@@ -105,8 +120,45 @@ def _column(name):
     return number
 
 
-def _value(cell, shared):
-    """The value of one ``<c>``: text, ``float`` or ``None``."""
+def _is_date_format(fmt_id, codes):
+    """Does the number format ``fmt_id`` (text, from ``numFmtId``) show a date? ``codes``: the custom
+    formats, ``{numFmtId: formatCode}``."""
+    if fmt_id is None:
+        return False
+    code = codes.get(fmt_id.strip())
+    if code is not None and _DAY_OR_YEAR.search(_CODE_SKIP.sub("", code)):
+        return True
+    try:
+        return int(fmt_id) in _DATE_FORMAT_IDS
+    except ValueError:
+        return False
+
+
+def _date_styles(zf, rels):
+    """The cell style numbers (``s=``) whose number format shows a date: from the styles part of the
+    workbook (its relation, else ``xl/styles.xml``). No styles part or a broken one: none, never an error.
+    A styles part over ``MAX_MEMBER`` is refused, like any part."""
+    name = next((name for kind, name in rels.values() if kind.endswith("/styles")), "xl/styles.xml")
+    if name not in zf.namelist():
+        return frozenset()
+    try:
+        root = _xml(zf, name)
+    except TextError:
+        raise
+    except (ValueError, *_BROKEN):
+        return frozenset()
+    codes = {fmt.get("numFmtId", "").strip(): fmt.get("formatCode") or ""
+             for group in _children(root, "numFmts") for fmt in _children(group, "numFmt")}
+    xf_list = next(iter(_children(root, "cellXfs")), None)
+    if xf_list is None:
+        return frozenset()
+    xfs = _children(xf_list, "xf")
+    return frozenset(i for i, xf in enumerate(xfs) if _is_date_format(xf.get("numFmtId"), codes))
+
+
+def _value(cell, shared, date_styles=frozenset()):
+    """The value of one ``<c>``: text, ``float`` (a :class:`DateNumber` when its style ``s=`` is in
+    ``date_styles``) or ``None``."""
     kind = cell.get("t") or "n"
     if kind == "inlineStr":
         found = _children(cell, "is")
@@ -125,12 +177,14 @@ def _value(cell, shared):
         elif kind in ("str", "e"):  # a formula's text, an error such as #N/A
             value = raw
         else:
-            return float(raw)  # "abc" raises ValueError: not a real .xlsx file
+            number = float(raw)  # "abc" raises ValueError: not a real .xlsx file
+            style = cell.get("s") or "0"  # no s=: the first cell style
+            return DateNumber(number) if kind == "n" and style.isdecimal() and int(style) in date_styles else number
     value = text.nfc(value)
     return value if value != "" else None
 
 
-def _cells(sheet_xml, shared):
+def _cells(sheet_xml, shared, date_styles=frozenset()):
     """``{row number: {column number: value}}`` of the cells that have a value."""
     rows, row_number = {}, 0
     for row in sheet_xml.iter():
@@ -141,7 +195,7 @@ def _cells(sheet_xml, shared):
         for cell in _children(row, "c"):
             ref = _CELL_REF.fullmatch(cell.get("r") or "")
             col_number = _column(ref.group(1)) if ref else col_number + 1
-            value = _value(cell, shared)
+            value = _value(cell, shared, date_styles)
             if value is None:
                 continue
             if row_number > MAX_ROWS:
@@ -176,7 +230,7 @@ def read_first_sheet(data):
             shared = []
             if strings_name in zf.namelist():
                 shared = [_run_text(si) for si in _children(_xml(zf, strings_name), "si")]
-            cells = _cells(_xml(zf, sheet_name), shared)
+            cells = _cells(_xml(zf, sheet_name), shared, _date_styles(zf, rels))
     except TextError:
         raise
     except (ValueError, *_BROKEN) as exc:

@@ -583,6 +583,13 @@ class SmallLogicTest(unittest.TestCase):
         self.assertIn('aria-invalid="true"', ui.field("Date", "date", "x", error="Bad date."))
         self.assertIn("selected", ui.select_field("Fund", "fund", [(1, "General"), (2, "Building")], selected=2))
 
+    def test_fmt_birth_date(self):
+        """BY-1: a year-only Birth date (YYYY-00-00) shows the year; a full date shows as fmt_date."""
+        self.assertEqual(ui.fmt_birth_date("1980-00-00"), "1980")
+        self.assertEqual(ui.fmt_birth_date("1980-12-31"), "31/12/1980")
+        self.assertEqual(ui.fmt_birth_date(None), "—")
+        self.assertEqual(ui.fmt_birth_date(""), "—")
+
     def test_content_disposition(self):
         header = server.content_disposition("Thư mời Hội Thánh.pdf")
         self.assertIn('filename="Thu moi Hoi Thanh.pdf"', header)

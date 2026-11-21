@@ -128,6 +128,14 @@ def fmt_date(value):
     return _parse_day(value).strftime("%d/%m/%Y")
 
 
+def fmt_birth_date(value):
+    """A Birth date: ``"1980-00-00"`` (the year only) -> ``"1980"``; a full date as :func:`fmt_date`
+    (``"31/12/1980"``). Missing -> ``"—"``."""
+    if isinstance(value, str) and value[4:] == "-00-00":
+        return value[:4]
+    return fmt_date(value)
+
+
 def fmt_datetime(value):
     """``"2026-11-01 08:00"`` -> ``"01/11/2026 08:00"``. Missing -> ``"—"``."""
     if value is None or value == "":

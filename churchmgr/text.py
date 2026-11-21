@@ -1,7 +1,8 @@
 """Text helpers: NFC, the search fold, slugs, and checks for dates and ids.
 
 Every text value is NFC-normalized before it is stored. Dates are TEXT
-``YYYY-MM-DD``; date-times are TEXT ``YYYY-MM-DD HH:MM`` in local time.
+``YYYY-MM-DD``; date-times are TEXT ``YYYY-MM-DD HH:MM`` in local time. A Birth date may
+be a year only, stored ``YYYY-00-00``.
 """
 
 import datetime as _dt
@@ -13,6 +14,7 @@ from .i18n import TextError
 _SPACES = re.compile(r"\s+")
 _NOT_SLUG = re.compile(r"[^a-z0-9]+")
 _DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+_YEAR_ONLY = re.compile(r"([0-9]{4})-00-00")  # a Birth date with the year only
 _DATETIME = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}")
 _DIGITS = re.compile(r"[0-9]+")
 MAX_NAME_LENGTH = 120  # a name (Full name, Family, Chi phái, list item, title) has at most this many characters
@@ -97,6 +99,19 @@ def check_date_years(value, what="Date"):
     if not 1900 <= int(day[:4]) <= 9999:
         raise TextError("errors.date_years", label=what)
     return day
+
+
+def check_birth_date(value, what="Birth date"):
+    """A Birth date: a full date exactly as :func:`check_date` gives it (any year), or a year only,
+    stored ``YYYY-00-00`` with a year from 1900 to 9999 and kept as is. Anything else raises
+    ``ValueError``. "Not after today" is not checked here (the pages do it)."""
+    if isinstance(value, str):
+        year_only = _YEAR_ONLY.fullmatch(value.strip())
+        if year_only:
+            if int(year_only.group(1)) < 1900:
+                raise TextError("errors.date", label=what)
+            return year_only.group(0)
+    return check_date(value, what)
 
 
 def check_datetime(value, what="Date and time"):

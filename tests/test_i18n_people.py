@@ -209,6 +209,29 @@ class VietnamesePagesTest(CopyServer, unittest.TestCase):
                       "YYYY-MM-DD, ví dụ 2026-05-31.</p>", page)
         self.assert_vietnamese(page, "truong, bad date")
 
+    def test_birth_date_year_only_in_vietnamese(self):
+        """BY-2: the Birth date hint and its errors in Vietnamese; a year only is saved and shown as 1980."""
+        page = self.page("/people/new")
+        self.assertIn('<p class="hint" id="f-birth_date-hint">Như 31/12/1980, hoặc chỉ năm: 1980. '
+                      "Để trống nếu không biết.</p>", page)
+        member = self.item("status", "member")
+        form = {"full_name": "Lê Văn Năm Sinh", "birth_date": "1850", "status_id": member, "start_date": ago(0)}
+        _h, page = self.post("/people/new", form, expect=400)
+        self.assertIn('<p class="error" id="f-birth_date-error">Ngày sinh phải là một ngày có thật như 31/12/1980, '
+                      "hoặc một năm từ 1900 như 1980.</p>", page)
+        self.assert_vietnamese(page, "new person, birth year before 1900")
+        _h, page = self.post("/people/new", {**form, "birth_date": str(TODAY.year + 1)}, expect=400)
+        self.assertIn(f'<p class="error" id="f-birth_date-error">Ngày sinh không được sau hôm nay ({shown(ago(0))}). '
+                      "Hãy dùng hôm nay hoặc một ngày trước đó.</p>", page)
+        headers, _ = self.post("/people/new", {**form, "birth_date": "1980"})
+        pid = int(re.fullmatch(r"/people/(\d+)\?msg=.+", headers["location"]).group(1))
+        page = self.page(f"/people/{pid}")
+        self.assertIn('<dd><span class="num">1980</span></dd>', page)
+        self.assert_vietnamese(page, "person page, year only")
+        page = self.page(f"/people/{pid}/edit")
+        self.assertRegex(page, r'<input [^>]*name="birth_date"[^>]*value="1980"')
+        self.assert_vietnamese(page, "edit person, year only")
+
     def test_flash_messages_are_vietnamese(self):
         pid, headers = self.new_person("Trần Thị Diệu")
         page, message = self.follow(headers)
@@ -287,6 +310,8 @@ class EnglishPagesTest(CopyServer, unittest.TestCase):
             self.assertNotIn("[[", page, path)
         self.assertIn("<h1>People</h1>", self.page("/people"))
         self.assertIn('<p class="lead">There is no Person with this number.</p>', self.page("/people/999999", 404))
+        self.assertIn('<p class="hint" id="f-birth_date-hint">Like 31/12/1980, or the year only: 1980. '
+                      "Leave empty if you do not know it.</p>", self.page("/people/new"))
 
     def test_a_name_with_accents_is_shown_as_typed(self):
         pid, headers = self.new_person(ACCENTED)
@@ -390,6 +415,21 @@ class SharedHelpersTest(unittest.TestCase):
         self.use_lang("en")
         self.assertEqual(people_pages.same_change("A."), "A. Nothing changed.")
         self.assertEqual(people_pages.period("2026-01-02", None)[1], '<span class="faint">now</span>')
+
+    def test_birth_from_input_keeps_its_english(self):
+        """BY-2: a refused Birth date: ``str()`` English, the page shows Vietnamese."""
+        self.use_lang("vi")
+        with self.assertRaises(TextError) as ctx:
+            people_pages.birth_from_input("1850")
+        self.assertEqual(str(ctx.exception),
+                         "Birth date must be a real date like 31/12/1980, or a year from 1900 like 1980.")
+        self.assertEqual(error_text(ctx.exception),
+                         "Ngày sinh phải là một ngày có thật như 31/12/1980, hoặc một năm từ 1900 như 1980.")
+        with self.assertRaises(TextError) as ctx:
+            people_pages.birth_from_input(str(TODAY.year + 1))
+        self.assertEqual(str(ctx.exception), f"Birth date cannot be after today ({shown(ago(0))}). "
+                                             "Use today or an earlier date.")
+        self.assertTrue(error_text(ctx.exception).startswith("Ngày sinh không được sau hôm nay"))
 
 
 class StoryTest(_support.CopyTestCase):

@@ -7,6 +7,8 @@ Rules kept here:
 - History changes go only through the data layer (``people.set_status``, ``set_family``,
   ``set_ministry``, ...). Never an SQL UPDATE on a history table.
 - A start date after today is refused (the data layer would count it as current at once).
+- A Birth date is a text box: a full date or a year only (:func:`birth_from_input`, made to read a
+  People file cell too). A year only is stored ``YYYY-00-00`` and shown ``1980``.
 - Private notes show only on this Person page, inside ``.no-print``; never in the story list,
   never on another page. ``print.css`` hides ``.no-print``.
 - Words on screen come from the text table (``t``/``tn``; sections ``people``, ``families``,
@@ -16,8 +18,9 @@ Rules kept here:
 """
 
 import datetime as _dt
+import re
 
-from .. import care, i18n, lists, people, story, text, ui
+from .. import care, i18n, lists, people, story, text, ui, xlsx
 from .. import search as person_search
 from ..i18n import TextError, t, tn
 from ..schema import FAMILY_ROLES, MINISTRY_ROLES
@@ -27,6 +30,7 @@ from . import documents as document_pages  # card C3 (a module import: pages/doc
 
 GENDER_WORDS = {"M": "people.male", "F": "people.female"}  # code -> TEXT key
 SEARCH_LIMIT = 100_000  # the quick search on /people keeps every match
+_BIRTH_YEAR = re.compile(r"[0-9]{4}(-00-00)?")  # a Birth date with the year only: 1980 or 1980-00-00
 
 
 # ---------------------------------------------------------------- shared helpers (C1 pages)
@@ -55,6 +59,38 @@ def past_or_today(value, what):
     if day > today_text():
         raise TextError("people.err_after_today", label=what, today=ui.fmt_date(today_text()))
     return day
+
+
+def birth_from_input(value, what="people.birth_date", date1904=False):
+    """A Birth date typed in a form or read from a People file cell: ``YYYY-MM-DD``, or ``YYYY-00-00``
+    for a year only. Empty (``None``, ``""``, spaces) gives ``None``.
+
+    A year is a whole number from 1000 to 9999, 4 digits of text, or ``YYYY-00-00``; it must be from 1900
+    and not after this year. A date cell (an ``xlsx.DateNumber``: a number with a date style) is never a
+    year, and neither is any other number: those are spreadsheet dates (``date1904``: the file's date
+    system). Other text is read as 31/12/1980, 1/2/1980 or 1980-12-31. A date is not after today.
+    A refusal is a ``TextError`` whose English sentence starts with ``what``.
+    """
+    if isinstance(value, str):
+        value = value.strip()
+    if value is None or value == "":
+        return None
+    year = None
+    if isinstance(value, (int, float)) and not isinstance(value, (bool, xlsx.DateNumber)):
+        if 1000 <= value <= 9999 and float(value).is_integer():
+            year = int(value)
+    elif isinstance(value, str) and _BIRTH_YEAR.fullmatch(value):
+        year = int(value[:4])
+    if year is not None:
+        if year < 1900:
+            raise TextError("people.err_birth_date", label=what)
+        if year > int(today_text()[:4]):
+            raise TextError("people.err_after_today", label=what, today=ui.fmt_date(today_text()))
+        return f"{year}-00-00"  # never past_or_today: text.check_date refuses a year only
+    day = xlsx.cell_date(value, date1904)
+    if day is None:
+        raise TextError("people.err_birth_date", label=what)
+    return past_or_today(day, what)
 
 
 def field_errors(error, form_key, labels):
@@ -322,7 +358,7 @@ def _plain_fields(values, errors):
         ui.field(t("people.full_name"), "full_name", v("full_name", ""), error=errors.get("full_name"),
                  required=True, autocomplete="off", lang="vi")
         + ui.select_field(t("people.gender"), "gender", genders, selected=v("gender", ""), error=errors.get("gender"))
-        + ui.field(t("people.birth_date"), "birth_date", v("birth_date", ""), type="date", max=today_text(),
+        + ui.field(t("people.birth_date"), "birth_date", v("birth_date", ""), type="text",  # takes a year only
                    error=errors.get("birth_date"), hint=t("people.birth_hint"))
         + ui.field(t("people.phone"), "phone", v("phone", ""), type="tel", autocomplete="off")
         + ui.textarea_field(t("people.own_address"), "address", v("address", ""), lang="vi",
@@ -358,11 +394,10 @@ def add_person_from_form(conn, form):
     Hermes door. ``form`` has ``.get`` (the server's form or a plain dict). Returns the Person id;
     a refused value raises ``ValueError`` (a ``TextError``: ``str()`` is the English sentence)."""
     f = form
-    if f.get("birth_date"):
-        past_or_today(f["birth_date"], "people.birth_date")
+    birth = birth_from_input(f.get("birth_date"))
     start = past_or_today(f.get("start_date"), "people.start_date")
     status_id = list_choice(conn, f["status_id"], "status", "people.status")["id"] if f.get("status_id") else None
-    return people.add_person(conn, f.get("full_name"), gender=f.get("gender"), birth_date=f.get("birth_date"),
+    return people.add_person(conn, f.get("full_name"), gender=f.get("gender"), birth_date=birth,
                              phone=f.get("phone"), address=f.get("address"), note=f.get("note"),
                              status_id=status_id, start_date=start)
 
@@ -378,7 +413,9 @@ def new_post(req):
 
 def _edit_form(req, person, values=None, error=None, status=200):
     values = values if values is not None else {
-        k: person[k] or "" for k in ("full_name", "gender", "birth_date", "phone", "address", "note")
+        **{k: person[k] or "" for k in ("full_name", "gender", "phone", "address", "note")},
+        # 1980 or 31/12/1980, as the box reads it back (Save with no change keeps it); empty, never a dash
+        "birth_date": ui.fmt_birth_date(person["birth_date"]) if person["birth_date"] else "",
     }
     errors = field_errors(error, "edit", _PERSON_LABELS)
     pid = person["id"]
@@ -403,10 +440,9 @@ def edit_post(req):
         return not_found("people.person", "/people", "people.go_people")
     f = req.form
     try:
-        if f.get("birth_date"):
-            past_or_today(f["birth_date"], "people.birth_date")
+        birth = birth_from_input(f.get("birth_date"))
         people.update_person(req.conn, person["id"], full_name=f.get("full_name"), gender=f.get("gender"),
-                             birth_date=f.get("birth_date"), phone=f.get("phone"), address=f.get("address"),
+                             birth_date=birth, phone=f.get("phone"), address=f.get("address"),
                              note=f.get("note"))
     except ValueError as exc:
         return _edit_form(req, person, f, ("edit", exc), 400)
@@ -519,7 +555,7 @@ def _details_panel(conn, person):
     gender = GENDER_WORDS.get(person["gender"])
     rows = [
         ("people.gender", h(t(gender)) if gender else ui.DASH),
-        ("people.birth_date", num(ui.fmt_date(person["birth_date"])) if person["birth_date"] else ui.DASH),
+        ("people.birth_date", num(ui.fmt_birth_date(person["birth_date"])) if person["birth_date"] else ui.DASH),
         ("people.phone", num(person["phone"]) if person["phone"] else ui.DASH),
         ("people.address", vi(address)
          + (f' <span class="faint">{h(t("people.family_address"))}</span>' if from_family else "")),

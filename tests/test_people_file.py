@@ -61,21 +61,55 @@ def zip_of(members):
     return buf.getvalue()
 
 
-def hand_made(sheet_data, shared=None, workbook_pr=""):
+def hand_made(sheet_data, shared=None, workbook_pr="", styles=None, styles_target="styles.xml"):
     """A small .xlsx made by hand, as another spreadsheet program could write it: the sheet sits in
-    ``xl/worksheets/data.xml`` under the relation id ``rId7``."""
+    ``xl/worksheets/data.xml`` under the relation id ``rId7``. ``styles``: the text of a styles part, at
+    ``xl/<styles_target>`` under the relation id ``rId9``; with ``styles_target`` ``None`` it sits at
+    ``xl/styles.xml`` with no relation."""
+    styles_rel = (f'<Relationship Id="rId9" Type="{REL_NS}/styles" Target="{styles_target}"/>'
+                  if styles is not None and styles_target else "")
     members = {
         "xl/workbook.xml": (f'<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="{MAIN_NS}" '
                             f'xmlns:r="{REL_NS}">{workbook_pr}<sheets><sheet name="Mọi người" sheetId="1" '
                             'r:id="rId7"/></sheets></workbook>'),
         "xl/_rels/workbook.xml.rels": (
             '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-            f'<Relationship Id="rId7" Type="{REL_NS}/worksheet" Target="worksheets/data.xml"/></Relationships>'),
+            f'<Relationship Id="rId7" Type="{REL_NS}/worksheet" Target="worksheets/data.xml"/>{styles_rel}'
+            '</Relationships>'),
         "xl/worksheets/data.xml": f'<worksheet xmlns="{MAIN_NS}"><sheetData>{sheet_data}</sheetData></worksheet>',
     }
     if shared is not None:
         members["xl/sharedStrings.xml"] = f'<sst xmlns="{MAIN_NS}">{shared}</sst>'
+    if styles is not None:
+        members["xl/" + (styles_target or "styles.xml")] = styles
     return zip_of(members)
+
+
+def styles_xml(num_fmt_ids, custom=""):
+    """A styles part: one cell style per id of ``num_fmt_ids`` (``s="0"``, ``s="1"``, ...) and the custom number
+    formats ``custom`` (``<numFmt>`` elements). Its ``cellStyleXfs`` list has a date format first: only the
+    ``cellXfs`` list counts for ``s=``."""
+    fmts = f'<numFmts count="{custom.count("<numFmt ")}">{custom}</numFmts>' if custom else ""
+    xfs = "".join(f'<xf numFmtId="{n}" fontId="0" fillId="0" borderId="0" xfId="0"/>' for n in num_fmt_ids)
+    return (f'<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="{MAIN_NS}">{fmts}'
+            '<cellStyleXfs count="1"><xf numFmtId="14" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+            f'<cellXfs count="{len(num_fmt_ids)}">{xfs}</cellXfs>'
+            '<dxfs count="1"><dxf><numFmt numFmtId="170" formatCode="dd/mm/yyyy"/></dxf></dxfs></styleSheet>')
+
+
+def inline(ref, value):
+    """A text cell ``value`` at ``ref`` (such as ``A1``)."""
+    return f'<c r="{ref}" t="inlineStr"><is><t>{value}</t></is></c>'
+
+
+def birth_file(births, styles=None, titles=("Họ và tên", "Ngày sinh"), workbook_pr=""):
+    """A People file made by hand: a Full name and a Birth date column; ``births`` is ``[(cell value, style)]``,
+    one row each (style ``None``: no ``s=``). The names are ``Người 2``, ``Người 3``, ... (the sheet row)."""
+    rows = [f'<row r="1">{inline("A1", titles[0])}{inline("B1", titles[1])}</row>']
+    for r, (value, style) in enumerate(births, start=2):
+        s = f' s="{style}"' if style is not None else ""
+        rows.append(f'<row r="{r}">{inline(f"A{r}", f"Người {r}")}<c r="B{r}"{s}><v>{value}</v></c></row>')
+    return hand_made("".join(rows), workbook_pr=workbook_pr, styles=styles)
 
 
 class XlsxTest(unittest.TestCase):
@@ -194,6 +228,74 @@ class XlsxTest(unittest.TestCase):
         self.assertEqual(xlsx.cell_text("  0912 345 678 "), "0912 345 678")
         self.assertEqual(xlsx.cell_text(None), "")
 
+    # ---- BY-FIX1: a number cell with a date style is a DateNumber
+    def test_date_style_marks_a_number_cell(self):
+        """Built-in date formats (14-22, 27-36, 45-47, 50-58) and custom codes with d or y (not inside "...",
+        [...] or after a \\) mark a number cell; every other cell stays as it was."""
+        custom = ('<numFmt numFmtId="164" formatCode="dd/mm/yyyy"/>'
+                  '<numFmt numFmtId="165" formatCode="0&quot; days&quot;"/>'
+                  '<numFmt numFmtId="166" formatCode="[Red]#,##0"/>'
+                  '<numFmt numFmtId="167" formatCode="\\d0"/>'
+                  '<numFmt numFmtId="168" formatCode="[$-409]D/M/YYYY"/>')
+        ids = [0, 14, 49, 164, 165, 166, 167, 168, 22, 27, 36, 45, 47, 50, 58, 13, 23, 37, 48, 59, 4]
+        dated = {1, 3, 7, 8, 9, 10, 11, 12, 13, 14}  # the s= of a date format
+        row1 = "".join(f'<c r="{xlsx._column_name(s + 1)}1" s="{s}"><v>1926</v></c>' for s in range(len(ids)))
+        row2 = ('<c r="A2" s="1" t="n"><v>7380</v></c><c r="B2" s="1" t="inlineStr"><is><t>1926</t></is></c>'
+                '<c r="C2" s="1" t="str"><v>1926</v></c><c r="D2" s="99"><v>1926</v></c>'
+                '<c r="E2" s="x"><v>1926</v></c><c r="F2" s="-1"><v>1926</v></c><c r="G2"><v>1926</v></c>'
+                '<c r="H2" s="&#178;"><v>1926</v></c>')
+        data = hand_made(f'<row r="1">{row1}</row><row r="2">{row2}</row>', styles=styles_xml(ids, custom))
+        rows = xlsx.read_first_sheet(data).rows
+        self.assertEqual(rows[0], [1926.0] * len(ids))
+        self.assertEqual({s for s, v in enumerate(rows[0]) if isinstance(v, xlsx.DateNumber)}, dated)
+        self.assertEqual({type(v) for s, v in enumerate(rows[0]) if s not in dated}, {float})
+        self.assertIsInstance(rows[1][0], xlsx.DateNumber)  # t="n" is a number cell too
+        self.assertEqual(rows[1][:8], [7380.0, "1926", "1926", 1926.0, 1926.0, 1926.0, 1926.0, 1926.0])
+        self.assertEqual([type(v) for v in rows[1][3:8]], [float] * 5)  # a bad s=, or s=0 (General)
+        number = rows[0][1]
+        self.assertIsInstance(number, float)  # cell_date and cell_text read it as any number
+        self.assertEqual((xlsx.cell_date(number, False), xlsx.cell_text(number)), ("1905-04-09", "1926"))
+
+    def test_styles_part_from_the_workbook_relation(self):
+        cell = '<row r="1"><c r="A1" s="1"><v>1926</v></c></row>'
+        for target in ("look.xml", "/xl/look.xml", "../xl/look.xml"):
+            data = hand_made(cell, styles=styles_xml([0, 14]), styles_target=target.rpartition("/")[2])
+            if target != "look.xml":  # the same part, named another way in the relation
+                with zipfile.ZipFile(io.BytesIO(data)) as zf:
+                    members = {n: zf.read(n) for n in zf.namelist()}
+                rels = members["xl/_rels/workbook.xml.rels"].decode("utf-8")
+                members["xl/_rels/workbook.xml.rels"] = rels.replace('Target="look.xml"', f'Target="{target}"').encode()
+                data = zip_of(members)
+            self.assertIsInstance(xlsx.read_first_sheet(data).rows[0][0], xlsx.DateNumber, target)
+        # no relation: xl/styles.xml
+        data = hand_made(cell, styles=styles_xml([0, 14]), styles_target=None)
+        self.assertIsInstance(xlsx.read_first_sheet(data).rows[0][0], xlsx.DateNumber)
+
+    def test_no_or_broken_styles_part_marks_no_date(self):
+        """No styles part, a broken one, or a style with no usable number format: plain numbers, never an
+        error (the file reads as before)."""
+        cell = '<row r="1"><c r="A1" s="1"><v>1926</v></c></row>'
+        broken = ["<styleSheet", "not xml at all",
+                  f'<styleSheet xmlns="{MAIN_NS}"><cellXfs><xf/><xf numFmtId="abc"/></cellXfs></styleSheet>',
+                  f'<styleSheet xmlns="{MAIN_NS}"><cellXfs><xf numFmtId="0"/></cellXfs></styleSheet>']
+        files = [hand_made(cell)] + [hand_made(cell, styles=s) for s in broken]
+        missing = hand_made(cell, styles=styles_xml([0, 14]), styles_target="look.xml")
+        with zipfile.ZipFile(io.BytesIO(missing)) as zf:
+            members = {n: zf.read(n) for n in zf.namelist() if n != "xl/look.xml"}  # the relation points nowhere
+        files.append(zip_of(members))
+        for data in files:
+            value = xlsx.read_first_sheet(data).rows[0][0]
+            self.assertEqual((type(value), value), (float, 1926.0))
+
+    def test_a_styles_part_too_big_is_refused(self):
+        """The styles part has the limit of every part (a zip bomb stops there)."""
+        cell = '<row r="1"><c r="A1" s="1"><v>1926</v></c></row>'
+        big = styles_xml([0, 14]).replace("</styleSheet>", " " * 3000 + "</styleSheet>")
+        with mock.patch.object(xlsx, "MAX_MEMBER", 2000):
+            self.assertIsInstance(xlsx.read_first_sheet(hand_made(cell, styles=styles_xml([0, 14]))).rows[0][0],
+                                  xlsx.DateNumber)
+            self.assert_refused(hand_made(cell, styles=big), "people.file_err_too_big")
+
 
 class PeopleFileTest(_support.CopyTestCase):
     def setUp(self):
@@ -276,7 +378,8 @@ class PeopleFileTest(_support.CopyTestCase):
         sentences = [e[0][1] for e in errors]
         self.assertEqual(sentences[0], "Row 2, Full name: Full name is required.")
         self.assertEqual(sentences[1], "Row 3, Gender: Gender must be M or F, or empty.")
-        self.assertEqual(sentences[2], "Row 4, Birth date: write the date as 31/12/1980")
+        self.assertEqual(sentences[2], "Row 4, Birth date: Birth date must be a real date like 31/12/1980, or a year "
+                                       "from 1900 like 1980.")
         self.assertTrue(sentences[3].startswith("Row 5, Birth date: Birth date cannot be after today"), sentences[3])
         self.assertEqual(sentences[4], "Row 6, Status: not in the Status list (Member, Attender, Visitor, Left, "
                                        "Passed away)")
@@ -498,24 +601,21 @@ class PeopleFileTest(_support.CopyTestCase):
         people.add_family(self.conn, "Gia dinh Do")  # the same name without diacritics: two Families
         none7 = [None] * 7
         checks, _ = self.check([
-            ["Không vai trò", *none7, "Gia đình Mới", None],
             ["Vai trò lạ", *none7, "Gia đình Mới", "Ông"],
             ["Hai Gia đình", *none7, "gia dinh do", "Con"],
             ["Không Gia đình", *none7, None, "Con"],
             ["Tên quá dài", *none7, "x" * 300, "Con"],
         ])
         self.assertEqual([[key for key, _s in c["errors"]] for c in checks],
-                         [["family_role"], ["family_role"], ["family"], ["family_role"], ["family"]])
+                         [["family_role"], ["family"], ["family_role"], ["family"]])
         sentences = [c["errors"][0][1] for c in checks]
-        self.assertEqual(sentences[0], "Row 2, Family role: Family role is needed when Family is set.")
-        self.assertEqual(sentences[1], "Row 3, Family role: not a Family role (Head, Spouse, Child, Other)")
-        self.assertEqual(sentences[2], "Row 4, Family: Two or more Families have this name. Leave it empty here, "
+        self.assertEqual(sentences[0], "Row 2, Family role: not a Family role (Head, Spouse, Child, Other)")
+        self.assertEqual(sentences[1], "Row 3, Family: Two or more Families have this name. Leave it empty here, "
                                        "then set the Family on the Person page.")
-        self.assertEqual(sentences[3], "Row 5, Family role: A Family role needs a Family. Write the Family name, or "
+        self.assertEqual(sentences[2], "Row 4, Family role: A Family role needs a Family. Write the Family name, or "
                                        "leave Family role empty.")
-        self.assertEqual(sentences[4], "Row 6, Family: Family name: use at most 120 characters.")
-        self.assertEqual([c["family_id"] or c["new_family"] for c in checks],
-                         ["Gia đình Mới", "Gia đình Mới", None, None, None])
+        self.assertEqual(sentences[3], "Row 5, Family: Family name: use at most 120 characters.")
+        self.assertEqual([c["family_id"] or c["new_family"] for c in checks], ["Gia đình Mới", None, None, None])
         i18n.set_lang_getter(lambda: "vi")
         checks, _ = self.check([["Vai trò lạ", *none7, "Gia đình Mới", "Ông"]])
         self.assertEqual(checks[0]["errors"], [
@@ -568,6 +668,133 @@ class PeopleFileTest(_support.CopyTestCase):
         self.assertEqual([m["full_name"] for m in people.family_members(self.conn, fid)], ["Trần Văn Một"])
         self.assertEqual(count(self.conn, "family"), before["family"])
 
+    # ---- An empty Family role comes from the Family; a Birth date may be a year only
+    def test_family_role_default_head(self):
+        """A Family and no Family role: Head when the Full name is the Family name (no diacritics, any case)."""
+        old = people.add_family(self.conn, "Lê Văn Bảy")
+        none7 = [None] * 7
+        checks, _ = self.check([["Nguyễn Văn An", *none7, "nguyen van an", None],
+                                ["le van  BAY", *none7, "LÊ VĂN BẢY", " "]])
+        self.assertEqual([c["errors"] for c in checks], [[], []])
+        self.assertEqual([(c["family_id"], c["new_family"], c["values"]["family_role"]) for c in checks],
+                         [(None, "nguyen van an", "Head"), (old, None, "Head")])
+
+    def test_family_role_default_other(self):
+        none7 = [None] * 7
+        checks, _ = self.check([["Trần Thị Bình", *none7, "nguyen van an", None],
+                                ["Nguyễn Văn Anh", *none7, "Nguyễn Văn An", None],
+                                ["Nguyễn Văn An", *none7, "Gia đình Nguyễn Văn An", None]])
+        self.assertEqual([c["errors"] for c in checks], [[]] * 3)
+        self.assertEqual([c["values"]["family_role"] for c in checks], ["Other"] * 3)
+
+    def test_family_role_typed_wins(self):
+        none7 = [None] * 7
+        checks, _ = self.check([["Nguyễn Văn An", *none7, "Nguyễn Văn An", "Child"],
+                                ["Trần Thị Bình", *none7, "nguyen van an", "chủ gia đình"],
+                                ["Lê Văn Cường", *none7, "nguyen van an", "Vợ/Chồng"]])
+        self.assertEqual([c["errors"] for c in checks], [[]] * 3)
+        self.assertEqual([c["values"]["family_role"] for c in checks], ["Child", "Head", "Spouse"])
+
+    def test_family_role_without_family_error(self):
+        none7 = [None] * 7
+        checks, _ = self.check([["Nguyễn Văn An", *none7, None, "Con"], ["Trần Thị Bình", *none7, None, None]])
+        self.assertEqual(checks[0]["errors"], [("family_role", "Row 2, Family role: A Family role needs a Family. "
+                                                                "Write the Family name, or leave Family role empty.")])
+        self.assertEqual((checks[1]["errors"], checks[1]["values"]["family_role"]), ([], ""))  # no Family: no role
+
+    def test_birth_year_only_text_and_number(self):
+        before = self.family_counts()
+        none5 = [None] * 5
+        checks, _ = self.check([["Nguyễn Văn An", None, "1980", *none5, "Nguyễn Văn An", None],
+                                ["Trần Thị Bình", None, 1980.0, *none5, "nguyen van an", None]])
+        self.assertEqual([c["errors"] for c in checks], [[], []])
+        self.assertEqual([c["values"]["birth_date"] for c in checks], ["1980-00-00", "1980-00-00"])
+        self.assertEqual(self.save(people_file.rows_json(checks)), (2, 1, []))  # Save checks the rows again
+        after = self.family_counts()
+        self.assertEqual({t: after[t] - before[t] for t in after},
+                         {"person": 2, "person_status": 0, "family": 1, "family_link": 2, "private_note": 0})
+        made = self.conn.execute("SELECT id FROM family WHERE name_folded = 'nguyen van an'").fetchone()["id"]
+        rows = self.conn.execute(
+            "SELECT p.full_name, p.birth_date, l.family_role FROM family_link l JOIN person p ON p.id = l.person_id "
+            "WHERE l.family_id = ? AND l.end_date IS NULL ORDER BY p.id", (made,)).fetchall()
+        self.assertEqual([tuple(r) for r in rows], [("Nguyễn Văn An", "1980-00-00", "Head"),
+                                                    ("Trần Thị Bình", "1980-00-00", "Other")])
+
+    def test_birth_year_bad(self):
+        before = self.family_counts()
+        none5 = [None] * 5
+        checks, _ = self.check([["Năm Sau", None, "2999", *none5, None, None],
+                                ["Năm Sau Số", None, 2999.0, *none5, None, None],
+                                ["Năm Xưa", None, "1850", *none5, None, None],
+                                ["Năm Xưa Số", None, 1850.0, *none5, "Gia đình Xưa", None]])
+        self.assertEqual([[key for key, _s in c["errors"]] for c in checks], [["birth_date"]] * 4)
+        self.assertEqual([c["values"]["birth_date"] for c in checks], ["2999", "2999", "1850", "1850"])  # as typed
+        sentences = [c["errors"][0][1] for c in checks]
+        for row, sentence in zip((2, 3), sentences):
+            self.assertTrue(sentence.startswith(f"Row {row}, Birth date: Birth date cannot be after today"), sentence)
+        for row, sentence in zip((4, 5), sentences[2:]):
+            self.assertEqual(sentence, f"Row {row}, Birth date: Birth date must be a real date like 31/12/1980, or "
+                                       "a year from 1900 like 1980.")
+        added, families, again = self.save(people_file.rows_json(checks))
+        self.assertEqual((added, families, [c["row"] for c in again if c["errors"]]), (0, 0, [2, 3, 4, 5]))
+        self.assertEqual(self.family_counts(), before)
+        # a year changed between the check page and Save is checked again
+        checks, _ = self.check([["Năm Đúng", None, "1980", *none5, None, None]])
+        tampered = json.loads(people_file.rows_json(checks))
+        tampered[0]["values"]["birth_date"] = "1850-00-00"
+        added, families, again = self.save(json.dumps(tampered))
+        self.assertEqual((added, [key for c in again for key, _s in c["errors"]]), (0, ["birth_date"]))
+        self.assertEqual(self.family_counts(), before)
+
+    # ---- BY-FIX1 (BY-TEST BUG-1): a date cell is a date, never a year
+    def test_birth_date_cell_with_date_style(self):
+        """Ngày sinh cells with the date style 14 (as Excel saves 09/04/1905): the day, not the year 1926."""
+        late = (TOMORROW - dt.date(1899, 12, 30)).days  # tomorrow as a date cell
+        data = birth_file([(1926, 1), (7380, 1), (1000, 1), (late, 1)], styles_xml([0, 14]))
+        checks, _ = people_file.check_people_file(self.conn, data)
+        self.assertEqual([c["values"]["birth_date"] for c in checks[:3]], ["1905-04-09", "1920-03-15", "1902-09-26"])
+        self.assertEqual([c["errors"] for c in checks[:3]], [[], [], []])
+        self.assertEqual([key for key, _s in checks[3]["errors"]], ["birth_date"])
+        self.assertTrue(checks[3]["errors"][0][1].startswith("Row 5, Birth date: Birth date cannot be after today"),
+                        checks[3]["errors"])
+        # without the late row: Save checks the rows again and keeps the day
+        data = birth_file([(1926, 1), (7380, 1), (1000, 1)], styles_xml([0, 14]))
+        checks, _ = people_file.check_people_file(self.conn, data)
+        self.assertEqual(self.save(people_file.rows_json(checks)), (3, 0, []))
+        rows = self.conn.execute("SELECT full_name, birth_date FROM person ORDER BY id DESC LIMIT 3").fetchall()
+        self.assertEqual([tuple(r) for r in reversed(rows)], [("Người 2", "1905-04-09"), ("Người 3", "1920-03-15"),
+                                                              ("Người 4", "1902-09-26")])
+
+    def test_birth_date_custom_date_style_and_1904(self):
+        """A custom date format (dd/mm/yyyy, id 164), English titles; with date1904 the 1904 count is used."""
+        styles = styles_xml([0, 164], '<numFmt numFmtId="164" formatCode="dd/mm/yyyy"/>')
+        for workbook_pr, day in (("", "1905-04-09"), ('<workbookPr date1904="1"/>', "1909-04-10")):
+            data = birth_file([(1926, 1)], styles, ("Full name", "Birth date"), workbook_pr)
+            checks, _ = people_file.check_people_file(self.conn, data)
+            self.assertEqual((checks[0]["values"]["birth_date"], checks[0]["errors"]), (day, []), workbook_pr)
+        self.assertEqual(xlsx.cell_date(1926.0, True), "1909-04-10")
+
+    def test_birth_year_in_a_general_cell_or_with_no_styles(self):
+        """A plain number 1980 is still a year: General (id 0) or Number (id 1) style, no s=, no styles part, or a
+        broken styles part (the file is not refused)."""
+        general = styles_xml([0, 1])
+        files = [birth_file([(1980, 0), (1980, 1), (1980, None)], general), birth_file([(1980, 1)]),
+                 birth_file([(1980, 1)], "<styleSheet"), birth_file([(1980, 1)], "not xml at all")]
+        for data in files:
+            checks, _ = people_file.check_people_file(self.conn, data)
+            self.assertEqual({(c["values"]["birth_date"], len(c["errors"])) for c in checks}, {("1980-00-00", 0)})
+
+    def test_birth_from_input_never_reads_a_date_cell_as_a_year(self):
+        birth = people_file.people_pages.birth_from_input
+        self.assertEqual(birth(xlsx.DateNumber(1926.0)), "1905-04-09")
+        self.assertEqual(birth(xlsx.DateNumber(1926.0), date1904=True), "1909-04-10")
+        self.assertEqual(birth(xlsx.DateNumber(29221.0)), "1980-01-01")
+        self.assertEqual((birth(1926.0), birth(1926)), ("1926-00-00", "1926-00-00"))  # a plain number: a year
+        for bad in (xlsx.DateNumber(0.0), xlsx.DateNumber(-3.0)):
+            with self.assertRaises(i18n.TextError) as cm:
+                birth(bad)
+            self.assertEqual(cm.exception.key, "people.err_birth_date")
+
 
 def part(data, name):
     """One part of a .xlsx file (bytes) as text, such as ``xl/worksheets/sheet2.xml``."""
@@ -608,9 +835,23 @@ class EmptyFileTest(_support.CopyTestCase):
         self.assertEqual(lines["Full name"], "Required. The name of one Person.")
         self.assertEqual(lines["Status"], "Optional. A name of the Status list: Member, Attender, Left, Passed away.")
         self.assertEqual(lines["Gender"], "Optional. One of these words: Nam, Nữ, Male, Female, M, F.")
-        self.assertEqual(lines["Family role"], "Needed when Family is set: Chủ gia đình, Vợ/Chồng, Con, "
-                                               "Người thân khác, Head, Spouse, Child, Other.")
+        self.assertEqual(lines["Family role"], "Optional, and only with a Family: Chủ gia đình, Vợ/Chồng, Con, "
+                                               "Người thân khác, Head, Spouse, Child, Other. Left empty with a Family: "
+                                               "Head when the Full name is the Family name, else Other.")
         self.assertEqual(len(lines), len(people_file.COLUMNS) + 1)  # one line per column, under the 2 titles
+        lines = {row[0]: row[1] for row in people_file.help_rows(self.conn, "vi") if len(row) == 2}
+        self.assertEqual(lines["Vai trò trong gia đình"],
+                         "Không bắt buộc, và chỉ điền khi có Gia đình: Chủ gia đình, Vợ/Chồng, Con, Người thân khác, "
+                         "Head, Spouse, Child, Other. Để trống khi có Gia đình: Chủ gia đình nếu Họ và tên trùng với "
+                         "tên Gia đình, nếu không thì Người thân khác.")
+
+    def test_help_line_birth_date_says_a_year_only_is_fine(self):
+        en = {row[0]: row[1] for row in people_file.help_rows(self.conn, "en") if len(row) == 2}
+        vi = {row[0]: row[1] for row in people_file.help_rows(self.conn, "vi") if len(row) == 2}
+        self.assertEqual(en["Birth date"], "Optional. Write the date like 31/12/1980, or the year only, like 1980. "
+                                           "Not after today.")
+        self.assertEqual(vi["Ngày sinh"], "Không bắt buộc. Viết ngày như 31/12/1980, hoặc chỉ năm, như 1980. "
+                                          "Không sau hôm nay.")
 
     def test_the_example_row_passes_the_check(self):
         """The example is the last row of the Help sheet, under the column titles. Put on sheet 1 it is a
@@ -703,8 +944,10 @@ class PeopleFilePagesTest(PagesBase, unittest.TestCase):
         self.assertIn("Full name", page)  # the help names the columns
         # the gender words of both languages, each marked with its language
         self.assertIn('Gender: <span lang="vi">Nam, Nữ</span>, <span lang="en">Male, Female</span>, M, F.', page)
-        self.assertIn('When Family is set, Family role is needed: <span lang="vi">Chủ gia đình, Vợ/Chồng, Con, '
-                      'Người thân khác</span>, <span lang="en">Head, Spouse, Child, Other</span>.', page)
+        self.assertIn('Family role: <span lang="vi">Chủ gia đình, Vợ/Chồng, Con, Người thân khác</span>, '
+                      '<span lang="en">Head, Spouse, Child, Other</span>. When Family is set and Family role is empty: '
+                      'Head when the Full name is the Family name, else Other.', page)
+        self.assertIn("Write dates like 31/12/1980; a Birth date may be a year only, like 1980.", page)
         self.assertNotIn("[[", page)
 
     def test_check_then_save(self):
@@ -732,7 +975,8 @@ class PeopleFilePagesTest(PagesBase, unittest.TestCase):
         self.assertNotIn('action="/people/file/save"', page)
         self.assertRegex(page, r"4 rows: 3 OK, 1 with errors, \d warnings")
         self.assertIn("Row 5, Full name: Full name is required.", page)
-        self.assertIn("Row 5, Birth date: write the date as 31/12/1980", page)
+        self.assertIn("Row 5, Birth date: Birth date must be a real date like 31/12/1980, or a year from 1900 like "
+                      "1980.", page)
         self.assertIn("Fix these rows in the file, then pick it again.", page)
         self.assertIn('<form class="form" action="/people/file" method="post" enctype="multipart/form-data">', page)
 
@@ -895,11 +1139,31 @@ class PeopleFilePagesTest(PagesBase, unittest.TestCase):
 
     def test_a_family_error_shows_no_save_button(self):
         before = {t: count(self.db(), t) for t in ("person", "family")}
-        status, page = self.pick(people_xlsx([["Hà Văn Bốn", *[None] * 7, "Gia đình Hà Bốn", None]], TITLES_EN))
+        status, page = self.pick(people_xlsx([["Hà Văn Bốn", *[None] * 7, "Gia đình Hà Bốn", "Ông"]], TITLES_EN))
         self.assertEqual(status, 200)
         self.assertNotIn('action="/people/file/save"', page)
-        self.assertIn("Row 2, Family role: Family role is needed when Family is set.", page)
+        self.assertIn("Row 2, Family role: not a Family role (Head, Spouse, Child, Other)", page)
         self.assertEqual({t: count(self.db(), t) for t in before}, before)
+
+    def test_check_page_shows_default_role(self):
+        """An empty Family role: the check page shows the role Save will use, and a year-only Birth date as 1980."""
+        none5 = [None] * 5
+        rows = [["Khúc Văn Niên", None, "1980", *none5, "khuc van nien", None],
+                ["Khúc Thị Niên", None, 1980.0, *none5, "Khúc Văn Niên", None]]
+        status, page = self.pick(people_xlsx(rows, TITLES_EN))
+        self.assertEqual(status, 200, page[:2000])
+        self.assertRegex(page, r"2 rows: 2 OK, 0 with errors, \d warnings")
+        self.assertIn("<td>Head</td>", page)
+        self.assertIn("<td>Other</td>", page)
+        self.assertEqual(len(re.findall(r'<td[^>]*><span class="num">1980</span></td>', page)), 2)
+        self.assertNotIn("00/00", page)
+        status, _h, data = self.request("POST", "/people/file/save", self.save_form(page))
+        self.assertEqual(status, 303, data.decode("utf-8")[:2000])
+        saved = self.db().execute(
+            "SELECT p.full_name, p.birth_date, l.family_role FROM person p JOIN family_link l ON l.person_id = p.id "
+            "WHERE p.full_name LIKE 'Khúc % Niên' AND l.end_date IS NULL ORDER BY p.id").fetchall()
+        self.assertEqual([tuple(r) for r in saved], [("Khúc Văn Niên", "1980-00-00", "Head"),
+                                                     ("Khúc Thị Niên", "1980-00-00", "Other")])
 
 
 class PeopleFileVietnamesePagesTest(PagesBase, unittest.TestCase):
@@ -920,14 +1184,35 @@ class PeopleFileVietnamesePagesTest(PagesBase, unittest.TestCase):
         self.assert_vietnamese(page)
         self.assertIn("Họ và tên", page)
         self.assertIn('Giới tính: <span lang="vi">Nam, Nữ</span>, <span lang="en">Male, Female</span>, M, F.', page)
+        self.assertIn("Ngày viết như 31/12/1980; Ngày sinh có thể chỉ có năm, như 1980.", page)
+        self.assertIn("Khi có Gia đình mà để trống Vai trò trong gia đình: Chủ gia đình nếu Họ và tên trùng với tên "
+                      "Gia đình, nếu không thì Người thân khác.", page)
+
+    def test_check_page_shows_default_role(self):
+        none5 = [None] * 5
+        rows = [["Khúc Văn Niên", None, "1980", *none5, "khuc van nien", None],
+                ["Khúc Thị Niên", None, 1980.0, *none5, "Khúc Văn Niên", None]]
+        status, page = self.pick(people_xlsx(rows))
+        self.assertEqual(status, 200, page[:2000])
+        self.assertRegex(page, r"2 dòng: 2 hợp lệ, 0 có lỗi, \d cảnh báo")
+        self.assertIn("<td>Chủ gia đình</td>", page)
+        self.assertIn("<td>Người thân khác</td>", page)
+        self.assertEqual(len(re.findall(r'<td[^>]*><span class="num">1980</span></td>', page)), 2)
+        self.assertNotIn("00/00", page)
+        self.assert_vietnamese(page)
+        status, page = self.pick(people_xlsx([["Khúc Văn Xưa", None, "1850", *none5, None, None]]))
+        self.assertIn("Dòng 2, Ngày sinh: Ngày sinh phải là một ngày có thật như 31/12/1980, hoặc một năm từ 1900 như "
+                      "1980.", page)
+        self.assert_vietnamese(page)
 
     def test_vi_families(self):
         none7 = [None] * 7
         status, page = self.pick(people_xlsx([["Hà Văn Một", *none7, "Gia đình Hà Mới", "Chủ gia đình"],
-                                              ["Hà Văn Hai", *none7, "Gia đình Hà Mới", None]]))
+                                              ["Hà Văn Hai", *none7, None, "Con"]]))
         self.assertEqual(status, 200)
         self.assertIn('<span class="faint">Gia đình mới</span>', page)
-        self.assertIn("Dòng 3, Vai trò trong gia đình: Cần điền Vai trò trong gia đình khi có Gia đình.", page)
+        self.assertIn("Dòng 3, Vai trò trong gia đình: Vai trò trong gia đình cần có Gia đình. Hãy viết tên Gia đình, "
+                      "hoặc để trống Vai trò trong gia đình.", page)
         self.assert_vietnamese(page)
         status, page = self.pick(people_xlsx([["Hà Văn Một", *none7, "Gia đình Hà Mới", "Chủ gia đình"]]))
         self.assertEqual(status, 200)

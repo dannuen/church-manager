@@ -626,6 +626,34 @@ class WriteCommandsTest(FakeChurchBase):
         self.assertEqual(self.ok("add-person", "--full-name", "Ngày Hôm Nay", "--status-id", visitor)
                          ["would_save"]["start_date"], day())
 
+    def test_agent_add_person_year_only(self):
+        """BY-4 (D10): a Birth date with the year only is YYYY-00-00 in, in church.db and in the answers."""
+        visitor = self.list_id("status", "visitor")
+        argv = ["add-person", "--full-name", "Đinh Văn Năm Sinh", "--birth-date", "1980-00-00", "--status-id", visitor]
+        dry, saved = self.dry_then_yes(argv, {"person": 1, "person_status": 1})
+        self.assertEqual(dry["would_save"]["birth_date"], "1980-00-00")
+        pid = saved["result"]["person_id"]
+        self.assertEqual(self.sql("SELECT birth_date FROM person WHERE id = ?", (pid,)), [("1980-00-00",)])
+        self.assertEqual(self.ok("person", str(pid))["person"]["birth_date"], "1980-00-00")  # raw, as saved
+        # a year after this year is refused like any other bad value, and nothing is saved
+        counts, before = row_counts(self.db_path), sha(self.db_path)
+        for yes in ([], ["--yes"]):
+            answer = self.refused("invalid", "add-person", "--full-name", "Năm Sau", "--birth-date", "2999-00-00",
+                                  *yes)
+            self.assertTrue(answer["message"].startswith("Birth date cannot be after today"), answer)
+        self.assertEqual((row_counts(self.db_path), sha(self.db_path)), (counts, before))
+        # the hint tells Hermes the two forms; the skill tells it how to read 1980-00-00
+        sub = next(a for a in agent.build_parser()._actions if isinstance(a, argparse._SubParsersAction))
+        hint = next(a.help for a in sub.choices["add-person"]._actions if a.dest == "birth_date")
+        self.assertEqual(hint, "YYYY-MM-DD, or YYYY-00-00 for a year only; not after today")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(agent.main(["add-person", "--help"]), 0)
+        self.assertIn("YYYY-00-00", json.loads(out.getvalue())["help"])
+        skill = SKILL.read_text(encoding="utf-8")
+        self.assertIn("`YYYY-00-00`", skill)
+        self.assertIn("`1980-00-00`", skill)
+
     def test_add_family(self):
         dry, saved = self.dry_then_yes(["add-family", "--name", "Gia đình Hermes Thử", "--address", "5 Lê Lợi"],
                                        {"family": 1})

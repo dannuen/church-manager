@@ -80,8 +80,9 @@ def _gender(value):
     return g
 
 
-def _optional_date(value, what):
-    return None if value is None or value == "" else text.check_date(value, what)
+def _optional_birth(value):
+    """A Birth date (a full date or a year only, ``YYYY-00-00``), or ``None`` when empty."""
+    return None if value is None or value == "" else text.check_birth_date(value, "people.birth_date")
 
 
 def _given_name_key(row):
@@ -97,7 +98,7 @@ def add_person(conn, full_name, gender=None, birth_date=None, phone=None, addres
     from ``start_date`` (today if empty). ``note`` is a normal note, not private."""
     name = text.clean_name(full_name, "people.full_name")
     values = (
-        name, text.fold(name), _gender(gender), _optional_date(birth_date, "people.birth_date"),
+        name, text.fold(name), _gender(gender), _optional_birth(birth_date),
         text.clean_text(phone), text.clean_text(address), text.clean_text(note), text.now_text(),
     )
     with transaction(conn):
@@ -125,7 +126,7 @@ def update_person(conn, person_id, *, full_name=_KEEP, gender=_KEEP, birth_date=
     if gender is not _KEEP:
         changes["gender"] = _gender(gender)
     if birth_date is not _KEEP:
-        changes["birth_date"] = _optional_date(birth_date, "people.birth_date")
+        changes["birth_date"] = _optional_birth(birth_date)
     if phone is not _KEEP:
         changes["phone"] = text.clean_text(phone)
     if address is not _KEEP:

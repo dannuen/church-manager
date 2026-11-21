@@ -89,7 +89,7 @@ Bạn có danh sách người trong một bảng tính? Bạn có thể thêm t�
 3. Mở tệp đó bằng chương trình bảng tính. Trang tính **Mọi người** có dòng tiêu đề các cột. Trang tính
    **Hướng dẫn** nói cách điền từng cột và có một dòng ví dụ (dòng ví dụ không bao giờ được thêm).
 4. Trên trang tính **Mọi người**, viết mỗi Người trên một dòng, dưới dòng tiêu đề. Chỉ cột **Họ và tên**
-   là bắt buộc. Ngày viết như `31/12/1980`. Đừng đổi tiêu đề các cột. Lưu tệp dưới dạng `.xlsx`.
+   là bắt buộc. Ngày viết như `31/12/1980`. Ngày sinh có thể chỉ viết năm, như `1980`. Đừng đổi tiêu đề các cột. Lưu tệp dưới dạng `.xlsx`.
 5. Trở lại Church Manager. Ở ô **Tệp danh sách người (.xlsx)**, chọn tệp vừa lưu, rồi bấm **Kiểm tra tệp**.
 6. Trang kiểm tra hiện từng dòng: **Hợp lệ**, hoặc một câu nói rõ dòng nào, cột nào cần sửa.
    **Chưa có gì được lưu.**

@@ -57,6 +57,24 @@ class PersonTest(CopyTestCase):
         with self.assertRaises(ValueError):
             people.update_person(self.conn, 99999, phone="2")
 
+    def test_add_person_year_only(self):
+        """BY-1: a year-only Birth date is stored YYYY-00-00 by add_person and update_person."""
+        pid = people.add_person(self.conn, "Lê Văn Khoa", birth_date="1980-00-00")
+        self.assertEqual(people.get_person(self.conn, pid)["birth_date"], "1980-00-00")
+        people.update_person(self.conn, pid, birth_date="1975-03-09")
+        self.assertEqual(people.get_person(self.conn, pid)["birth_date"], "1975-03-09")
+        people.update_person(self.conn, pid, birth_date="1980-00-00")
+        self.assertEqual(people.get_person(self.conn, pid)["birth_date"], "1980-00-00")
+        for bad in ("0980-00-00", "1980-00-00x", "1850-00-00", "1980-00-05", "1980"):
+            with self.assertRaisesRegex(ValueError, r"^Birth date must be a real date", msg=bad):
+                people.add_person(self.conn, "Lê Văn Bình", birth_date=bad)
+            with self.assertRaisesRegex(ValueError, r"^Birth date must be a real date", msg=bad):
+                people.update_person(self.conn, pid, birth_date=bad)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM person").fetchone()[0], 1)
+        self.assertEqual(people.get_person(self.conn, pid)["birth_date"], "1980-00-00")
+        people.update_person(self.conn, pid, birth_date="")
+        self.assertIsNone(people.get_person(self.conn, pid)["birth_date"])
+
     def test_list_persons_sorted_by_given_name(self):
         for name in ("Nguyễn Văn Bình", "Trần Thị An", "Lê Hải Đăng", "Phạm Ánh", "Đỗ Văn An"):
             people.add_person(self.conn, name)
@@ -210,6 +228,16 @@ class FamilyTest(CopyTestCase):
         self.assertEqual([(m["full_name"], m["family_role"]) for m in members],
                          [(NAME, "Head"), ("Lê Thị Hoa", "Spouse"), ("Nguyễn Văn Bé", "Child")])
         self.assertEqual(people.get_family(self.conn, self.f1)["name"], "Gia đình Nguyễn")
+
+    def test_family_members_sort_year_only(self):
+        """BY-1: in one Family role, a 1980-00-00 Person sorts before a 1980-06-01 one."""
+        june = people.add_person(self.conn, "An Văn Một", birth_date="1980-06-01")  # first by name and id
+        year = people.add_person(self.conn, "Bùi Văn Hai", birth_date="1980-00-00")
+        for pid in (self.kid, june, year):
+            people.set_family(self.conn, pid, self.f1, "Child", "2000-01-01")
+        members = people.family_members(self.conn, self.f1)
+        self.assertEqual([m["id"] for m in members], [year, june, self.kid])
+        self.assertEqual(members[0]["birth_date"], "1980-00-00")
 
     def test_move_family_keeps_history(self):
         people.set_family(self.conn, self.kid, self.f1, "Child", "2000-01-01")

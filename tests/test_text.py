@@ -129,6 +129,20 @@ class CleanTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"^Date must be a real date"):
             text.check_date_years("2026-02-30")
 
+    def test_check_birth_date_year_only(self):
+        """BY-1: a Birth date is a full date (as check_date), or a year only stored YYYY-00-00 (1900 to 9999)."""
+        for day, want in (("1980-00-00", "1980-00-00"), (" 1980-00-00 ", "1980-00-00"),
+                          ("1900-00-00", "1900-00-00"), ("9999-00-00", "9999-00-00"),
+                          ("1980-12-31", "1980-12-31"), ("0980-05-01", "0980-05-01"),  # a full date: any year
+                          (datetime.date(1980, 12, 31), "1980-12-31")):
+            self.assertEqual(text.check_birth_date(day), want, msg=repr(day))
+        for bad in ("1850-00-00", "1899-00-00", "0980-00-00", "1980-00-05", "1980-13-00", "1980-05-00",
+                    "1980-00-00x", "1980", "1980-0-0", "2026-02-30", "31/12/1980", "", None, 1980):
+            with self.assertRaisesRegex(ValueError, r"^Birth date must be a real date", msg=repr(bad)):
+                text.check_birth_date(bad)
+        with self.assertRaisesRegex(ValueError, r"^Born must be a real date"):
+            text.check_birth_date("1850-00-00", "Born")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -133,11 +133,11 @@ TEXT = {
         "dashboard.title": "Trang chủ",
         "dashboard.open_calendar": "Mở Lịch",
         # --- people
+        "people.err_birth_date": "{label} phải là một ngày có thật như 31/12/1980, hoặc một năm từ 1900 như 1980.",
         "people.file_saved_before": "Tất cả các tên trong tệp này đều đã có trong Hội Thánh. Có thể bạn đã lưu tệp "
                                     "này rồi.",
         "people.file_again": "Vẫn thêm họ một lần nữa",
         "people.file_new_family": "Gia đình mới",
-        "people.file_err_family_role_needed": "Cần điền Vai trò trong gia đình khi có Gia đình.",
         "people.file_err_family_role": "không phải Vai trò trong gia đình ({names})",
         "people.file_err_family_two": "Có từ hai Gia đình trở lên mang tên này. Hãy để trống ô này, rồi chọn Gia đình "
                                       "trên trang của Người đó.",
@@ -156,7 +156,8 @@ TEXT = {
         "people.file_help_example": "Ví dụ một dòng (chỉ có ở trang này, không bao giờ được thêm):",
         "people.file_help_full_name": "Bắt buộc. Họ và tên của một Người.",
         "people.file_help_gender": "Không bắt buộc. Một trong các từ: {genders}.",
-        "people.file_help_birth_date": "Không bắt buộc. Viết ngày như 31/12/1980, không sau hôm nay.",
+        "people.file_help_birth_date": "Không bắt buộc. Viết ngày như 31/12/1980, hoặc chỉ năm, như 1980. "
+                                       "Không sau hôm nay.",
         "people.file_help_phone": "Không bắt buộc. Viết như 0912345678: số 0 đầu được giữ.",
         "people.file_help_address": "Không bắt buộc.",
         "people.file_help_note": "Không bắt buộc. Ghi chú thường: ai có Dữ liệu Hội Thánh cũng đọc được. Đừng viết Ghi "
@@ -166,7 +167,9 @@ TEXT = {
                                        "trống là hôm nay.",
         "people.file_help_family": "Không bắt buộc. Tên một Gia đình đã có, hoặc một tên mới: một Gia đình mới được "
                                    "tạo cho mọi dòng có tên này.",
-        "people.file_help_family_role": "Cần điền khi cột Gia đình có tên: {roles}.",
+        "people.file_help_family_role": "Không bắt buộc, và chỉ điền khi có Gia đình: {roles}. Để trống khi có Gia "
+                                        "đình: Chủ gia đình nếu Họ và tên trùng với tên Gia đình, nếu không thì Người "
+                                        "thân khác.",
         "people.file_col_full_name": "Họ và tên",
         "people.file_col_gender": "Giới tính",
         "people.file_col_birth_date": "Ngày sinh",
@@ -188,10 +191,13 @@ TEXT = {
         "people.file_pick": "Tệp danh sách người (.xlsx)",
         "people.file_check": "Kiểm tra tệp",
         "people.file_help": "Dòng đầu tiên là tiêu đề các cột: {columns}. Mỗi dòng bên dưới là một Người. Chỉ cột "
-                            "{full_name} bắt buộc phải điền. Ngày viết như 31/12/1980. Chỉ trang tính đầu tiên được "
-                            "đọc, và chưa có gì được lưu cho đến khi bạn bấm Lưu.",
+                            "{full_name} bắt buộc phải điền. Ngày viết như 31/12/1980; Ngày sinh có thể chỉ có năm, "
+                            "như 1980. Chỉ trang tính đầu tiên được đọc, và chưa có gì được lưu cho đến khi bạn bấm "
+                            "Lưu.",
         "people.file_help_words": "{gender}: {genders}. {status}: một tên trong danh sách ({statuses}). Để trống "
-                                  "{start_date} là hôm nay. Khi có {family}, cần điền {family_role}: {roles}.",
+                                  "{start_date} là hôm nay. {family_role}: {roles}. Khi có {family} mà để trống "
+                                  "{family_role}: Chủ gia đình nếu {full_name} trùng với tên {family}, nếu không thì "
+                                  "Người thân khác.",
         "people.file_summary": "{rows} dòng: {ok} hợp lệ, {bad} có lỗi, {warn} cảnh báo",
         "people.file_ok": "Hợp lệ",
         "people.file_ready": "Không dòng nào có lỗi. Bấm Lưu để thêm tất cả cùng lúc.",
@@ -262,7 +268,7 @@ TEXT = {
         "people.empty_q": "Không có Người nào khớp với “{q}” ở đây.",
         "people.empty_status": "Hiện không có Người nào có Trạng thái này.",
         "people.first_status": "Trạng thái ban đầu",
-        "people.birth_hint": "Để trống nếu không biết.",
+        "people.birth_hint": "Như 31/12/1980, hoặc chỉ năm: 1980. Để trống nếu không biết.",
         "people.address_hint": "Dùng khi Người này không ở trong Gia đình nào.",
         "people.note_hint": "Ghi chú thông thường. Ghi chú cá nhân được thêm trên trang của Người.",
         "people.start_hint": "Ngày bắt đầu Trạng thái này. Không sau hôm nay.",
@@ -1204,11 +1210,11 @@ TEXT = {
         "dashboard.title": "Dashboard",
         "dashboard.open_calendar": "Open Calendar",
         # --- people
+        "people.err_birth_date": "{label} must be a real date like 31/12/1980, or a year from 1900 like 1980.",
         "people.file_saved_before": "Every name in this file is already in the church. You may have saved this "
                                     "file before.",
         "people.file_again": "Add them again anyway",
         "people.file_new_family": "new Family",
-        "people.file_err_family_role_needed": "Family role is needed when Family is set.",
         "people.file_err_family_role": "not a Family role ({names})",
         "people.file_err_family_two": "Two or more Families have this name. Leave it empty here, then set the Family "
                                       "on the Person page.",
@@ -1227,7 +1233,8 @@ TEXT = {
         "people.file_help_example": "An example row (only on this sheet, never added):",
         "people.file_help_full_name": "Required. The name of one Person.",
         "people.file_help_gender": "Optional. One of these words: {genders}.",
-        "people.file_help_birth_date": "Optional. Write the date like 31/12/1980, not after today.",
+        "people.file_help_birth_date": "Optional. Write the date like 31/12/1980, or the year only, like 1980. "
+                                       "Not after today.",
         "people.file_help_phone": "Optional. Write it like 0912345678: the first 0 is kept.",
         "people.file_help_address": "Optional.",
         "people.file_help_note": "Optional. A normal note: anyone with the church copy can read it. Do not write a "
@@ -1237,7 +1244,8 @@ TEXT = {
                                        "means today.",
         "people.file_help_family": "Optional. The name of a Family already in the church, or a new name: one new "
                                    "Family is made for all the rows with this name.",
-        "people.file_help_family_role": "Needed when Family is set: {roles}.",
+        "people.file_help_family_role": "Optional, and only with a Family: {roles}. Left empty with a Family: Head "
+                                        "when the Full name is the Family name, else Other.",
         "people.file_col_full_name": "Full name",
         "people.file_col_gender": "Gender",
         "people.file_col_birth_date": "Birth date",
@@ -1259,10 +1267,12 @@ TEXT = {
         "people.file_pick": "People file (.xlsx)",
         "people.file_check": "Check the file",
         "people.file_help": "The first row holds the column titles: {columns}. Each row below it is one Person. Only "
-                            "the {full_name} column must be filled. Write dates like 31/12/1980. Only the first "
-                            "sheet is read, and nothing is saved until you press Save.",
+                            "the {full_name} column must be filled. Write dates like 31/12/1980; a Birth date may be a "
+                            "year only, like 1980. Only the first sheet is read, and nothing is saved until you press "
+                            "Save.",
         "people.file_help_words": "{gender}: {genders}. {status}: a name of the list ({statuses}). An empty "
-                                  "{start_date} means today. When {family} is set, {family_role} is needed: {roles}.",
+                                  "{start_date} means today. {family_role}: {roles}. When {family} is set and "
+                                  "{family_role} is empty: Head when the {full_name} is the {family} name, else Other.",
         "people.file_summary": "{rows} rows: {ok} OK, {bad} with errors, {warn} warnings",
         "people.file_ok": "OK",
         "people.file_ready": "No row has an error. Press Save to add them all at once.",
@@ -1331,7 +1341,7 @@ TEXT = {
         "people.empty_q": "No Person matches “{q}” here.",
         "people.empty_status": "No Person has this Status now.",
         "people.first_status": "First Status",
-        "people.birth_hint": "Leave empty if you do not know it.",
+        "people.birth_hint": "Like 31/12/1980, or the year only: 1980. Leave empty if you do not know it.",
         "people.address_hint": "Used when the Person is not in a Family.",
         "people.note_hint": "A normal note. A Private note is added on the Person page.",
         "people.start_hint": "The day this Status began. Not after today.",
