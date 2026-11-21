@@ -189,6 +189,7 @@ def update_calendar_item(conn, item_id, *, kind=_KEEP, title=_KEEP, starts_at=_K
 
     ``None`` clears ``ends_at``, ``place`` or ``note``. The kind cannot become or
     stop being a Visit, and a Service with a Head count or a Service role link stays a Service.
+    A Service with a Service role link keeps its day of the week (a Service role is for one weekday).
     """
     with transaction(conn):
         row = _require_item(conn, item_id)
@@ -213,6 +214,8 @@ def update_calendar_item(conn, item_id, *, kind=_KEEP, title=_KEEP, starts_at=_K
         if note is not _KEEP:
             changes["note"] = text.clean_text(note)
         start = changes.get("starts_at", row["starts_at"])
+        if _weekday(start) != _weekday(row["starts_at"]) and _has_roster_link(conn, row["id"]):
+            raise TextError("calendar.err_service_day_roster")
         end = changes.get("ends_at", row["ends_at"])
         if end is not None and end < start:
             raise TextError("calendar.err_end_before_start")
@@ -223,6 +226,11 @@ def update_calendar_item(conn, item_id, *, kind=_KEEP, title=_KEEP, starts_at=_K
 
 def _has_head_count(conn, item_id):
     return conn.execute("SELECT 1 FROM head_count WHERE calendar_item_id = ?", (item_id,)).fetchone() is not None
+
+
+def _weekday(starts_at):
+    """``date.weekday()`` of a ``YYYY-MM-DD HH:MM`` text: 0 Monday .. 6 Sunday."""
+    return _dt.date.fromisoformat(starts_at[:10]).weekday()
 
 
 def _has_roster_link(conn, item_id):

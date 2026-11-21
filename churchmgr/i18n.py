@@ -442,6 +442,8 @@ TEXT = {
         "chi_phai.title": "Chi phái",
         "chi_phai.add": "Thêm Chi phái",
         # --- calendar
+        "calendar.err_service_day_roster": "Giờ thờ phượng này đã có Phần vụ trong Lịch phân công, nên không đổi "
+                                           "được ngày trong tuần.",
         "calendar.roster_role": "Phần vụ",
         "calendar.roster_role_name": "Tên Phần vụ",
         "calendar.roster_ministry": "Ban ngành",
@@ -1548,6 +1550,8 @@ TEXT = {
         "chi_phai.title": "Chi phái",
         "chi_phai.add": "Add a Chi phái",
         # --- calendar
+        "calendar.err_service_day_roster": "This Service has Service roles on the Roster, so its day of the week "
+                                           "cannot change.",
         "calendar.roster_role": "Service role",
         "calendar.roster_role_name": "Service role name",
         "calendar.roster_ministry": "Ministry",

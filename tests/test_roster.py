@@ -372,6 +372,22 @@ class CalendarKeepsTheRosterTest(RosterCase):
         calendar.update_calendar_item(self.conn, self.sunday, kind="Event")  # no link: the kind may change
         self.assertEqual(calendar.get_calendar_item(self.conn, self.sunday)["kind"], "Event")
 
+    def test_a_service_with_a_link_keeps_its_weekday(self):
+        """RO-2R Minor: a Service role is for one weekday (set_link checks it), so a Service with a link, open
+        or closed, may move only to another date of the same weekday."""
+        roster.set_link(self.conn, self.thursday, self.boi_linh, self.p1, day="2026-04-20")
+        roster.clear_link(self.conn, self.thursday, self.boi_linh, day="2026-04-21")  # closed: still history
+        e = self.refused("calendar.err_service_day_roster", calendar.update_calendar_item, self.thursday,
+                         starts_at=f"{MONDAY} 19:30")
+        self.assertEqual(str(e), "This Service has Service roles on the Roster, so its day of the week cannot "
+                                 "change.")
+        self.assertEqual(calendar.get_calendar_item(self.conn, self.thursday)["starts_at"], f"{THURSDAY} 19:30")
+        calendar.update_calendar_item(self.conn, self.thursday, starts_at=f"{THURSDAY} 18:00")  # same day: fine
+        calendar.update_calendar_item(self.conn, self.thursday, starts_at="2026-05-07 18:00")  # a Thursday: fine
+        self.assertEqual(calendar.get_calendar_item(self.conn, self.thursday)["starts_at"], "2026-05-07 18:00")
+        calendar.update_calendar_item(self.conn, self.sunday, starts_at=f"{MONDAY} 08:00")  # no link: it may move
+        self.assertEqual(calendar.get_calendar_item(self.conn, self.sunday)["starts_at"], f"{MONDAY} 08:00")
+
 
 if __name__ == "__main__":
     unittest.main()
