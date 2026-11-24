@@ -909,7 +909,7 @@ table.documents td:last-child a { color: var(--accent-text); font-weight: 400; }
   .next-item { position: absolute; top: calc(var(--wash-h) - 170px); right: var(--pad); width: 360px; max-width: calc(100% - 2 * var(--pad)); padding: 22px; border: 1px solid color-mix(in srgb, var(--surface) 40%, transparent); border-radius: var(--radius-card); background: color-mix(in srgb, var(--text) 72%, transparent); color: var(--surface); box-shadow: var(--shadow-raised); backdrop-filter: blur(8px); }
   .next-item .when { display: block; font-size: var(--fs-small); line-height: 18px; }
   .next-item .what { display: block; margin-top: 8px; font-family: var(--font-display); font-size: 26px; line-height: 32px; }
-  .next-item a:focus-visible { outline-color: var(--accent-text); }
+  .next-item a:focus-visible { outline-color: var(--highlight-focus); }
 }
 @media screen and (max-width: 1180px) {
   .next-item { position: static; width: auto; max-width: none; margin-bottom: var(--gap); }

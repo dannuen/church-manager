@@ -259,6 +259,15 @@ class FiguresAndNextItemTest(unittest.TestCase):
         self.assertNotIn('</span><a class="what" ', card)
         self.assertIn("Buổi họp Họp Ban Chấp Sự", html.unescape(re.sub(r"<[^>]+>", "", card)))
 
+    def test_the_focus_ring_of_the_link_is_white_on_the_dark_card(self):
+        """PP-F1 (D2): the card is dark, so a ring in the app color (``--accent-text``) was 1.45:1 on it with the
+        app color #1b1c1f. It is ``--highlight-focus`` (#ffffff), the ring of the dark Needs a visit card."""
+        path = pathlib.Path(__file__).resolve().parents[1] / "web" / "style.css"
+        css = re.sub(r"/\*.*?\*/", "", path.read_text(encoding="utf-8"), flags=re.S)
+        self.assertEqual(re.findall(r"\.next-item a:focus-visible\s*\{([^}]*)\}", css),
+                         [" outline-color: var(--highlight-focus); "])
+        self.assertRegex(css, r"--highlight-focus: #ffffff;")
+
 
 class DashboardPageTest(PagesTestBase):
     def test_the_services_card_has_a_dot_per_head_count_it_shows(self):
