@@ -11,13 +11,15 @@ Part 2 (classes FiguresAndNextItemTest, DashboardPageTest, VietnameseDashboardTe
 visit, the Balance of this month. A value that failed to load is a dash. No 01 02 03 numbers. The count of
 Calendar items is said once (CRIT-3): the line under the h1 keeps the weekday and the date only.
 Part 3 (same classes): ``<aside class="next-item">``, the first row of Next 7 days (day, time and kind, then its
-title as a link to it). Nothing when the 7 days have no Calendar item or did not load. The children of
+title as a link to it). Nothing when the 7 days have no Calendar item or did not load. The title shows 2 lines
+at most (``clamp2``, PP-F1): from 1181px the card has a fixed top over the figures strip. The children of
 ``main.canvas`` are: the language switch, the title row, the next item, the figures, the grid.
 390px and 1440px (no sideways scroll) need a browser: no test here runs one, it is measured on the card.
 """
 
 import contextlib
 import datetime as dt
+import html
 import io
 import pathlib
 import re
@@ -40,9 +42,15 @@ COUNTS = (60, 82, 75, 91, 74, 88, 66, 79)
 FIGURES = re.compile(r'<section class="figures" aria-label="([^"]*)">(.*?)</section>', re.S)
 FIGURE = re.compile(r'<div class="figure"><span class="figure-label">(.*?)</span>'
                     r'<span class="figure-value num">(.*?)</span></div>')
+# PP-F1: the title is in clamp2 (at most 2 lines on screen, then "…"), its whole text in the title: the same
+# escaped text (\4)
 NEXT_ITEM = re.compile(r'<aside class="next-item" aria-label="([^"]*)"><span class="when">([^<]*)</span>'
-                       r'<a class="what" href="(/calendar/\d+)" lang="vi">([^<]*)</a></aside>')
+                       r'<a class="what" href="(/calendar/\d+)" lang="vi"><span class="clamp-2" title="([^"]*)">\4'
+                       r'</span></a></aside>')
 DAY = dt.date(2026, 11, 24)  # a Tuesday
+# PP-F1: a title of 120 characters, with the 3 signs HTML must escape
+LONG_TITLE = ('Lễ Tạ Ơn & Mừng Chúa Giáng Sinh của Hội Thánh <Ban Thanh niên> cùng các Chi phái, '
+              'Hội đồng bồi linh "Ngọc trai" về thăm.')
 
 
 def head_counts(n):
@@ -224,6 +232,22 @@ class FiguresAndNextItemTest(unittest.TestCase):
         self.use("en")
         self.assertEqual(dashboard._next_item([], DAY), "")
         self.assertEqual(dashboard._next_item(dashboard._FAILED, DAY), "")
+
+    def test_a_long_title_shows_2_lines_at_most_its_whole_text_in_the_title(self):
+        """PP-F1 (D1): from 1181px the card has a fixed top over the figures strip, so a 3rd line of title ran
+        over the Balance label. The title is in clamp2: at most 2 lines on screen, then "…"; its whole text is
+        in the title (and on paper: style.css prints a .clamp-2 whole). Escaped once."""
+        self.use("vi")
+        self.assertEqual(len(LONG_TITLE), 120)
+        card = dashboard._next_item([item(21, DAY, "23:30", kind="Event", title=LONG_TITLE)], DAY)
+        esc = ui.h(LONG_TITLE)
+        self.assertIn(f'<a class="what" href="/calendar/21" lang="vi"><span class="clamp-2" title="{esc}">{esc}'
+                      '</span></a></aside>', card)
+        self.assertEqual(card.count('<span class="clamp-2"'), 1)
+        for twice in ("&amp;amp;", "&amp;lt;", "&amp;gt;", "&amp;quot;"):  # escaped once, never twice
+            self.assertNotIn(twice, card)
+        self.assertEqual(html.unescape(NEXT_ITEM.fullmatch(card).group(4)), LONG_TITLE)
+        self.assertNotIn("style=", card)
 
 
 class DashboardPageTest(PagesTestBase):
