@@ -155,14 +155,15 @@ def _next_item(items, today):
     """Round 4: the first row of Next 7 days (``items[0]``) as a small dark card: its day, time and kind on
     one line, its title as a link to it. Nothing when the 7 days did not load or have no Calendar item.
     The title shows 2 lines at most (``clamp2``, its whole text in the title and on paper): from 1181px the
-    card has a fixed top, so a 3rd line ran over the figures strip under it."""
+    card has a fixed top, so a 3rd line ran over the figures strip under it. A space before the title: on
+    paper the card is plain text, and the kind and the title must not run together."""
     if items is _FAILED or not items:
         return ""
     it = items[0]
     day = _dt.date.fromisoformat(it["starts_at"][:10])
     when = " · ".join((_day_label(day, today), ui.fmt_time(it["starts_at"]), ui.calendar_kind(it["kind"])))
     return (f'<aside class="next-item" aria-label="{h(t("dashboard.next_item"))}">'
-            f'<span class="when">{h(when)}</span>'
+            f'<span class="when">{h(when)}</span> '
             f'<a class="what" href="/calendar/{it["id"]}" lang="vi">{clamp2(h(it["title"]), it["title"])}</a>'
             '</aside>')
 

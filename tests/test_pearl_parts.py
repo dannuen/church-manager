@@ -12,7 +12,8 @@ visit, the Balance of this month. A value that failed to load is a dash. No 01 0
 Calendar items is said once (CRIT-3): the line under the h1 keeps the weekday and the date only.
 Part 3 (same classes): ``<aside class="next-item">``, the first row of Next 7 days (day, time and kind, then its
 title as a link to it). Nothing when the 7 days have no Calendar item or did not load. The title shows 2 lines
-at most (``clamp2``, PP-F1): from 1181px the card has a fixed top over the figures strip. The children of
+at most (``clamp2``, PP-F1): from 1181px the card has a fixed top over the figures strip. A space comes before
+the title: on paper the card is plain text. The children of
 ``main.canvas`` are: the language switch, the title row, the next item, the figures, the grid.
 390px and 1440px (no sideways scroll) need a browser: no test here runs one, it is measured on the card.
 """
@@ -42,9 +43,9 @@ COUNTS = (60, 82, 75, 91, 74, 88, 66, 79)
 FIGURES = re.compile(r'<section class="figures" aria-label="([^"]*)">(.*?)</section>', re.S)
 FIGURE = re.compile(r'<div class="figure"><span class="figure-label">(.*?)</span>'
                     r'<span class="figure-value num">(.*?)</span></div>')
-# PP-F1: the title is in clamp2 (at most 2 lines on screen, then "…"), its whole text in the title: the same
-# escaped text (\4)
-NEXT_ITEM = re.compile(r'<aside class="next-item" aria-label="([^"]*)"><span class="when">([^<]*)</span>'
+# PP-F1: a space after the when line (on paper the kind and the title do not run together); the title is in
+# clamp2 (at most 2 lines on screen, then "…"), its whole text in the title: the same escaped text (\4)
+NEXT_ITEM = re.compile(r'<aside class="next-item" aria-label="([^"]*)"><span class="when">([^<]*)</span> '
                        r'<a class="what" href="(/calendar/\d+)" lang="vi"><span class="clamp-2" title="([^"]*)">\4'
                        r'</span></a></aside>')
 DAY = dt.date(2026, 11, 24)  # a Tuesday
@@ -248,6 +249,15 @@ class FiguresAndNextItemTest(unittest.TestCase):
             self.assertNotIn(twice, card)
         self.assertEqual(html.unescape(NEXT_ITEM.fullmatch(card).group(4)), LONG_TITLE)
         self.assertNotIn("style=", card)
+
+    def test_a_space_between_the_when_line_and_the_title(self):
+        """PP-F1 (D3): on paper the card is plain text; with no space the kind and the title ran together
+        ("Buổi họpHọp Ban Chấp Sự")."""
+        self.use("vi")
+        card = dashboard._next_item(self.WEEK, DAY)
+        self.assertIn('</span> <a class="what" ', card)
+        self.assertNotIn('</span><a class="what" ', card)
+        self.assertIn("Buổi họp Họp Ban Chấp Sự", html.unescape(re.sub(r"<[^>]+>", "", card)))
 
 
 class DashboardPageTest(PagesTestBase):
