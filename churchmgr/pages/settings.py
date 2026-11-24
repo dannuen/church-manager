@@ -68,8 +68,9 @@ def _picture_panel(req, error=None):
     save = ui.form("/settings/church-picture", inner, multipart=True)
     if version is None:
         return panel("settings-picture", t("settings.panel_picture"), save, meta=h(t("settings.picture_none")))
-    preview = (f'<p><img src="{h(ui.url("/church-picture", v=version))}" alt="{h(t("settings.picture_alt"))}"'
-               f' width="{PREVIEW_WIDTH}"></p>')
+    # on screen only: print.css hides .no-print, so Settings on paper has no picture
+    preview = (f'<p class="no-print"><img src="{h(ui.url("/church-picture", v=version))}"'
+               f' alt="{h(t("settings.picture_alt"))}" width="{PREVIEW_WIDTH}"></p>')
     remove = ui.form("/settings/church-picture/remove", ui.button(t("settings.picture_remove"), "secondary"))
     body = f'{preview}{remove}<div class="add-form">{save}</div>'
     return panel("settings-picture", t("settings.panel_picture"), body)

@@ -286,12 +286,22 @@ class PicturePagesTest(MultipartMixin, PagesTestBase):
                       '<button class="btn secondary" type="submit">Remove the picture</button></form>', panel)
         self.assertIn('action="/settings/church-picture" method="post" enctype="multipart/form-data"', panel)
         # the picture, Remove right under it, then the form for a new one under a line
-        self.assertRegex(panel, r'^<header>.*?</header><p><img [^>]*></p><form class="form" action="/settings/'
+        self.assertRegex(panel, r'^<header>.*?</header><p class="no-print"><img [^>]*></p><form class="form" action="/settings/'
                                 r'church-picture/remove" method="post">.*?</form><div class="add-form"><form class="form" '
                                 r'action="/settings/church-picture" method="post" enctype="multipart/form-data">.*?'
                                 r'</form></div>$')
         self.assertNotIn("No picture yet", panel)
         self.assertNotIn("style=", panel)
+
+    def test_the_preview_never_prints(self):
+        """PP-F1 (D4): the preview helps on screen only; on paper Settings shows no picture. It is in
+        ``<p class="no-print">``, and web/print.css hides ``.no-print``."""
+        self.choose(JPEG)
+        panel = section(self.page("/settings"), "settings-picture")
+        self.assertEqual(panel.count("<img"), 1)
+        self.assertIn(f'<p class="no-print"><img src="/church-picture?v={self.version()}" ', panel)
+        print_css = (pathlib.Path(__file__).resolve().parents[1] / "web" / "print.css").read_text(encoding="utf-8")
+        self.assertRegex(print_css, r"@media print \{\s*[^{}]*\.no-print,[^{}]*\{ display: none !important; \}")
 
     def test_a_refused_file_gives_the_page_again_with_the_sentence_at_the_field(self):
         sent = {"kind": (TEXT_FILE, "photo.jpg"), "size": (TOO_BIG, "big.jpg"), "none": (b"", "")}
