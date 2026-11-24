@@ -432,6 +432,7 @@ class CodeRulesTest(unittest.TestCase):
     OUTSIDE_NAMES = (
         "user_version",  # SQLite: PRAGMA user_version
         "attachment; filename",  # HTTP: the Content-Disposition header value for a download
+        "letter-spacing",  # CSS: the property name (the pastor's yes, 2026-11-24)
     )
 
     def package_sources(self):

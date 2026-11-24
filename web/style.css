@@ -916,3 +916,4 @@ table.documents td:last-child a { color: var(--accent-text); font-weight: 400; }
 }
 .chart .dot { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
 .chart .dot.last { fill: var(--accent-text); }
+.title-row h1, .panel h2 { letter-spacing: 2.5px; }
