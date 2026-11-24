@@ -5,7 +5,9 @@
 1. Runs all tests (``python -m unittest discover -s tests``).
 2. Builds a fake church of N People (default 50) in a new temp folder outside OneDrive.
    It never touches ``%LOCALAPPDATA%\\ChurchManager``.
-3. Starts the real server on 127.0.0.1 and checks the 6 Dashboard panels and Search.
+3. Starts the real server on 127.0.0.1 and checks the 6 Dashboard panels and Search. Then a church
+   picture saved through Settings: a page has ``has-hero`` and ``--hero-image``, ``GET /church-picture``
+   gives the same bytes, Remove gives the page back byte for byte.
 4. Makes a Handover through the app (POST /copies/handover) and proves the zip has no Private notes.
 5. Checks the Giving statement of one Person and one Family has no Private note.
    Then checks the Hermes door (``python -m churchmgr.agent``): with the door off, ``status`` stops with
@@ -248,6 +250,40 @@ def check_search(port, query):
     names = [row["full_name"] for row in json.loads(body.decode("utf-8"))] if status == 200 else []
     ok = fake.FIRST_PERSON in names
     return ok, f"GET {path} -> {status}, {len(names)} found" + (f", has {fake.FIRST_PERSON}" if ok else "")
+
+
+def check_picture(port):
+    """The church picture through the app: saved in Settings (a multipart POST, as the browser sends it), a
+    page has ``has-hero`` and ``--hero-image``, ``GET /church-picture`` gives the same bytes, and Remove
+    gives the page back byte for byte."""
+    data = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01" + bytes(range(256))  # a JPEG start: the kind is read from it
+    boundary = "cmVerifyChurchPicture"
+    body = (f'--{boundary}\r\nContent-Disposition: form-data; name="picture"; filename="hinh.jpg"\r\n'
+            "Content-Type: image/jpeg\r\n\r\n").encode("ascii") + data + f"\r\n--{boundary}--\r\n".encode("ascii")
+    before = request(port, "GET", "/people")[2]
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
+    try:
+        conn.request("POST", "/settings/church-picture", body=body, headers={
+            "Host": f"127.0.0.1:{port}", "Origin": f"http://127.0.0.1:{port}",
+            "Content-Type": f"multipart/form-data; boundary={boundary}"})
+        resp = conn.getresponse()
+        resp.read()
+        saved = resp.status
+    finally:
+        conn.close()
+    page = request(port, "GET", "/people")[2].decode("utf-8")
+    hero = '<div class="app has-hero">' in page and "--hero-image:url(/church-picture?v=" in page
+    got_status, got_headers, got = request(port, "GET", "/church-picture")
+    removed = request(port, "POST", "/settings/church-picture/remove", body=b"")[0]
+    after = request(port, "GET", "/people")[2]
+    same = got_status == 200 and got == data and got_headers.get("content-type") == "image/jpeg"
+    ok = saved == 303 and hero and same and removed == 303 and after == before
+    return ok, (f"POST /settings/church-picture -> {saved}; GET /people: "
+                + ("has-hero + --hero-image" if hero else "NO has-hero or --hero-image")
+                + f"; GET /church-picture -> {got_status} {got_headers.get('content-type')}, {len(got)} bytes, "
+                + ("the same bytes" if got == data else "NOT the same bytes")
+                + f"; POST /settings/church-picture/remove -> {removed}; GET /people "
+                + ("byte for byte as before" if after == before else "NOT as before"))
 
 
 def make_handover(port, root, state):
@@ -919,6 +955,7 @@ def check_app(checks, port, tmp, source_db, people, state):
                          ("NFC accents", unicodedata.normalize("NFC", name)),
                          ("NFD accents", unicodedata.normalize("NFD", name))):
         checks.run(f"3. Search ({label})", check_search, port, query)
+    checks.run("3. Church picture through Settings", check_picture, port)
 
     bodies = note_texts(source_db)
     if checks.run("4. Handover", make_handover, port, tmp, state):
