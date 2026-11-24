@@ -261,11 +261,14 @@ class FiguresAndNextItemTest(unittest.TestCase):
 
     def test_the_focus_ring_of_the_link_is_white_on_the_dark_card(self):
         """PP-F1 (D2): the card is dark, so a ring in the app color (``--accent-text``) was 1.45:1 on it with the
-        app color #1b1c1f. It is ``--highlight-focus`` (#ffffff), the ring of the dark Needs a visit card."""
+        app color #1b1c1f. It is ``--highlight-focus`` (#ffffff), the ring of the dark Needs a visit card, set
+        the same way: the link in focus gets its own ``--accent-text``, and the one ``:focus-visible`` rule
+        draws the ring with it (no second ring color in style.css)."""
         path = pathlib.Path(__file__).resolve().parents[1] / "web" / "style.css"
         css = re.sub(r"/\*.*?\*/", "", path.read_text(encoding="utf-8"), flags=re.S)
         self.assertEqual(re.findall(r"\.next-item a:focus-visible\s*\{([^}]*)\}", css),
-                         [" outline-color: var(--highlight-focus); "])
+                         [" --accent-text: var(--highlight-focus); "])
+        self.assertRegex(css, r"(?m)^:focus-visible \{ outline: 2px solid var\(--accent-text\);")
         self.assertRegex(css, r"--highlight-focus: #ffffff;")
 
 
