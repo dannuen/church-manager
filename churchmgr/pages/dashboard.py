@@ -67,6 +67,7 @@ def services_svg(rows):
     The y scale fits the counts (``fit_scale``), not 0 to a round top, so a change from 91 to 74 shows;
     its two lines, the low and the high one, carry their numbers, so the scale is honest. The low line is
     the darker base line only when it is 0.
+    Each Head count has a dot (``.chart .dot``), the newest a bigger filled one (``.dot.last``).
     With more than 5 Services every second date is labelled, counted back from the last one.
     """
     counts = [r["count"] for r in rows]
@@ -95,6 +96,12 @@ def services_svg(rows):
     points = " ".join(f"{x(i):.2f},{y(c):.1f}" for i, c in enumerate(counts))
     parts.append(f'<svg class="plot" width="100%" height="{height}" viewBox="0 0 100 {height}" '
                  f'preserveAspectRatio="none"><polyline class="line" points="{points}"/></svg>')
+    # round 4: a dot on each Head count, the newest filled; in the outer chart (in the stretched plot a
+    # circle turns into an oval), before the last number so the number stays on top
+    for i, c in enumerate(counts):
+        newest = i == n - 1
+        parts.append(f'<circle class="dot{" last" if newest else ""}" cx="{x(i):.2f}%" cy="{y(c):.1f}" '
+                     f'r="{"4.5" if newest else "3.5"}"/>')
     parts.append(f'<text class="end" x="100%" dx="8" y="{y(counts[-1]) + 4:.1f}">{counts[-1]}</text>')
     label = "; ".join(f"{ui.fmt_date(r['starts_at'])} {r['count']}" for r in rows)
     return (f'<svg class="chart" width="100%" height="{height}" role="img" '
@@ -150,7 +157,8 @@ def _this_week(items, today, span):
     for it in items[:WEEK_ROWS]:
         day = _dt.date.fromisoformat(it["starts_at"][:10])
         kind = ui.calendar_kind(it["kind"])
-        sub, words = [h(kind)], [kind]
+        # round 4: the kind is a small tag; the place or the visited name after it stays plain grey text
+        sub, words = [f'<span class="tag">{h(kind)}</span>'], [kind]
         if it["kind"] == "Visit" and it["visit_name"] and it["visit_name"] not in it["title"]:
             sub.append(vi(it["visit_name"]))
             words.append(it["visit_name"])

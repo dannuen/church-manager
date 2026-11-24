@@ -397,7 +397,8 @@ class UiMinorsRound4Test(PagesTestBase):
         week = section(self.page("/"), "this-week")
         self.assertIn(f'<span class="what wrap"><span class="clamp-2" lang="vi" title="{title}">'
                       f'<a href="/calendar/{today_id}">{title}</a></span></span>'
-                      f'<span class="side" title="Service · {place}">Service · <span lang="vi">{place}</span></span>',
+                      f'<span class="side" title="Service · {place}"><span class="tag">Service</span> · '
+                      f'<span lang="vi">{place}</span></span>',
                       week)
         record = section(self.page("/calendar"), "to-record")
         self.assertIn(f'<span class="what wrap"><span class="clamp-2" lang="vi" title="{to_record}">'
