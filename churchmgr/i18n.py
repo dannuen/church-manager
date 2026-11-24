@@ -132,6 +132,10 @@ TEXT = {
         "dashboard.plan_visit": "Lên lịch Thăm viếng",
         "dashboard.title": "Trang chủ",
         "dashboard.open_calendar": "Mở Lịch",
+        "dashboard.figures": "Tóm tắt",
+        "dashboard.figure_items_one": "{n} Lịch",
+        "dashboard.figure_items_many": "{n} Lịch",
+        "dashboard.next_item": "Lịch sắp tới",
         # --- people
         "people.err_birth_date": "{label} phải là một ngày có thật như 31/12/1980, hoặc một năm từ 1900 như 1980.",
         "people.file_saved_before": "Tất cả các tên trong tệp này đều đã có trong Hội Thánh. Có thể bạn đã lưu tệp "
@@ -1387,6 +1391,10 @@ TEXT = {
         "dashboard.plan_visit": "Plan a Visit",
         "dashboard.title": "Dashboard",
         "dashboard.open_calendar": "Open Calendar",
+        "dashboard.figures": "At a glance",
+        "dashboard.figure_items_one": "{n} Calendar item",
+        "dashboard.figure_items_many": "{n} Calendar items",
+        "dashboard.next_item": "Next Calendar item",
         # --- people
         "people.err_birth_date": "{label} must be a real date like 31/12/1980, or a year from 1900 like 1980.",
         "people.file_saved_before": "Every name in this file is already in the church. You may have saved this "

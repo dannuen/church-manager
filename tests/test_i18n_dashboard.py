@@ -181,8 +181,8 @@ class VietnameseScreensTest(_Screens):
                       'aria-label="Số người nhóm của ', "<span>Thăm gần nhất</span>"):
             self.assertIn(words, page)
         weekday = t(f"core.weekday_{TODAY.weekday()}", "vi")
-        self.assertRegex(page, rf'<p class="sub">{weekday} {TODAY:%d/%m/%Y} · '  # CRIT-3: Needs a visit has its
-                               r'\d+ Lịch trong 7 ngày tới</p>')  # count on its card, not again here
+        # CRIT-3: the line under the h1 is the day only; the count of Calendar items is in the figures strip
+        self.assertIn(f'<p class="sub">{weekday} {TODAY:%d/%m/%Y}</p>', page)
         count = len(sent.list_sent_documents(self.db(), TODAY.year))
         # CRIT-4: more than the rows shown -> the foot link names them all
         self.assertIn(f">Xem tất cả {count}</a>" if count > 2 else ">Mở Văn bản đi</a>", page)

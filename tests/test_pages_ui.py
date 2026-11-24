@@ -996,7 +996,9 @@ class StyleFix1Test(PagesTestBase):
         # the real page: the switch, then the flash, both children of the canvas; the grid too
         page = self.page("/?msg=" + urllib.parse.quote("Đã lưu."))
         self.assertRegex(page, r'<main class="canvas" id="main" tabindex="-1"><form class="lang-switch"[^>]*>.*?</form><p class="flash" role="status">')
-        self.assertIn('</header><div class="grid dashboard">', page)
+        # round 4: the next Calendar item (when there is one) and the figures strip sit before the grid
+        self.assertRegex(page, r'(?s)</header>(<aside class="next-item"[^>]*>.*?</aside>)?<section class="figures"'
+                               r'[^>]*>.*?</section><div class="grid dashboard">')
 
     def test_bug3_a_table_scrolls_inside_its_own_box(self):
         # the hidden Edit header word is absolute: the positioned wrap holds it (it pushed the Money page
@@ -1549,7 +1551,8 @@ class CritFourTest(PagesTestBase):
         self.assertIn(f'<h2 id="p-this-week">Next 7 days</h2><span class="meta">{TODAY:%d/%m} – {last:%d/%m/%Y}</span>',
                       week)
         self.assertIn(f'<a class="card-link" href="/calendar?from={TODAY.isoformat()}">', week)
-        self.assertRegex(page, r'<p class="sub">[^<]* · \d+ Calendar items? in the next 7 days</p>')
+        self.assertRegex(page, r'<span class="figure-label">Next 7 days</span>'  # round 4: in the figures strip
+                               r'<span class="figure-value num">\d+ Calendar items?</span>')
         self.assertEqual([t("dashboard.this_week", lang) for lang in ("vi", "en")], ["7 ngày tới", "Next 7 days"])
         self.assertEqual(t("dashboard.nothing_week", "vi"), "7 ngày tới không có gì trong Lịch.")
         # the Monday-to-Sunday chip of the Calendar keeps "This week"

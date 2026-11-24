@@ -1,5 +1,9 @@
 """Dashboard ``/``: what needs the pastor this week? Six panels on one page.
 
+Round 4: between the title row and the panels, the next Calendar item (``<aside class="next-item">``, the
+first row of Next 7 days) and a strip of 3 figures (``<section class="figures">``); both are styled in
+``web/style.css``. Neither is a panel: they have no ``data-panel`` and no ``data-row``.
+
 Each panel is ``<section data-panel="NAME">``; each data line in it has ``data-row``.
 A panel that cannot load keeps its frame and says so (the error goes to the console).
 Words on screen come from the text table (section ``dashboard``), also the words of the live search:
@@ -145,6 +149,36 @@ def _day_label(day, today):
     if day == today + _dt.timedelta(days=1):
         return t("dashboard.tomorrow")
     return f"{ui.fmt_weekday(day)} {day.strftime('%d/%m')}"
+
+
+def _next_item(items, today):
+    """Round 4: the first row of Next 7 days (``items[0]``) as a small dark card: its day, time and kind on
+    one line, its title as a link to it. Nothing when the 7 days did not load or have no Calendar item."""
+    if items is _FAILED or not items:
+        return ""
+    it = items[0]
+    day = _dt.date.fromisoformat(it["starts_at"][:10])
+    when = " · ".join((_day_label(day, today), ui.fmt_time(it["starts_at"]), ui.calendar_kind(it["kind"])))
+    return (f'<aside class="next-item" aria-label="{h(t("dashboard.next_item"))}">'
+            f'<span class="when">{h(when)}</span>'
+            f'<a class="what" href="/calendar/{it["id"]}" lang="vi">{h(it["title"])}</a></aside>')
+
+
+def _figures(week, needs, totals, today):
+    """Round 4: the strip of 3 figures under the title row: the Calendar items of the Next 7 days, the People
+    who need a visit and the Balance of this month, each with its word (no 01 02 03). A value that did not
+    load is a dash; its label stays."""
+    def figure(label, value_html):
+        return (f'<div class="figure"><span class="figure-label">{h(label)}</span>'
+                f'<span class="figure-value num">{value_html}</span></div>')
+
+    items = ui.DASH if week is _FAILED else h(tn("dashboard.figure_items", len(week)))
+    persons = ui.DASH if needs is _FAILED else h(tn("dashboard.persons", len(needs)))
+    balance = ui.DASH if totals is _FAILED else h(ui.fmt_money(totals["balance"]))
+    month = ui.fmt_month(today.year, today.month)
+    return (f'<section class="figures" aria-label="{h(t("dashboard.figures"))}">'
+            + figure(t("dashboard.this_week"), items) + figure(t("dashboard.needs_visit"), persons)
+            + figure(f'{t("dashboard.balance")}, {month}', balance) + "</section>")
 
 
 def _this_week(items, today, span):
@@ -319,12 +353,13 @@ def dashboard(req):
     next_number = _load(sent.next_number, conn, today.year)
     recent = _load(_recent_sent, conn, today.year)
 
-    # how many need a visit is the count on the Needs a visit card: not again in this line (CRIT-3)
-    finding = [f"{ui.fmt_weekday(today)} {ui.fmt_date(today)}"]
-    if week is not _FAILED:
-        finding.append(tn("dashboard.finding_week", len(week)))
+    # CRIT-3, a number is said once: the line under the h1 is the day only; how many Calendar items the
+    # Next 7 days have is in the figures strip
+    finding = f"{ui.fmt_weekday(today)} {ui.fmt_date(today)}"
     body = (
-        '<div class="grid dashboard">'
+        _next_item(week, today)
+        + _figures(week, needs, totals, today)
+        + '<div class="grid dashboard">'
         + _this_week(week, today, "span-7")
         + _needs_visit(needs, months, "span-5")
         + _services(counts, ROW2_SPANS[0])
@@ -333,7 +368,7 @@ def dashboard(req):
         + "</div>"
     )
     actions = _search_panel() + ui.link_button(t("dashboard.plan_visit"), "/care", "primary")
-    return Response.html(ui.page(t("dashboard.title"), body, "dashboard", sub=h(" · ".join(finding)),
+    return Response.html(ui.page(t("dashboard.title"), body, "dashboard", sub=h(finding),
                                  actions=actions))
 
 
