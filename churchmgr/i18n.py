@@ -1180,6 +1180,8 @@ TEXT = {
         "copies.err_door": "Cổng Hermes chưa tắt trong cơ sở dữ liệu Bàn giao. Chưa tạo Bàn giao.",
         "copies.err_text_in_document": "Chữ của một Ghi chú cá nhân cũng được ghi trong một tệp Tài liệu, nên sẽ đến "
                                        "tay mục sư kế nhiệm. Chưa tạo Bàn giao.",
+        "copies.err_text_in_picture": "Chữ của một Ghi chú cá nhân cũng có trong Hình Hội Thánh, nên sẽ đến tay mục sư "
+                                      "kế nhiệm. Hãy gỡ hình trong Cài đặt, hoặc chọn hình khác. Chưa tạo Bàn giao.",
         "copies.err_zip_damaged": "Tệp ZIP Bàn giao bị hỏng ({detail}). Chưa tạo Bàn giao.",
         "copies.err_zip_no_db": "Tệp ZIP Bàn giao không có {db}. Chưa tạo Bàn giao.",
         "copies.err_zip_missing_file": "Thiếu một tệp Tài liệu trong tệp ZIP Bàn giao. Chưa tạo Bàn giao.",
@@ -2433,6 +2435,9 @@ TEXT = {
         "copies.err_door": "The Hermes door was not off in the handover database. No handover was made.",
         "copies.err_text_in_document": "The text of a Private note is also written in a Document file, so it would go "
                                        "to the next pastor. No handover was made.",
+        "copies.err_text_in_picture": "The text of a Private note is also in the church picture, so it would go to the "
+                                      "next pastor. Remove the picture in Settings, or choose another one. No handover "
+                                      "was made.",
         "copies.err_zip_damaged": "The handover zip is damaged ({detail}). No handover was made.",
         "copies.err_zip_no_db": "The handover zip has no {db}. No handover was made.",
         "copies.err_zip_missing_file": "A Document file is missing from the handover zip. No handover was made.",
