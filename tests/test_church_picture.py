@@ -285,6 +285,11 @@ class PicturePagesTest(MultipartMixin, PagesTestBase):
         self.assertIn('<form class="form" action="/settings/church-picture/remove" method="post">'
                       '<button class="btn secondary" type="submit">Remove the picture</button></form>', panel)
         self.assertIn('action="/settings/church-picture" method="post" enctype="multipart/form-data"', panel)
+        # the picture, Remove right under it, then the form for a new one under a line
+        self.assertRegex(panel, r'^<header>.*?</header><p><img [^>]*></p><form class="form" action="/settings/'
+                                r'church-picture/remove" method="post">.*?</form><div class="add-form"><form class="form" '
+                                r'action="/settings/church-picture" method="post" enctype="multipart/form-data">.*?'
+                                r'</form></div>$')
         self.assertNotIn("No picture yet", panel)
         self.assertNotIn("style=", panel)
 

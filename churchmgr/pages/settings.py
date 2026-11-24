@@ -54,9 +54,9 @@ def _shown_color(conn, posted):
 
 
 def _picture_panel(req, error=None):
-    """The Church picture panel: a small preview of the picture (or the line that there is none), the form
-    that saves a new one and, with a picture, the Remove form. ``error``: the sentence of a refused file,
-    already in the language of the page."""
+    """The Church picture panel. With no picture: the line that there is none, then the form that saves one.
+    With a picture: a small preview and the Remove form under it, then the form that saves a new one under a
+    line (``.add-form``). ``error``: the sentence of a refused file, already in the language of the page."""
     version = picture.picture_version(req.state.copy_folder)
     mb = picture.MAX_SIZE // picture.MB
     inner = (
@@ -71,7 +71,8 @@ def _picture_panel(req, error=None):
     preview = (f'<p><img src="{h(ui.url("/church-picture", v=version))}" alt="{h(t("settings.picture_alt"))}"'
                f' width="{PREVIEW_WIDTH}"></p>')
     remove = ui.form("/settings/church-picture/remove", ui.button(t("settings.picture_remove"), "secondary"))
-    return panel("settings-picture", t("settings.panel_picture"), preview + save + remove)
+    body = f'{preview}{remove}<div class="add-form">{save}</div>'
+    return panel("settings-picture", t("settings.panel_picture"), body)
 
 
 def _view(req, values=None, errors=None, status=200):
