@@ -1,13 +1,14 @@
 /* Church Manager: one light app screen style. Plain CSS, no build, works offline.
-   The look (docs/superpowers/specs/2026-11-12-app-styling-design.md, round 2, approved by the pastor): a
-   light ground; a wash of the app color at the top of the canvas with the page title on it; white cards
-   with round corners and a soft shadow; pill buttons; green and red only on money amounts. Light only.
+   The look (DESIGN.md, round 4 "Pearl": the pastor's mockup and tweak values of 24/11/2026): a pearl grey
+   ground; the menu as pills in a bar at the top; the page title in a frosted white card; white cards with
+   10px corners and a soft shadow that takes the app color; serif titles; dotted lines between rows; pill
+   buttons; green and red only on money amounts. Light only.
    Every color is a token of :root, made from the one app color the pastor picks in Settings: the page
-   head sets 4 of them (churchmgr/app_color.py theme). Text on the wash and on the gradient is
-   --on-accent; the color as text on the light surfaces, and the focus ring, is --accent-text; the plain
-   accent is on the chart lines. One system face; sizes 12/14/16/24 and 28 for the page title; tabular
-   figures on every number.
-   Grid sum at 1440px: sidebar 232 + canvas (24 + 1160 + 24); 12 columns, 20px gutter. */
+   head sets 4 of them (churchmgr/app_color.py theme). The app color fills the current menu item and the
+   primary button (the text on it is --on-accent); the color as text on the light surfaces, and the focus
+   ring, is --accent-text; the plain accent is on the chart lines. Two faces: a serif for titles and big
+   numbers (--font-display), the system face for the rest; tabular figures on every number.
+   Width: the page is at most 1800px, with 90px at its sides from 1181px; 12 columns, 28px gutter. */
 
 :root {
   /* The app color (Settings). The page head sets these 4 for the color the pastor picked; these are the
@@ -22,12 +23,12 @@
   --gradient: linear-gradient(135deg, var(--accent-light), var(--accent-dark));
   /* Surfaces, lines and text: grey with a touch of the app color. tests/test_pages_ui.py checks, for any
      color, 4.5:1 for each text on the surfaces it sits on and 3:1 for the field border. */
-  --ground: color-mix(in srgb, var(--accent-base) 2%, #f8f9f9);
+  --ground: color-mix(in srgb, var(--accent-base) 2%, #f4f4f6);
   --surface: #ffffff;
   --raised: color-mix(in srgb, var(--accent-base) 10%, #ffffff);    /* hover, the Private note panel */
   --active: color-mix(in srgb, var(--accent-base) 16%, #ffffff);    /* the tint: flash, tag */
   --border: color-mix(in srgb, var(--accent-base) 12%, #fafafa);
-  --rule: color-mix(in srgb, var(--accent-base) 8%, #fcfcfc);
+  --rule: color-mix(in srgb, var(--accent-base) 8%, #cfd0d6);     /* the dotted line between rows */
   --control: color-mix(in srgb, var(--accent-text) 36%, #949494);   /* the border of a field or a button */
   --text: color-mix(in srgb, var(--accent-text) 35%, #000000);
   --muted: color-mix(in srgb, var(--accent-text) 38%, #585858);
@@ -40,14 +41,14 @@
   /* the Year report chart: the Offerings and Expenses bars and their legend keys. Spec 3.3: the two
      colors stay as they were, on screen and on paper (green is money) */
   --bar-offerings: #2f6f4f; --bar-expenses: #999999;
-  /* the wash at the top of the canvas: the app color from dark (left) to light (right). Its first layer is
-     the fade into the ground, drawn over its last --wash-fade only (.canvas::before), so a taller wash (a tall
-     head) keeps the same fade under its text. From 861px the fade is short, 48px: a long one (136px) showed
-     a muddy grey-blue band in the gutter and the gaps between the cards (CRIT-9). Under 861px the cards
-     leave only 8px at the sides: the fade stays 40% of --wash-h-narrow there */
-  --wash: linear-gradient(180deg, transparent, var(--ground)),
-          linear-gradient(112deg, var(--accent-dark) 0%, var(--accent-base) 48%, var(--accent-light) 100%);
-  --wash-h: 340px; --wash-h-narrow: 600px; --wash-fade: 48px; --wash-fade-narrow: 240px; --wash-radius: 28px;
+  /* the wash at the top of the canvas, behind the language switch and the title card. --hero-image is none
+     here: it is the slot for a church picture, set in the page head beside the 4 app color tokens
+     (docs/redesign-pearl-for-hermes.md). With none the wash paints nothing and the pearl ground shows.
+     Its last --wash-fade fades out (a mask on .canvas::before), so a taller wash (a tall head) keeps the
+     same fade */
+  --hero-image: none;
+  --wash: var(--hero-image);
+  --wash-h: 360px; --wash-h-narrow: 600px; --wash-fade: 48px; --wash-fade-narrow: 240px;
   /* the one dark card (Dashboard, Needs a visit, CRIT-7): the app color as text (--accent-text, dark
      enough to read on white) taken darker, from the top left (darkest) to the bottom right (softer). It is
      dark for every app color, so its text is white and its grey words a white with a touch of the app
@@ -62,18 +63,25 @@
   --highlight-rule: color-mix(in srgb, var(--highlight-ink) 20%, transparent);  /* lines, the empty box */
   --highlight-line: color-mix(in srgb, var(--highlight-ink) 65%, var(--highlight-end));  /* the line under a name */
   --highlight-focus: #ffffff;                                                /* the links and the focus ring on it */
-  --shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent), 0 6px 20px color-mix(in srgb, var(--text) 7%, transparent);
-  --shadow-raised: 0 10px 30px color-mix(in srgb, var(--text) 16%, transparent);
+  /* a card: a soft drop that takes the app color, and a white line of light on its top edge */
+  --shadow: 0 8px 24px color-mix(in srgb, var(--accent-dark) 13%, transparent), inset 0 1px 0 color-mix(in srgb, #ffffff 55%, transparent);
+  --shadow-raised: 0 16px 34px color-mix(in srgb, var(--accent-dark) 22%, transparent);
   --font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
-  --fs-small: 12px; --fs-meta: 14px; --fs-body: 16px; --fs-title: 24px; --fs-display: 28px;
-  --gap: 20px; --pad: 24px; --card-pad: 24px;
-  --radius: 12px; --radius-control: 12px; --radius-card: 18px; --radius-pill: 999px;
-  --sidebar: 232px; --control-height: 40px; --row: 44px; --dash-row2: 294px;
+  /* titles and big numbers: a serif Windows has, with the Vietnamese marks (not Georgia: it breaks ầ, ế) */
+  --font-display: "Palatino Linotype", "Book Antiqua", Cambria, serif;
+  --fs-small: 12px; --fs-meta: 14px; --fs-body: 16px; --fs-title: 24px; --fs-display: 28px; --fs-card: 30px;
+  --gap: 28px; --pad: 90px; --card-pad: 37px;
+  --radius: 10px; --radius-control: 10px; --radius-card: 10px; --radius-pill: 999px;
+  --bar-h: 76px; --control-height: 40px; --row: 44px; --dash-row2: 430px;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
-body { margin: 0; background: var(--ground); color: var(--text); font: var(--fs-body)/24px var(--font); }
+body { margin: 0; background: radial-gradient(900px 500px at 12% 0, var(--surface) 0, transparent 70%), radial-gradient(800px 600px at 88% 30%, var(--raised) 0, transparent 70%), var(--ground); color: var(--text); font: var(--fs-body)/24px var(--font); }
+/* a fine paper grain over the whole screen (the pastor's value: 7%); it takes no click and stays off paper */
+@media screen {
+  body::after { content: ""; position: fixed; inset: 0; z-index: 30; pointer-events: none; opacity: .07; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 .2 0 0 0 0 .2 0 0 0 0 .2 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E"); }
+}
 h1, h2, h3, p, ul, ol { margin: 0; }
 a { color: inherit; text-decoration: none; }
 /* a link in a table cell or in a row title is in the app color, so a name shows it can be clicked (a card
@@ -87,60 +95,62 @@ a:hover, :where(td) a:focus-visible, :where(.row .what) a:focus-visible, .card-l
 .dash, .faint { color: var(--faint); }
 .path { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 
-/* ---------- shell: sidebar on the page ground, canvas beside it ---------- */
-.app { display: grid; grid-template-columns: var(--sidebar) minmax(0, 1fr); min-height: 100vh; }
-.sidebar { position: sticky; top: 0; height: 100vh; overflow: auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 20px; }
-.brand { display: flex; flex-direction: column; padding: 0 16px; }
+/* ---------- shell: the menu bar at the top, the canvas under it ----------
+   One sheet (.app) on the pearl ground, at most 1800px wide. The bar holds the church name and the menu: 5
+   items and the "More" fold that holds the other 8 (the pastor moved the menu to the top, round 4; under
+   861px it was so already, CRIT-2). The fold opens a white card under "More", over the page; it works with
+   no JS. Its summary takes the current-page look when the page is one of its 8. */
+.app { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; min-height: calc(100vh - 20px); max-width: 1800px; margin: 10px auto; background: color-mix(in srgb, var(--surface) 58%, transparent); border: 1px solid var(--surface); border-radius: var(--radius-card); box-shadow: var(--shadow-raised); }
+.sidebar { position: relative; z-index: 2; display: flex; align-items: center; gap: 12px 28px; flex-wrap: wrap; min-height: var(--bar-h); padding: 12px var(--pad); }
+.brand { display: flex; flex-direction: column; }
 .brand:hover { text-decoration: none; }
 .brand-app { font-size: var(--fs-small); line-height: 16px; color: var(--muted); }
-.brand-church { color: var(--accent-text); font-weight: 700; line-height: 22px; }
-.nav { display: flex; flex-direction: column; gap: 2px; }
-.nav-item { display: flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: var(--radius-pill); color: var(--muted); font-size: var(--fs-meta); }
+.brand-church { color: var(--accent-text); font-family: var(--font-display); font-size: 18px; font-weight: 800; line-height: 22px; }
+.nav { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
+.nav-item { display: flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: var(--radius-pill); color: var(--muted); font-size: var(--fs-meta); font-weight: 600; }
 .nav-item:hover { background: var(--raised); color: var(--text); text-decoration: none; }
 .nav-item[aria-current="page"], .nav-more:has([aria-current="page"]) > summary { background: var(--gradient); color: var(--on-accent); font-weight: 600; }
 .nav-item[aria-current="page"]:hover, .nav-more:has([aria-current="page"]) > summary:hover { background: var(--accent-dark); }
-/* the "More" fold of the top bar (under 861px, below); from 861px the sidebar shows all 13 items. Its
-   summary takes the current-page look when the page is one of its 8 (CRIT-2) */
-.nav-more { display: none; }
+.nav .in-more { display: none; }
+.nav-more { display: block; }
+.nav-more > summary { gap: 8px; cursor: pointer; list-style: none; }
+.nav-more > summary::-webkit-details-marker { display: none; }
+.nav-more > summary::after { content: ""; flex: none; width: 6px; height: 6px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: translateY(-2px) rotate(45deg); }
+.nav-more[open] > summary::after { transform: translateY(2px) rotate(-135deg); }
+.nav-more-list { position: absolute; z-index: 20; top: calc(100% + 4px); right: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; width: 340px; padding: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow-raised); }
 /* the skip link: the first stop of Tab on every page, out of sight until it has the focus; then a white
    pill at the top left above everything, with the one focus ring. print.css hides it (.no-print) (CRIT-2) */
 .skip-link { position: fixed; z-index: 100; top: 8px; left: 8px; display: inline-flex; align-items: center; min-height: 44px; padding: 0 20px; border-radius: var(--radius-pill); background: var(--surface); color: var(--accent-text); font-size: var(--fs-meta); font-weight: 600; transform: translateY(-200%); }
 .skip-link:focus { transform: none; box-shadow: var(--shadow-raised); }
-/* The wash: one layer of the app color behind the top of the canvas (the language switch, the title row
-   and the top of the first cards). It is not a card. The sidebar stays on the plain ground. */
+/* The wash: one soft layer behind the top of the canvas (the language switch and the title card). It is
+   not a card. With no picture it is the pearl sheen of --wash. */
 .canvas { position: relative; isolation: isolate; min-width: 0; padding: 14px var(--pad) var(--pad); }
-.canvas::before { content: ""; position: absolute; z-index: -1; top: 8px; left: 0; right: 12px; height: var(--wash-h); background: var(--wash); background-size: 100% var(--wash-fade), 100% 100%; background-position: 0 100%, 0 0; background-repeat: no-repeat; border-radius: var(--wash-radius) var(--wash-radius) 0 0; pointer-events: none; }
+.canvas::before { content: ""; position: absolute; z-index: -1; top: 0; left: 0; right: 0; height: var(--wash-h); background: var(--wash) 50% 52% / cover no-repeat; mask-image: linear-gradient(to bottom, black calc(100% - var(--wash-fade)), transparent); pointer-events: none; }
 
-/* ---------- title row on the wash: one h1, one finding line, the actions ----------
-   The title keeps at least 240px: when the actions leave it less, they wrap under it (861px to 1180px).
-   It is the anchor the wash grows with (STYLE-FIX-1, at the end of this file). */
-.title-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: var(--gap); padding: 0 12px 14px; color: var(--on-accent); anchor-name: --title-row; }
+/* ---------- the title card: one h1, one finding line, the actions ----------
+   A frosted white card at the top left, as wide as its words (720px at most; 476px on the Dashboard). Its
+   text is ink. The title keeps at least 240px: when the actions leave it less, they wrap under it. It is
+   the anchor the wash grows with (STYLE-FIX-1, at the end of this file). */
+.title-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; width: fit-content; max-width: min(100%, 720px); margin-bottom: var(--gap); padding: 24px 28px 28px; background: color-mix(in srgb, var(--surface) 78%, transparent); border: 1px solid var(--surface); border-radius: var(--radius-card); box-shadow: var(--shadow-raised); backdrop-filter: blur(8px); color: var(--text); anchor-name: --title-row; }
 .title-row > :first-child { flex: 1 1 240px; min-width: 0; }
-.title-row h1 { font-size: var(--fs-display); line-height: 36px; font-weight: 700; }
-.title-row .sub { margin-top: 2px; color: var(--on-accent); }
+.title-row h1 { font-family: var(--font-display); font-size: var(--fs-display); line-height: 36px; font-weight: 800; }
+.title-row .sub { margin-top: 2px; color: var(--muted); }
 /* a line for paper only: People without a search, whose counts are on the Status chips on screen (print.css
    hides the chips) (CRIT-3) */
 @media screen { .title-row .sub:has(> .on-paper) { display: none; } }
 .title-row .actions { display: flex; align-items: flex-end; gap: 12px; flex: none; }
-/* On the wash every text is --on-accent at full strength. The main action is a pill filled with
-   --on-accent and --accent-dark text; the other buttons are pills outlined in --on-accent. The search
-   field and the live results keep their white surface and ink; the field gets an --on-accent border. The
-   focus ring is --on-accent on the wash and --accent-text on the white results. */
-.title-row .btn { border-color: var(--on-accent); border-radius: var(--radius-pill); background: transparent; color: var(--on-accent); }
-.title-row .btn:hover { background: var(--accent-dark); }
-.title-row .btn.primary { background: var(--on-accent); color: var(--accent-dark); border-color: var(--on-accent); }
-.title-row .btn.primary:hover { background: var(--on-accent); text-decoration: underline; text-underline-offset: 3px; }
-.title-row .input, .title-row .results { color: var(--text); }
-.title-row .input { border-color: var(--on-accent); border-radius: var(--radius-pill); padding: 0 18px; }
-.title-row :focus-visible { outline-color: var(--on-accent); }
-.title-row .results :focus-visible { outline-color: var(--accent-text); }
+/* in the card the buttons and the search field are pills, as everywhere */
+.title-row .btn { border-radius: var(--radius-pill); }
+.title-row .input { border-radius: var(--radius-pill); padding: 0 18px; }
+/* from 861px the title is large (48px; 60px on the Dashboard); a phone keeps 28px on 36px lines (CRIT-FIX-1) */
+@media (min-width: 861px) { .canvas > .title-row h1 { font-size: 48px; line-height: 52px; } }
 .flash { margin-bottom: 16px; padding: 10px 16px; background: var(--active); border-radius: var(--radius); }
-/* the language switch at the top of every page, on the wash: two small pills, the current one white */
+/* the language switch at the top right of every page, above the title card: two small pills, the current
+   one white with an edge */
 .lang-switch { display: flex; justify-content: flex-end; gap: 4px; margin: 0 12px 4px; }
-.lang-switch button { min-height: 28px; padding: 0 10px; border: 1px solid transparent; border-radius: var(--radius-pill); background: none; color: var(--on-accent); font: inherit; font-size: var(--fs-small); cursor: pointer; }
-.lang-switch button:hover { background: var(--accent-dark); color: var(--on-accent); }
-.lang-switch button[aria-pressed="true"] { border-color: var(--on-accent); background: var(--surface); color: var(--text); font-weight: 600; }
-.lang-switch :focus-visible { outline-color: var(--on-accent); }
+.lang-switch button { min-height: 28px; padding: 0 10px; border: 1px solid transparent; border-radius: var(--radius-pill); background: none; color: var(--muted); font: inherit; font-size: var(--fs-small); cursor: pointer; }
+.lang-switch button:hover { background: var(--raised); color: var(--text); }
+.lang-switch button[aria-pressed="true"] { border-color: var(--control); background: var(--surface); color: var(--text); font-weight: 600; }
 .lead { font-size: var(--fs-body); margin-bottom: 12px; }
 /* text outside a card never sits on the wash: a note right under the title row (the Documents hint) is a
    small white note; the filter row under it is a white bar (.list-toolbar below) */
@@ -155,7 +165,7 @@ a:hover, :where(td) a:focus-visible, :where(.row .what) a:focus-visible, .card-l
 .span-6 { grid-column: span 6; } .span-7 { grid-column: span 7; } .span-12 { grid-column: 1 / -1; }
 .panel { display: flex; flex-direction: column; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow); padding: var(--card-pad); }
 .panel > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-.panel h2 { font-size: var(--fs-body); line-height: 24px; font-weight: 700; }
+.panel h2 { font-family: var(--font-display); font-size: var(--fs-card); line-height: 36px; font-weight: 800; }
 .panel .meta { display: block; color: var(--muted); font-size: var(--fs-meta); line-height: 20px; }
 .panel .count { color: var(--text); font-weight: 600; white-space: nowrap; }
 .panel > footer { margin-top: auto; padding-top: 12px; display: flex; flex-wrap: wrap; gap: 8px 20px; }
@@ -168,7 +178,7 @@ header .card-link { white-space: nowrap; }   /* in a card head (Money): the titl
 /* list rows: a rule between rows, none above the first; one line each */
 .rows { list-style: none; padding: 0; display: grid; }
 .row { display: flex; align-items: center; gap: 12px; min-height: var(--row); padding: 8px 0; min-width: 0; }
-.row + .row { border-top: 1px solid var(--rule); }
+.row + .row { border-top: 1px dotted var(--rule); }
 .row .what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .row .side { flex: 0 1 auto; max-width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--fs-meta); }
 .row .day { flex: none; width: 112px; font-size: var(--fs-meta); }   /* "Chúa Nhật 15/11" is wider than 92px */
@@ -187,9 +197,9 @@ header .card-link { white-space: nowrap; }   /* in a card head (Money): the titl
    money amounts only (spec 4.4). */
 .kpis { display: grid; }
 .kpi { display: flex; flex-direction: column; padding: 8px 0; }
-.kpi + .kpi { border-top: 1px solid var(--rule); }
+.kpi + .kpi { border-top: 1px dotted var(--rule); }
 .kpi-label { color: var(--muted); font-size: var(--fs-meta); line-height: 20px; }
-.kpi-value { font-size: var(--fs-title); line-height: 32px; font-weight: 500; white-space: nowrap; }
+.kpi-value { font-family: var(--font-display); font-size: var(--fs-title); line-height: 32px; font-weight: 500; white-space: nowrap; }
 .kpi-value.strong { font-weight: 700; }
 .kpi-value.strong:not(.neg) { color: var(--positive); }
 .neg { color: var(--negative); }
@@ -204,7 +214,7 @@ header .card-link { white-space: nowrap; }   /* in a card head (Money): the titl
 .chart .gridline { stroke: var(--grid); stroke-width: 1; }
 .chart .gridline.base { stroke: var(--grid-base); }
 .chart .tick { fill: var(--muted); font-size: 12px; font-family: var(--font); }
-.chart .line { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.chart .line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .chart .end { fill: var(--accent-text); font-size: 12px; font-weight: 700; font-family: var(--font); }
 .trend { font-size: var(--fs-meta); line-height: 20px; color: var(--muted); }
 .trend strong { color: var(--text); font-weight: 700; }
@@ -224,7 +234,7 @@ header .card-link { white-space: nowrap; }   /* in a card head (Money): the titl
 .dashboard > [data-panel="needs-visit"] {
   --text: var(--highlight-ink); --muted: var(--highlight-muted); --faint: var(--highlight-muted);
   --rule: var(--highlight-rule); --border: var(--highlight-rule); --control: var(--highlight-rule);
-  --accent-text: var(--highlight-focus);
+  --accent-text: var(--highlight-focus); --raised: var(--highlight-rule);
   background: var(--highlight-fill); border-color: transparent; box-shadow: var(--shadow-raised); color: var(--text); }
 :where(.dashboard > [data-panel="needs-visit"] .row .what) a { text-decoration: underline; text-decoration-color: var(--highlight-line); text-decoration-thickness: 1px; text-underline-offset: 3px; }
 
@@ -286,7 +296,7 @@ input[type="checkbox"] { width: 20px; height: 20px; margin: 0; accent-color: var
 table { width: 100%; border-collapse: separate; border-spacing: 0; }
 th { padding: 0 12px; text-align: left; font-weight: 600; }
 :where(thead) th { height: 36px; font-size: var(--fs-small); line-height: 16px; color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap; }
-td, :where(tbody) th { padding: 10px 12px; border-bottom: 1px solid var(--rule); vertical-align: baseline; }
+td, :where(tbody) th { padding: 10px 12px; border-bottom: 1px dotted var(--rule); vertical-align: baseline; }
 tbody tr:last-child > * { border-bottom: 0; }
 @media screen { tbody tr:has(+ tr.total) > * { border-bottom: 0; } }   /* a total row draws its own line (paper: collapsed borders) */
 th.n, td.n { text-align: right; }
@@ -299,6 +309,7 @@ td .num { white-space: nowrap; }   /* a phone number, a date or an amount never 
 
 /* ---------- laptop: still 2 rows; tablet and phone: one column, the nav becomes a top bar ---------- */
 @media (max-width: 1180px) {
+  .app { --pad: 32px; --card-pad: 24px; }
   .span-3, .span-4 { grid-column: span 6; }
   /* the two list cards take the full row here: at half the canvas a name or a title of This week was
      squeezed to a few characters a line beside the day, the time and the kind */
@@ -308,8 +319,8 @@ td .num { white-space: nowrap; }   /* a phone number, a date or an amount never 
 @media (max-width: 860px) {
   /* the top bar keeps its own height and the canvas takes the rest: on a short page the bar never grows
      an empty band under the menu */
-  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
-  .sidebar { position: static; height: auto; overflow: visible; flex-direction: column; gap: 8px; padding: 12px 16px 8px; border-bottom: 1px solid var(--border); }
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; min-height: 100vh; margin: 0; border: 0; border-radius: 0; }
+  .sidebar { position: static; height: auto; overflow: visible; flex-direction: column; align-items: stretch; flex-wrap: nowrap; gap: 8px; padding: 12px 16px 8px; border-bottom: 1px solid var(--border); }
   .brand { padding: 0; }
   /* the menu: 5 items and the "More" fold that holds the other 8 (CRIT-2), with no row that scrolls
      sideways: one row of 6 on a tablet, 2 rows of 3 on a phone (640px, below). Each is a 44px tap. The
@@ -322,11 +333,12 @@ td .num { white-space: nowrap; }   /* a phone number, a date or an amount never 
   .nav-more > summary::-webkit-details-marker { display: none; }
   .nav-more > summary::after { content: ""; flex: none; width: 6px; height: 6px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: translateY(-2px) rotate(45deg); }
   .nav-more[open] > summary::after { transform: translateY(2px) rotate(-135deg); }
-  .nav-more-list { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow-raised); }
+  .nav-more-list { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0; width: auto; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow-raised); }
   .canvas { padding: 16px; }
-  .canvas::before { left: 8px; right: 8px; height: var(--wash-h-narrow); background-size: 100% var(--wash-fade-narrow), 100% 100%; }   /* the title row stacks */
+  .canvas::before { height: var(--wash-h-narrow); mask-image: linear-gradient(to bottom, black calc(100% - var(--wash-fade-narrow)), transparent); }   /* the title row stacks */
   .grid > * { grid-column: 1 / -1 !important; }
-  .title-row { flex-direction: column; align-items: stretch; }
+  .title-row { flex-direction: column; align-items: stretch; width: auto; max-width: none; padding: 16px; }
+  .panel h2 { font-size: var(--fs-title); line-height: 30px; }
   .title-row > :first-child { flex: none; }   /* a column: no 240px basis in height */
   /* the actions side by side at their own width, the next ones wrap under them; the main (primary)
      button first. The Dashboard search keeps its own whole row above the button (CRIT-3). Money: Record
@@ -354,7 +366,7 @@ td .num { white-space: nowrap; }   /* a phone number, a date or an amount never 
    the flash (as the Dashboard from 1181px, STYLE-FIX-1). Screen only: on paper the switch is hidden and the
    h1 keeps its whole line (CRIT-FIX-1) */
 @media screen and (max-width: 860px) {
-  .lang-switch { position: absolute; z-index: 1; top: 12px; right: 28px; margin: 0; }
+  .lang-switch { position: absolute; z-index: 1; top: 29px; right: 28px; margin: 0; }
   .canvas:has(> .flash) > .lang-switch { position: static; margin: 0 12px 4px; }
   .lang-switch + .title-row h1 { padding-top: 4px; }
   .lang-switch + .title-row h1::before { content: ""; float: right; width: 160px; height: 1px; }
@@ -365,6 +377,21 @@ td .num { white-space: nowrap; }   /* a phone number, a date or an amount never 
   /* the title-row pills keep 14px at the sides (20px from 641px): at 360px the 2 People buttons share one
      line in English too ("Add a Person", "Add from .xlsx file"), so the list starts one line higher (CRIT-FIXF1) */
   .title-row .btn { padding: 0 14px; }
+}
+/* Motion (the pastor's tweak values, round 4; before it nothing moved): when a page opens, the title card
+   and the cards fade in (1400ms) and the Services line draws itself; a Dashboard card grows a hair under
+   the pointer; a row lights up under the pointer. All of it only when Windows does not ask for less
+   motion; the rule after it stops every move when it does. */
+@keyframes enter { from { opacity: 0; } }
+@keyframes draw { from { stroke-dashoffset: 900; } }
+@media (prefers-reduced-motion: no-preference) {
+  .title-row, .panel, .list-toolbar, .kpi-strip { animation: enter 1400ms ease-out both; }
+  .chart .line { stroke-dasharray: 900; animation: draw 3500ms ease-out both; }
+  .dashboard > .panel { transition: transform 200ms ease-out; }
+  .dashboard > .panel:hover { transform: scale(1.005); }
+}
+@media (hover: hover) and (min-width: 641px) {
+  .row:hover { background: var(--raised); box-shadow: -8px 0 0 var(--raised), 8px 0 0 var(--raised); border-radius: 4px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
 
@@ -388,7 +415,7 @@ table.story td:first-child { width: 104px; white-space: nowrap; font-weight: 400
 /* key-value rows (Details, the current Family) */
 .kv { display: grid; margin: 0; }
 .kv > div { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px; padding: 6px 0; font-size: var(--fs-meta); line-height: 20px; }
-.kv > div + div { border-top: 1px solid var(--rule); }
+.kv > div + div { border-top: 1px dotted var(--rule); }
 .kv dt { color: var(--muted); }
 .kv dd { margin: 0; overflow-wrap: anywhere; }
 
@@ -737,62 +764,35 @@ table.documents td:last-child a { color: var(--accent-text); font-weight: 400; }
 .row:has(> .what.wrap) { align-items: baseline; }
 .row .day, .row .time { white-space: nowrap; }
 
-/* ---------- STYLE-2: a short window, and the Dashboard on one screen ----------
-   From 861px wide and up to 720px high the menu is one notch tighter, on every page: all 13 items stay in
-   view. From 1181px wide the Dashboard is 2 rows of cards under a tight title row.
-   The DASH RULE (CRIT-4), in this order: 1. no Dashboard list scrolls inside its card (the mouse wheel never
-   sticks in a card: no overflow, no fixed height on a list); 2. every row shown is whole; 3. each list shows
-   at most a fixed number of rows (dashboard.py: WEEK_ROWS, VISIT_ROWS, SENT_ROWS) and, when there are more,
-   its foot link names the full count; 4. from 1181px wide the page fits one screen at 1440x900 and 1280x800,
-   with titles on 2 lines. Each card is as high as its rows (no window-high canvas): below 800px high, and
-   from 861px to 1180px wide, the page itself may scroll. Under 861px it is the top bar. */
-@media (min-width: 861px) and (max-height: 720px) {
-  .sidebar { padding: 14px 16px; gap: 12px; }
-  .nav-item { min-height: 34px; }
-}
+/* ---------- the Dashboard (round 4) ----------
+   The DASH RULE (CRIT-4) keeps 3 of its 4 parts: 1. no Dashboard list scrolls inside its card (the mouse
+   wheel never sticks in a card: no overflow, no fixed height on a list); 2. every row shown is whole; 3.
+   each list shows at most a fixed number of rows (dashboard.py: WEEK_ROWS, VISIT_ROWS, SENT_ROWS) and, when
+   there are more, its foot link names the full count. Part 4 (the page fits one screen from 1181px) ended
+   on 24/11/2026: the pastor chose the roomy look of the mockup, and the page may scroll.
+   From 1181px: the title card is 476px wide with a 60px title; Next 7 days and Needs a visit share the
+   first row 6 + 6; the 3 cards of row 2 are at least --dash-row2 high, so they end level. */
 @media screen and (min-width: 1181px) {
   .canvas:has(> .dashboard) { padding-bottom: 12px; }
-  .canvas:has(> .dashboard) > .lang-switch { position: absolute; top: 12px; right: 40px; margin: 0; z-index: 1; }
+  .canvas:has(> .dashboard) > .lang-switch { position: absolute; top: 14px; right: var(--pad); margin: 0; z-index: 1; }
   /* a flash comes first at the canvas top: then the language switch goes back in the flow above it, as on
      every other page, so it never sits on the pale flash (STYLE-FIX-1) */
   .canvas:has(> .dashboard):has(> .flash) > .lang-switch { position: static; margin: 0 12px 4px; }
-  /* the title row is tight (the 14px canvas padding is its top): 14px more for the cards (rule 4) */
-  .canvas:has(> .dashboard) > .title-row { padding-top: 0; padding-bottom: 4px; margin-bottom: 8px; }
-  .canvas:has(> .dashboard) > .flash { margin-bottom: 8px; }
-  .dashboard { gap: 14px; }
-  .dashboard > .panel { padding: 14px 20px 12px; }
-  .dashboard .panel > header { margin-bottom: 4px; }
-  .dashboard .panel > header > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; }
-  .dashboard .panel > footer { padding-top: 8px; }
-  /* a row is as high as its content: one line 40px, a title on 2 lines 56px (2 x 24px + 8px) */
-  .dashboard .row { min-height: 40px; padding: 4px 0; }
-  /* row 2 keeps its own height (B11), at least --dash-row2. Money this month is never taller: its amounts
-     sit 4px closer, and in an empty month (its dashed box under them) the 3 zero amounts sit side by side,
-     as on the Money page, so every word still shows (STYLE-FIX-1: the empty card was 372-392px). Sent
-     documents has no cap: its 2 rows are whole, a long subject on 2 lines too (DASH RULE 2). Its date line
-     (date · Recipient · Purpose) is one line, the whole of it in its title, so a long Recipient name never
-     pushes the page past one screen (rule 4; on paper and under 1181px it may take 2 lines) */
+  .canvas:has(> .dashboard) > .title-row { max-width: 476px; margin-top: 34px; }
+  .canvas:has(> .dashboard) > .title-row .actions { flex: 0 1 auto; flex-wrap: wrap; min-width: 0; }
+  .canvas:has(> .dashboard) > .title-row h1 { font-size: 60px; line-height: 64px; }
+  .dashboard > [data-panel="this-week"], .dashboard > [data-panel="needs-visit"] { grid-column: span 6; }
+  /* row 2 keeps its own height (B11), at least --dash-row2. Money this month is never taller: in an empty
+     month (its dashed box under them) the 3 zero amounts sit side by side, as on the Money page, so every
+     word still shows. Sent documents has no cap: its 2 rows are whole, a long subject on 2 lines too (DASH
+     RULE 2). Its date line (date · Recipient · Purpose) is one line, the whole of it in its title */
   .dashboard > [data-panel="services"], .dashboard > [data-panel="money-month"],
   .dashboard > [data-panel="sent-documents"] { min-height: var(--dash-row2); }
   .dashboard > [data-panel="sent-documents"] .row .what .sub { -webkit-line-clamp: 1; line-clamp: 1; }
   .dashboard > [data-panel="money-month"] { max-height: var(--dash-row2); }
   .dashboard > [data-panel="money-month"] .kpi { padding: 4px 0; }
   .dashboard > [data-panel="money-month"]:has(> .empty) .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .dashboard > [data-panel="money-month"]:has(> .empty) .kpi + .kpi { border-top: 0; border-left: 1px solid var(--rule); padding-left: 12px; }
-}
-@media screen and (min-width: 1181px) and (max-height: 720px) {
-  /* a short window: the space between and in the cards is tighter, never the text (STYLE-FIX-3); the
-     Needs a visit hint takes the whole header width (one line, the count stays on the title line) */
-  .dashboard .row { min-height: 34px; padding: 2px 0; }
-  .dashboard > [data-panel="services"], .dashboard > [data-panel="money-month"],
-  .dashboard > [data-panel="sent-documents"] { padding-top: 10px; padding-bottom: 8px; }
-  .dashboard > [data-panel="needs-visit"] > header { flex-wrap: wrap; row-gap: 0; }
-  .dashboard > [data-panel="needs-visit"] > header > div { display: contents; }
-  .dashboard > [data-panel="needs-visit"] > header > div > .meta { order: 1; flex-basis: 100%; }
-  .dashboard { row-gap: 10px; }
-  .dashboard > [data-panel="this-week"], .dashboard > [data-panel="needs-visit"] { padding-top: 10px; padding-bottom: 8px; }
-  .dashboard > [data-panel="this-week"] > header, .dashboard > [data-panel="needs-visit"] > header { margin-bottom: 2px; }
-  .dashboard > [data-panel="this-week"] > footer, .dashboard > [data-panel="needs-visit"] > footer { padding-top: 4px; }
+  .dashboard > [data-panel="money-month"]:has(> .empty) .kpi + .kpi { border-top: 0; border-left: 1px dotted var(--rule); padding-left: 12px; }
 }
 
 /* ---------- STYLE-FIX-1: the wash grows with the head ----------
@@ -874,3 +874,45 @@ table.documents td:last-child a { color: var(--accent-text); font-weight: 400; }
   .roster-setup table.roster-roles { min-width: 760px; }
   .roster-setup table.roster-roles td:nth-child(2), .roster-setup table.roster-roles td:nth-child(3) { white-space: nowrap; }
 }
+
+/* ---------- round 4: ready for later pages (docs/redesign-pearl-for-hermes.md) ----------
+   The pastor's mockup has 4 things the pages do not write yet. Their look is here already, so the page code
+   only has to write the HTML (or set one token); DESIGN.md lists these selectors and a test keeps them.
+   1. A church picture: the page head sets --hero-image and <div class="app has-hero">. The picture fills the
+      wash and runs under the menu bar (from 861px), a little soft (blur 4px) and 4% darker, as the pastor
+      set it; the bar and the language switch get a white veil so their words read on any picture.
+   2. .figures: 3 big figures in one card under the title card (each a .figure with a .figure-label and a
+      .figure-value).
+   3. .next-item: the next Calendar item, a dark glass card at the right of the picture (screen only: on
+      paper it is plain text).
+   4. .chart .dot: a dot on each Head count of the Services chart (.last: the newest, filled). */
+.has-hero .canvas::before { background: linear-gradient(color-mix(in srgb, var(--text) 4%, transparent), color-mix(in srgb, var(--text) 4%, transparent)), var(--wash) 50% 52% / cover no-repeat; filter: blur(4px); clip-path: inset(0); }
+.has-hero .lang-switch button { background: color-mix(in srgb, var(--surface) 78%, transparent); }
+@media (min-width: 861px) {
+  .has-hero .canvas::before { top: calc(-1 * var(--bar-h)); }
+  .has-hero .sidebar { background: linear-gradient(to bottom, color-mix(in srgb, var(--surface) 88%, transparent), transparent); border-radius: var(--radius-card) var(--radius-card) 0 0; }
+}
+@media screen and (min-width: 1181px) {
+  .has-hero .canvas:has(> .dashboard) > .title-row { margin-top: 54px; }
+}
+.figures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: var(--gap); padding: 28px var(--card-pad); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow); }
+.figure { min-width: 0; }
+.figure + .figure { padding-left: 28px; border-left: 1px dotted var(--rule); }
+.figure-label { display: block; color: var(--muted); font-size: var(--fs-meta); font-weight: 600; line-height: 20px; }
+.figure-value { display: block; font-family: var(--font-display); font-size: 38px; line-height: 44px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (max-width: 860px) {
+  .figures { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 16px; }
+  .figure + .figure { padding: 12px 0 0; border-left: 0; border-top: 1px dotted var(--rule); }
+  .figure-value { font-size: var(--fs-display); line-height: 36px; }
+}
+@media screen {
+  .next-item { position: absolute; top: calc(var(--wash-h) - 170px); right: var(--pad); width: 360px; max-width: calc(100% - 2 * var(--pad)); padding: 22px; border: 1px solid color-mix(in srgb, var(--surface) 40%, transparent); border-radius: var(--radius-card); background: color-mix(in srgb, var(--text) 72%, transparent); color: var(--surface); box-shadow: var(--shadow-raised); backdrop-filter: blur(8px); }
+  .next-item .when { display: block; font-size: var(--fs-small); line-height: 18px; }
+  .next-item .what { display: block; margin-top: 8px; font-family: var(--font-display); font-size: 26px; line-height: 32px; }
+  .next-item a:focus-visible { outline-color: var(--accent-text); }
+}
+@media screen and (max-width: 1180px) {
+  .next-item { position: static; width: auto; max-width: none; margin-bottom: var(--gap); }
+}
+.chart .dot { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
+.chart .dot.last { fill: var(--accent-text); }

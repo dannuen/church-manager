@@ -599,7 +599,7 @@ class FormsAndButtonsTest(unittest.TestCase):
                          'input[type="file"].input::file-selector-button', ".title-row .input"):
             self.assertIn("border-radius: var(--radius-pill)", declarations(selector), selector)
         self.assertIn("border-radius: var(--radius-control)", declarations(".input"))
-        self.assertEqual(root_tokens()["--radius-control"], "12px")
+        self.assertEqual(root_tokens()["--radius-control"], "10px")  # round 4 (Pearl, 24/11/2026)
 
     def test_secondary_danger_hover_error_and_disabled(self):
         button = declarations(".btn")
@@ -617,9 +617,16 @@ class FormsAndButtonsTest(unittest.TestCase):
             for part in ("background: var(--raised)", "border-color: var(--border)", "color: var(--faint)",
                          "cursor: not-allowed"):
                 self.assertIn(part, rule, selector)
-        # hover never moves: the only transition or animation is the reduced-motion "none"
+        # Round 4 (24/11/2026) ends "hover never moves" (round 2). The pastor: "Try to match the tweak I did",
+        # with the tweak values fade 1400ms ease-out, the Services line draws itself, a card grows x1.005.
+        # These moves and no other, each only when Windows does not ask for less motion; then all stop.
         moves = re.findall(r"\b(?:transition|animation)\s*:\s*([^;]+)", style_css())
-        self.assertEqual(set(moves), {"none !important"})
+        self.assertEqual(set(moves), {"none !important", "enter 1400ms ease-out both", "draw 3500ms ease-out both",
+                                      "transform 200ms ease-out"})
+        calm = " ".join(body for _sel, body in media_rules("(prefers-reduced-motion: no-preference)"))
+        for move in ("enter 1400ms", "draw 3500ms", "transform 200ms", "scale(1.005)"):
+            self.assertIn(move, calm)
+        self.assertIn("animation: none !important", " ".join(b for _s, b in media_rules("(prefers-reduced-motion: reduce)")))
 
     def test_the_current_chip_is_marked_by_more_than_its_color(self):
         chip, current = declarations(".chip"), declarations('.chip[aria-current="true"]')
@@ -637,7 +644,7 @@ class FormsAndButtonsTest(unittest.TestCase):
             self.assertNotRegex(body, r"outline(?:-style|-width)?\s*:\s*(?:none|0)\b", selector)
             colors |= set(re.findall(r"outline(?:-color)?\s*:[^;]*?(var\(--[\w-]+\))", body))
         # the ring is one of the 2 tokens StyleTokensTest and test_app_color check for 3:1 on what is under it
-        self.assertEqual(colors, {"var(--accent-text)", "var(--on-accent)"})
+        self.assertEqual(colors, {"var(--accent-text)"})  # round 4: the title card is white, no ring in --on-accent
         # Tab also stops on the calendar button inside a date field: the field keeps the ring then
         for selector in DATE_RINGS:
             self.assertIn("outline: 2px solid var(--accent-text)", declarations(selector), selector)
@@ -717,13 +724,13 @@ class CardsAndChartsTest(PagesTestBase):
 
     def test_cards_are_white_with_round_corners_and_a_soft_shadow(self):
         tokens = root_tokens()
-        self.assertEqual((tokens["--radius-card"], tokens["--radius"]), ("18px", "12px"))
+        self.assertEqual((tokens["--radius-card"], tokens["--radius"]), ("10px", "10px"))  # round 4 (Pearl, 24/11/2026)
         for selector in (".panel", ".kpi-strip"):  # the Money totals strip is a light card too
             rule = rule_props(selector)
             self.assertEqual((rule["background"], rule["border"], rule["border-radius"], rule["box-shadow"]),
                              ("var(--surface)", "1px solid var(--border)", "var(--radius-card)", "var(--shadow)"),
                              selector)
-        self.assertEqual(rule_props(".panel h2")["font-weight"], "700")
+        self.assertEqual(rule_props(".panel h2")["font-weight"], "800")  # round 4 (Pearl, 24/11/2026)
         self.assertEqual(rule_props(".card-link")["color"], "var(--accent-text)")   # CRIT-1: a link shows it is one
         self.assertEqual(rule_props(".panel .meta")["color"], "var(--muted)")
         # the Private note panel: a tint, a dashed edge, no shadow (it stays .no-print)
@@ -742,7 +749,8 @@ class CardsAndChartsTest(PagesTestBase):
         self.assertEqual({p: v for p, v in card.items() if p.startswith("--")}, {
             "--text": "var(--highlight-ink)", "--muted": "var(--highlight-muted)", "--faint": "var(--highlight-muted)",
             "--rule": "var(--highlight-rule)", "--border": "var(--highlight-rule)", "--control": "var(--highlight-rule)",
-            "--accent-text": "var(--highlight-focus)"})  # the focus ring is --accent-text: white on the card
+            "--accent-text": "var(--highlight-focus)",  # the focus ring is --accent-text: white on the card
+            "--raised": "var(--highlight-rule)"})  # round 4: a row lights up under the pointer, here too
         # it stretches to the height of Next 7 days (row 1): no align-self of its own
         self.assertNotIn("align-self", declarations(DARK_CARD))
         # no other dark card: the fill is used by this one rule only
@@ -775,7 +783,7 @@ class CardsAndChartsTest(PagesTestBase):
     def test_services_chart_today_and_service(self):
         line = rule_props(".chart .line")
         self.assertEqual((line["stroke"], line["stroke-width"], line["stroke-linejoin"]),
-                         ("var(--accent)", "2.5", "round"))
+                         ("var(--accent)", "2", "round"))  # round 4 (Pearl, 24/11/2026)
         self.assertEqual((rule_props(".chart .end")["fill"], rule_props(".chart .end")["font-weight"]),
                          ("var(--accent-text)", "700"))
         self.assertEqual(rule_props(".chart .gridline")["stroke"], "var(--grid)")
@@ -948,9 +956,10 @@ class StyleFix1Test(PagesTestBase):
         tokens = root_tokens()
         # the fade is a fixed length at the bottom of the wash: from 861px a short 48px (CRIT-9: a long fade was a
         # grey-blue band in the gutters); under 861px 40% of the old fixed height, so a wash of it looks the same
-        self.assertEqual((tokens["--wash-h"], tokens["--wash-fade"]), ("340px", "48px"))
+        self.assertEqual((tokens["--wash-h"], tokens["--wash-fade"]), ("360px", "48px"))  # round 4 (Pearl, 24/11/2026)
         self.assertEqual((tokens["--wash-h-narrow"], tokens["--wash-fade-narrow"]), ("600px", "240px"))
-        self.assertTrue(tokens["--wash"].startswith("linear-gradient(180deg, transparent, var(--ground)),"))
+        # round 4: the wash paints only a church picture (--hero-image, none in style.css: the page head may set it)
+        self.assertEqual((tokens["--wash"], tokens["--hero-image"]), ("var(--hero-image)", "none"))
         self.assertEqual(rule_props(".title-row")["anchor-name"], "--title-row")
         inside, outside = at_block(style_css(), "@supports (anchor-name: --a)")
         narrow, wide = at_block(inside, "@media (max-width: 860px)")
@@ -958,12 +967,12 @@ class StyleFix1Test(PagesTestBase):
         self.assertNotIn("anchor(", outside)
         top_level = re.sub(r"@media[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}", "", outside)
         base = block_props(top_level, ".canvas::before")
-        self.assertEqual((base["height"], base["background"], base["background-size"], base["background-position"],
-                          base["background-repeat"]),
-                         ("var(--wash-h)", "var(--wash)", "100% var(--wash-fade), 100% 100%", "0 100%, 0 0", "no-repeat"))
+        self.assertEqual((base["height"], base["background"], base["mask-image"]),  # round 4: the fade is a mask
+                         ("var(--wash-h)", "var(--wash) 50% 52% / cover no-repeat",
+                          "linear-gradient(to bottom, black calc(100% - var(--wash-fade)), transparent)"))
         stacked = media_props("(max-width: 860px)", ".canvas::before")
         self.assertIn("height: var(--wash-h-narrow)", stacked)
-        self.assertIn("background-size: 100% var(--wash-fade-narrow), 100% 100%", stacked)
+        self.assertIn("black calc(100% - var(--wash-fade-narrow))", stacked)
         # with anchors: the wash ends its fade + 8px under the title row, never shorter than before
         for css, low, fade in ((wide, "var(--wash-h)", "var(--wash-fade)"),
                                (narrow, "var(--wash-h-narrow)", "var(--wash-fade-narrow)")):
@@ -1009,7 +1018,7 @@ class StyleFix1Test(PagesTestBase):
         self.assertIn("grid-template-columns: repeat(3, minmax(0, 1fr))", media_props(WIDE, empty + " .kpis"))
         side = media_props(WIDE, empty + " .kpi + .kpi")
         self.assertIn("border-top: 0", side)
-        self.assertIn("border-left: 1px solid var(--rule)", side)
+        self.assertIn("border-left: 1px dotted var(--rule)", side)  # round 4 (Pearl, 24/11/2026)
         # the real markup: in an empty month the dashed box is a child of the card, right after the amounts
         html = dashboard._money_month({"offerings": 0, "expenses": 0, "balance": 0}, TODAY, "span-4")
         self.assertIn('</div></div><p class="empty">', html)
@@ -1031,8 +1040,7 @@ class StyleFix2Test(PagesTestBase):
         for panel in DASH_LISTS:  # CRIT-4: no rule gives a Dashboard list a height or a scroll
             self.assertFalse([sel for sel, _body in css_rules() if f'[data-panel="{panel}"] .rows' in sel], panel)
         # unchanged: the row min-heights and the clamp of a title to 2 lines
-        self.assertIn("min-height: 40px", media_props(WIDE, ".dashboard .row"))
-        self.assertIn("min-height: 34px", media_props(WIDE + " and (max-height: 720px)", ".dashboard .row"))
+        self.assertFalse([sel for sel, _b in css_rules() if sel == ".dashboard .row"])  # round 4: a row as everywhere
         self.assertIn("-webkit-line-clamp: 2", declarations(".clamp-2"))
         # the real page: a long title of This week (about 110 characters, 2 lines) is a row of its <ul class="rows">
         title = "Buổi nhóm cầu nguyện đặc biệt của Ban Thanh Niên và Ban Phụ Nữ tại Nhà thờ chính"
@@ -1068,56 +1076,50 @@ class StyleFix3Test(PagesTestBase):
     at every height."""
 
     def test_bug6_row_1_always_shows_one_whole_row_in_each_list(self):
-        grid = media_wins(WIDE, ".dashboard")
-        self.assertNotIn("grid-template-rows", grid)  # CRIT-4: each row of cards is as high as its cards
+        self.assertFalse([sel for sel, body in css_rules() if ".dashboard" in sel and "grid-template-rows" in body])
         self.assertNotIn("minmax(150px", style_css())  # no fixed floor is left
         for panel in ROW1:  # CRIT-4: no floor and no scroll: the list shows its rows whole (at most a fixed number)
             self.assertFalse([sel for sel, _body in css_rules() if f'[data-panel="{panel}"] .rows' in sel], panel)
-        self.assertEqual(media_wins(WIDE, ".dashboard .row")["min-height"], "40px")  # the row min-heights as before
-        self.assertEqual(media_wins(SHORT, ".dashboard .row")["min-height"], "34px")
-        self.assertEqual(media_wins(WIDE, ".dashboard .row")["padding"], "4px 0")
-        self.assertEqual(media_wins(SHORT, ".dashboard .row")["padding"], "2px 0")
         self.assertIn("font: var(--fs-body)/24px", declarations("body"))  # a title line is 24px high
         # the real page: the Needs a visit rows are a <ul class="rows"> inside its card, under the list head
         visit = section(self.page("/"), "needs-visit")
         self.assertRegex(visit, r'<div class="list-head" aria-hidden="true">.*</div><ul class="rows">'
                                 r'<li class="row" data-row>')
 
-    def test_bug6_up_to_720px_high_the_space_around_row_1_is_tighter(self):
-        title_row = media_wins(WIDE, ".canvas:has(> .dashboard) > .title-row")  # CRIT-4: at every height
-        self.assertEqual((title_row["padding-top"], title_row["padding-bottom"], title_row["margin-bottom"]),
-                         ("0", "4px", "8px"))
-        self.assertEqual(media_wins(SHORT, ".dashboard")["row-gap"], "10px")
+    def test_round_4_the_look_ready_for_later_pages_stays_in_style_css(self):
+        """Round 4: docs/redesign-pearl-for-hermes.md tells the page code which classes to write for the parts
+        of the pastor's mockup that need new HTML. Their rules are in style.css already: no page uses them
+        yet, so this keeps them from being cleaned away as unused."""
+        selectors = {sel for rule, _body in css_rules() for sel in (s.strip() for s in rule.split(","))}
+        for ready in (".has-hero .canvas::before", ".has-hero .sidebar", ".figures", ".figure + .figure",
+                      ".figure-label", ".figure-value", ".next-item", ".next-item .what", ".chart .dot",
+                      ".chart .dot.last"):
+            self.assertIn(ready, selectors)
+        self.assertEqual(root_tokens()["--hero-image"], "none")  # the page head sets it for a church picture
+        # the amounts count up in app.js: whole dong only, never when Windows asks for less motion
+        js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+        self.assertIn('querySelectorAll(".kpi-value")', js)
+        self.assertIn('matchMedia("(prefers-reduced-motion:reduce)").matches', js)
+        self.assertIn("el.textContent = whole", js)  # it ends as the server wrote it
+
+    def test_round_4_the_dashboard_may_scroll_and_row_2_ends_level(self):
+        """Round 4 (24/11/2026) ends DASH RULE 4 (the Dashboard on one screen from 1181px). The pastor was asked
+        which wins, the rule or the roomy mockup, and chose: "My design; it may scroll". So no block makes the
+        Dashboard tighter in a short window any more, and its cards have the padding of every card."""
+        self.assertFalse(media_rules(SHORT))  # no short-window block is left
+        self.assertFalse([sel for sel, body in css_rules() if sel == ".dashboard > .panel" and "padding" in body])
+        self.assertEqual(root_tokens()["--card-pad"], "37px")
+        # the pastor's page: the title card 476px wide, and row 1 is 6 + 6
+        self.assertEqual(media_wins(WIDE, ".canvas:has(> .dashboard) > .title-row")["max-width"], "476px")
         for panel in ROW1:
-            card = f'.dashboard > [data-panel="{panel}"]'
-            props = media_wins(SHORT, card)
-            self.assertEqual((props["padding-top"], props["padding-bottom"]), ("10px", "8px"), panel)
-            self.assertEqual(media_wins(SHORT, card + " > header")["margin-bottom"], "2px", panel)
-            self.assertEqual(media_wins(SHORT, card + " > footer")["padding-top"], "4px", panel)
-        # the Needs a visit hint takes the whole header width: one line; the count stays on the title line
-        head = '.dashboard > [data-panel="needs-visit"] > header'
-        self.assertEqual((media_wins(SHORT, head)["flex-wrap"], media_wins(SHORT, head)["row-gap"]), ("wrap", "0"))
-        self.assertEqual(media_wins(SHORT, head + " > div")["display"], "contents")
-        meta = media_wins(SHORT, head + " > div > .meta")
-        self.assertEqual((meta["order"], meta["flex-basis"]), ("1", "100%"))
-        visit = section(self.page("/"), "needs-visit")
-        self.assertRegex(visit, r'^<header><div><h2 id="p-needs-visit">[^<]+</h2><span class="meta">[^<]+</span></div>'
-                                r'<span class="count num">[^<]+</span></header>')
-        # never from the text: no size, line or hiding rule in the short block
-        body = " ".join(body for sel, body in media_rules(SHORT))
-        for word in ("font-size", "line-height", "display: none", "visibility", "-webkit-line-clamp"):
-            self.assertNotIn(word, body)
-        # row 2 as it was: its height, its padding, the Money this month card
-        self.assertEqual(root_tokens()["--dash-row2"], "294px")
+            self.assertEqual(media_wins(WIDE, f'.dashboard > [data-panel="{panel}"]')["grid-column"], "span 6", panel)
+        # row 2: each card at least --dash-row2 high, so the 3 end level; Money this month never taller
+        self.assertEqual(root_tokens()["--dash-row2"], "430px")
         for panel in ("services", "money-month", "sent-documents"):
             card = f'.dashboard > [data-panel="{panel}"]'
             self.assertEqual(media_wins(WIDE, card)["min-height"], "var(--dash-row2)", panel)
-            self.assertEqual((media_wins(SHORT, card)["padding-top"], media_wins(SHORT, card)["padding-bottom"]),
-                             ("10px", "8px"), panel)
         self.assertEqual(media_wins(WIDE, CARD)["max-height"], "var(--dash-row2)")
-        # screen only: on paper every list prints whole
-        for query in (WIDE, SHORT):
-            self.assertTrue(query.startswith("screen and "))
+        self.assertTrue(WIDE.startswith("screen and "))  # screen only: on paper every list prints whole
 
 
 PHONE = "(max-width: 860px)"  # a phone or a tablet: the top bar
@@ -1298,10 +1300,19 @@ class CritTwoTest(PagesTestBase):
                          ("Chuyển đến nội dung", "Skip to content"))
 
     def test_under_861px_5_items_and_the_fold_and_from_861px_the_sidebar_as_before(self):
+        # Round 4 (24/11/2026): the pastor moved the menu to the top at every width ("Move it to the top").
+        # From 861px it is a bar of pills in a row: the same 5 items and the fold as under 861px.
         top = top_level_rules()
-        self.assertEqual(whole_rule(top, ".nav-more")["display"], "none")  # from 861px: no fold
-        self.assertEqual(whole_rule(top, ".nav")["flex-direction"], "column")  # the sidebar as before
-        self.assertFalse([sel for sel, _b in top if "in-more" in sel])  # ... with all 13 items
+        self.assertEqual(whole_rule(top, ".nav-more")["display"], "block")
+        self.assertEqual(whole_rule(top, ".nav .in-more")["display"], "none")
+        bar = whole_rule(top, ".nav")
+        self.assertEqual((bar["display"], bar["position"]), ("flex", "relative"))
+        self.assertNotIn("flex-direction", bar)  # a row
+        self.assertEqual(whole_rule(top, ".nav-item")["min-height"], "44px")
+        fold = whole_rule(top, ".nav-more-list")  # a white card under "More", over the page
+        self.assertEqual((fold["position"], fold["top"], fold["right"], fold["background"]),
+                         ("absolute", "calc(100% + 4px)", "0", "var(--surface)"))
+        self.assertFalse([p for p in whole_rule(top, ".sidebar") if p.startswith(("overflow", "scrollbar"))])
         self.assertEqual(media_wins(PHONE, ".nav .in-more")["display"], "none")
         self.assertEqual(media_wins(PHONE, ".nav-more")["display"], "block")
         nav = media_wins(PHONE, ".nav")
@@ -1442,10 +1453,12 @@ class CritFixOneTest(PagesTestBase):
 
     def test_under_861px_the_language_switch_sits_on_the_first_h1_line(self):
         self.assertEqual(media_wins(CRIT_FIX, ".lang-switch"),
-                         {"position": "absolute", "z-index": "1", "top": "12px", "right": "28px", "margin": "0"})
+                         {"position": "absolute", "z-index": "1", "top": "29px", "right": "28px", "margin": "0"})
         self.assertIn("position: relative", declarations(".canvas"))  # the box the switch is placed in
-        # 12px + a 44px tap = 56px = the 16px canvas padding + 4px + one 36px h1 line: the switch ends where
-        # the first h1 line ends, so the line under it (the next h1 line or the sub line) is never under it
+        # round 4, the title is in a card (1px edge, 16px padding): 29px + a 44px tap = 73px = the 16px canvas
+        # padding + 1px + 16px + 4px + one 36px h1 line: the switch ends where the first h1 line ends, so the
+        # line under it (the next h1 line or the sub line) is never under it
+        self.assertIn("padding: 16px", media_props(PHONE, ".title-row"))
         self.assertIn("padding: 16px", media_props(PHONE, ".canvas"))
         self.assertIn("min-height: 44px", media_props(PHONE, ".lang-switch button"))
         self.assertEqual(rule_props(".title-row h1")["line-height"], "36px")
@@ -1828,7 +1841,7 @@ class CritEightTest(PagesTestBase):
                          ['.js form[data-auto-submit] button[type="submit"]'])
         js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
         code = re.sub(r"^\s*//.*$", "", js, flags=re.M)
-        self.assertIn("Five jobs", js)
+        self.assertIn("Six jobs", js)  # round 4: the money amounts count up
         # html.js is set first, before any job: then CSS may hide what the script replaces
         self.assertLess(code.index('document.documentElement.classList.add("js")'), code.index("querySelectorAll"))
         job = code[code.index('querySelectorAll("form[data-auto-submit]")'):]
