@@ -1,5 +1,6 @@
-// Church Manager: the only script. Five jobs: live search (with a short wait), the print button, the
-// file size check, the one-send forms and the month fields that open a month on change (CRIT-8). Pages work
+// Church Manager: the only script. Six jobs: live search (with a short wait), the print button, the
+// file size check, the one-send forms, the month fields that open a month on change (CRIT-8) and the money
+// amounts that count up when a page opens (round 4). Pages work
 // without it: it marks <html class="js"> first, and only then style.css hides what the script replaces.
 // Results are built with textContent, never innerHTML.
 // No words live here: the page gives them in its own language (data-text-none, data-text-failed,
@@ -129,4 +130,27 @@
     form.addEventListener("submit", function () { typed = false; });
     window.addEventListener("pageshow", function () { input.value = input.defaultValue; typed = false; });
   });
+
+  // Round 4 (the pastor's tweak "numbers count up"): a big money amount (.kpi-value, whole dong with its
+  // dots) counts from 0 to its value in 1400ms when the page opens. Only the digits move: the sign and the
+  // dong mark stay, and the text ends exactly as the server wrote it. Not when Windows asks for less motion.
+  if (window.requestAnimationFrame && !window.matchMedia("(prefers-reduced-motion:reduce)").matches) {
+    document.querySelectorAll(".kpi-value").forEach(function (el) {
+      var whole = el.textContent;
+      var parts = /^(\s*-?)(\d{1,3}(?:\.\d{3})+)(\D*)$/.exec(whole);
+      if (!parts) { return; }
+      var amount = parseInt(parts[2].replace(/\./g, ""), 10);
+      var start = null;
+      function step(now) {
+        if (start === null) { start = now; }
+        var part = Math.min(1, (now - start) / 1400);
+        var eased = 1 - Math.pow(1 - part, 3);
+        if (part === 1) { el.textContent = whole; return; }
+        var shown = String(Math.round(amount * eased)).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+        el.textContent = parts[1] + shown + parts[3];
+        window.requestAnimationFrame(step);
+      }
+      window.requestAnimationFrame(step);
+    });
+  }
 })();

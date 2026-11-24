@@ -264,10 +264,10 @@ def props(selector, name="style.css"):
 
 
 class SurfacesTest(unittest.TestCase):
-    """COLOR-2, then STYLE-2 (the approved round-2 look in the pastor's color): the wash of the app color
-    at the top of the canvas (``.canvas::before``, ``--wash``) carries the title row, whose text is
-    ``--on-accent``; the gradient is on the active menu item and the primary buttons, with ``--on-accent``
-    text; the plain accent is on the chart line; the focus ring and the color as text on the light
+    """COLOR-2, STYLE-2, then round 4 "Pearl" (24/11/2026, the pastor's mockup): the title row is a frosted
+    white card with ink text, and the wash behind it (``.canvas::before``, ``--wash``) paints only a church
+    picture (``--hero-image``), never the app color; the gradient is on the active menu item and the primary
+    buttons, with ``--on-accent`` text; the plain accent is on the chart line; the focus ring and the color as text on the light
     surfaces are ``--accent-text``. STYLE-4 (pastor, t_121417d4): the active filter is the spec's tint
     chip. Paper never gets the gradient."""
 
@@ -285,46 +285,43 @@ class SurfacesTest(unittest.TestCase):
         tint = re.search(r"--active: ([^;]+);", (pathlib.Path(_support.ROOT) / "web" / "style.css").read_text(
             encoding="utf-8")).group(1)
         self.assertIn("var(--accent-base)", tint)  # the tint is made from the app color
-        # the wash replaces the band: one layer made only from the accent tokens and the ground
-        self.assertEqual(props(".canvas::before")["background"], "var(--wash)")
+        # round 4: the wash is the slot of a church picture; no app color in it
+        self.assertEqual(props(".canvas::before")["background"], "var(--wash) 50% 52% / cover no-repeat")
         css = re.sub(r"/\*.*?\*/", "", (pathlib.Path(_support.ROOT) / "web" / "style.css").read_text(
             encoding="utf-8"), flags=re.S)
         wash = re.search(r"--wash: ([^;]+);", re.search(r":root \{(.*?)\}", css, re.S).group(1)).group(1)
-        self.assertEqual(set(re.findall(r"var\((--[\w-]+)\)", wash)),
-                         {"--accent-dark", "--accent-base", "--accent-light", "--ground"})
+        self.assertEqual(set(re.findall(r"var\((--[\w-]+)\)", wash)), {"--hero-image"})
         self.assertNotRegex(wash, r"#|rgb|hsl")  # no raw color
-        row = props(".title-row")  # the title row on the wash: no background, no card
-        self.assertNotIn("background", row)
-        self.assertNotIn("border-radius", row)
-        self.assertEqual((row["padding"], row["color"]), ("0 12px 14px", "var(--on-accent)"))
+        row = props(".title-row")  # round 4: the title card, frosted white, its text ink
+        self.assertEqual((row["background"], row["border-radius"], row["color"]),
+                         ("color-mix(in srgb, var(--surface) 78%, transparent)", "var(--radius-card)", "var(--text)"))
         self.assertEqual(props(".btn.primary")["border-color"], "var(--accent-dark)")  # the border goes with the gradient
         self.assertEqual(props(".btn.primary:hover"), {"background": "var(--accent-dark)"})
-        # the main action on the wash: a pill of --on-accent with --accent-dark text
-        self.assertEqual(props(".title-row .btn.primary"), {"background": "var(--on-accent)",
-                                                             "color": "var(--accent-dark)",
-                                                             "border-color": "var(--on-accent)"})
+        # round 4: the main action in the title card is the primary button of every page (the gradient)
+        self.assertFalse([sel for sel, _d in css_rules("style.css") if ".title-row .btn.primary" in sel])
 
-    def test_every_text_in_the_band_is_on_accent_at_full_strength(self):
-        self.assertEqual(props(".title-row .sub")["color"], "var(--on-accent)")
+    def test_every_text_in_the_title_card_is_ink_or_the_grey_that_reads_on_white(self):
+        # round 4: the card is white (--surface at 78% over the pearl ground), so the finding line is --muted,
+        # which test_pages_ui checks at 4.5:1 on --surface and on --ground for any app color; nothing is faded
+        self.assertEqual(props(".title-row .sub")["color"], "var(--muted)")
         band_rules = [(sel, d) for sel, d in css_rules("style.css") if ".title-row" in sel]
         self.assertGreater(len(band_rules), 5)
         for sel, decls in band_rules:
             self.assertNotIn("opacity", decls, sel)
             for value in decls.values():
-                self.assertNotIn("var(--muted)", value, sel)
                 self.assertNotIn("var(--faint)", value, sel)
+                self.assertNotIn("var(--on-accent)", value, sel)
         # a control with its own white surface keeps its ink: secondary .btn, the search field, the results
         self.assertEqual((props(".btn")["background"], props(".btn")["color"]), ("var(--surface)", "var(--text)"))
         self.assertEqual(props(".input")["background"], "var(--surface)")
-        for selector in (".title-row .input", ".title-row .results"):
-            self.assertEqual(props(selector)["color"], "var(--text)", selector)
+        self.assertNotIn("color", props(".title-row .input"))  # the field keeps the ink of every field
 
     def test_the_plain_accent_stays_on_the_chart_line_and_the_focus_ring_is_accent_text(self):
         self.assertEqual(props(".chart .line")["stroke"], "var(--accent)")
         # the ring off the wash is --accent-text: at least 3:1 even for a very light color (#ffffcc)
         self.assertEqual(props(":focus-visible")["outline"], "2px solid var(--accent-text)")
-        self.assertEqual(props(".title-row :focus-visible"), {"outline-color": "var(--on-accent)"})  # on the wash
-        self.assertEqual(props(".title-row .results :focus-visible"), {"outline-color": "var(--accent-text)"})
+        # round 4: no colored band, so the one ring everywhere, in the title card too
+        self.assertFalse([sel for sel, _d in css_rules("style.css") if ".title-row" in sel and "focus-visible" in sel])
 
     def test_the_color_as_text_on_light_surfaces_is_accent_text(self):
         self.assertEqual(props(".today-tag")["color"], "var(--accent-text)")
@@ -343,7 +340,7 @@ class SurfacesTest(unittest.TestCase):
         for raw in accent | {"#1d1f20", "#3a3d3f"}:
             self.assertNotIn(raw, rest.lower(), raw)  # the default color, the old primary and its hover
         self.assertNotIn("--primary", plain)  # no rule used --primary / --primary-ink after COLOR-2
-        for selector in self.GRADIENT + (".btn.primary:hover", ".title-row .btn.primary", ".title-row .sub"):
+        for selector in self.GRADIENT + (".btn.primary:hover", ".title-row .sub"):
             for value in props(selector).values():
                 self.assertNotIn("#", value, selector)  # their colors come from the tokens only
         defined = set(re.findall(r"(--[\w-]+):", root))
