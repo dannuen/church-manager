@@ -14,7 +14,7 @@ import zipfile
 from unittest import mock
 
 import _support  # noqa: F401 - puts the repo root on sys.path
-from churchmgr import care, db, documents, fake, handover, paths, people, schema, settings
+from churchmgr import care, db, documents, fake, handover, paths, people, picture, schema, settings
 from churchmgr.pages import copies as copy_pages
 from churchmgr.pages import settings as settings_pages
 from test_pages_people import ROOT, PagesTestBase, section
@@ -125,6 +125,33 @@ class HandoverPagesTest(PagesTestBase):
         self.assertEqual(self.handovers(), before)  # no zip, no .partial file, no work folder
         self.assertEqual(self.note_count(), notes)
         self.assertEqual(sha(self.copy / db.DB_NAME), source_hash)  # the church copy is not changed
+
+    def test_handover_is_refused_when_the_church_picture_holds_private_note_text(self):
+        """PP-3H: the Copies page cannot list the church picture as a place, so the refusal is the one
+        sentence that says where (not an empty list), never the words of the Private note."""
+        conn = self.db()
+        owner = people.list_persons(conn)[2]
+        words = "PP3H tư vấn hôn nhân của chị Tuyết 7714"
+        note_id = people.add_private_note(conn, owner["id"], words)
+        self.addCleanup(conn.execute, "DELETE FROM private_note WHERE id = ?", (note_id,))  # the next tests hand over
+        data = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01caption: " + words.encode("utf-8") + b"\x00"
+        picture.save_picture(self.copy, data)
+        self.addCleanup(picture.remove_picture, self.copy)
+        before, notes, source_hash = self.handovers(), self.note_count(), sha(self.copy / db.DB_NAME)
+
+        status, _h, page = self.request("POST", "/copies/handover", {})
+        self.assertEqual(status, 400)
+        refusal = section(page.decode("utf-8"), "handover")
+        self.assertIn('<div class="refusal" role="alert"><p><strong>Handover not made.</strong> The text of a '
+                      "Private note is also in the church picture, so it would go to the next pastor. Remove the "
+                      "picture in Settings, or choose another one. No handover was made.</p>", refusal)
+        self.assertNotIn('<ul class="places">', refusal)
+        self.assertNotIn(words.encode("utf-8"), page)  # the Private note text is never shown
+        self.assertNotIn("tư vấn".encode("utf-8"), page)
+        self.assertEqual(self.handovers(), before)  # no zip, no .partial file, no work folder
+        self.assertEqual(self.note_count(), notes)
+        self.assertEqual(sha(self.copy / db.DB_NAME), source_hash)  # the church copy is not changed
+        self.assertEqual((self.copy / "church-picture").read_bytes(), data)
 
     def test_make_handover_removes_private_notes_and_keeps_the_copy(self):
         notes = self.note_count()

@@ -9,8 +9,12 @@ Steps (any failed check raises ``HandoverError`` and leaves no zip):
    note text (4+ characters) is found in the bytes of the file, nor in the bytes of any
    Document file (as UTF-8, NFC and NFD; text inside Word or PDF files is not read), and the
    Hermes door is off.
-4. Zip ``church.db`` and every file in ``documents/``, check the zip again, then
-   give it its final name ``handover-<slug>-<YYYY-MM-DD>.zip`` (``-2``, ``-3`` if taken).
+4. The church picture (``church-picture``, the church's own data), when the copy has one: copied
+   into the work folder, and the same Private note byte check runs on that copy.
+5. Zip ``church.db``, every file in ``documents/`` and the church picture (at the root, by its one
+   name), check the zip again (every one of those names is in it), then give it its final name
+   ``handover-<slug>-<YYYY-MM-DD>.zip`` (``-2``, ``-3`` if taken). With no church picture the zip is
+   as before.
 """
 
 import os
@@ -21,7 +25,7 @@ import unicodedata
 import zipfile
 from pathlib import Path
 
-from . import db, documents, paths, schema, settings, text
+from . import db, documents, paths, picture, schema, settings, text
 from .i18n import TEXT, TextError
 
 MIN_CHECK_LENGTH = 4  # Private note texts this long or longer are searched for in the bytes
@@ -35,7 +39,8 @@ class HandoverError(TextError):
 
     ``private_text_found`` is True only when the text of a Private note was found in the
     handover database or in a Document file (it is also written somewhere else in the church
-    copy). The Copies page then lists where, instead of showing the message.
+    copy). The Copies page then lists where, instead of showing the message. Found in the church
+    picture it is False: that sentence (``copies.err_text_in_picture``) says where.
     """
 
     def __init__(self, key, private_text_found=False, **params):
@@ -156,15 +161,32 @@ def _free_name(out_dir, slug, day):
     return name
 
 
-def _write_zip(zip_path, db_file, doc_files):
+def _copy_picture(folder, work):
+    """Copy the church picture of the church copy in ``folder`` into ``work``; ``None`` when it has none.
+    The check and the zip use this copy: Settings can put a new picture under the same name at any time
+    (a Document file is never changed in place), so the zip holds exactly the bytes that were checked."""
+    src = picture.picture_path(folder)
+    if src is None:
+        return None
+    target = work / db.PICTURE_NAME
+    try:
+        shutil.copyfile(src, target)
+    except FileNotFoundError:  # removed just now: no church picture
+        return None
+    return target
+
+
+def _write_zip(zip_path, db_file, doc_files, picture_file=None):
     with zipfile.ZipFile(zip_path, "x", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.write(db_file, db.DB_NAME)
         zf.mkdir(db.DOCUMENTS_DIR)
         for f in doc_files:
             zf.write(f, f"{db.DOCUMENTS_DIR}/{f.name}")
+        if picture_file is not None:  # at the root, by its one name, as in the church copy folder
+            zf.write(picture_file, db.PICTURE_NAME)
 
 
-def _check_zip(zip_path, bodies, work, doc_files):
+def _check_zip(zip_path, bodies, work, doc_files, picture_file=None):
     with zipfile.ZipFile(zip_path) as zf:
         bad = zf.testzip()
         if bad is not None:
@@ -174,6 +196,8 @@ def _check_zip(zip_path, bodies, work, doc_files):
             raise HandoverError("copies.err_zip_no_db", db=db.DB_NAME)
         if not {f"{db.DOCUMENTS_DIR}/{f.name}" for f in doc_files} <= names:
             raise HandoverError("copies.err_zip_missing_file")
+        if picture_file is not None and db.PICTURE_NAME not in names:
+            raise HandoverError("copies.err_zip_no_db", db=db.PICTURE_NAME)  # "The handover zip has no <name>."
         check_path = work / "check.db"
         check_path.write_bytes(zf.read(db.DB_NAME))
     _check_db_file(check_path, bodies)
@@ -211,9 +235,13 @@ def make_handover(copy_folder, out_dir, today=None):
         doc_files = documents.documents_on_disk(folder)
         if private_text_files(doc_files, bodies):
             raise HandoverError("copies.err_text_in_document", private_text_found=True)
+        picture_file = _copy_picture(folder, work)
+        # The Copies page cannot list the church picture as a place: its sentence says where instead.
+        if picture_file is not None and private_text_files([picture_file], bodies):
+            raise HandoverError("copies.err_text_in_picture")
         partial = out / (_free_name(out, slug, day) + ".partial")
-        _write_zip(partial, work_db, doc_files)
-        _check_zip(partial, bodies, work, doc_files)
+        _write_zip(partial, work_db, doc_files, picture_file)
+        _check_zip(partial, bodies, work, doc_files, picture_file)
         final = out / _free_name(out, slug, day)
         os.rename(partial, final)  # on Windows this never replaces a file
         partial = None

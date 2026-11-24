@@ -6,9 +6,11 @@ import zipfile
 from unittest import mock
 
 from _support import CopyTestCase, temp_folder
-from churchmgr import db, documents, handover, lists, paths, people, schema, settings
+from churchmgr import db, documents, handover, lists, paths, people, picture, schema, settings
+from churchmgr.i18n import error_text
 from churchmgr.setup import new_church_setup
 
+PICTURE = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01" + bytes(range(256)) * 4  # a JPEG start: a church picture
 NOTES = (
     "PRIVATE-NOTE-MARKER-1 Cần cầu nguyện cho hôn nhân.",
     "Đang gặp khó khăn tài chính, cần nâng đỡ.",
@@ -247,6 +249,76 @@ class HandoverTest(CopyTestCase):
 
     def test_a_door_value_that_is_not_off_stops_the_handover(self):
         self.assertEqual(self.refused_by_door("UPDATE setting SET value = 'maybe' WHERE key = ?"), [("maybe",)])
+
+    # ---- PP-3H: the church picture is the church's own data: it goes with a Handover
+
+    def files(self):
+        """``{name: sha256}`` of every file of the church copy (the source)."""
+        return {p.relative_to(self.folder).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                for p in sorted(self.folder.rglob("*")) if p.is_file()}
+
+    def test_the_zip_holds_the_church_picture_with_the_same_bytes(self):
+        picture.save_picture(self.folder, PICTURE)
+        before = self.files()
+        zip_path = self.make()
+        with zipfile.ZipFile(zip_path) as zf:
+            self.assertIsNone(zf.testzip())
+            self.assertEqual(sorted(zf.namelist()),
+                             ["church-picture", "church.db", "documents/", f"documents/{self.stored}"])
+            self.assertEqual(zf.read("church-picture"), PICTURE)  # at the root, next to church.db
+            zf.extractall(self.tmp / "next-pastor")
+        self.assertEqual(self.files(), before)  # the source church copy is not changed
+        self.assertEqual(sorted(p.name for p in self.out.iterdir()), [zip_path.name])  # no work files left
+        # The next pastor opens the zip as a church copy: the picture is there.
+        self.assertEqual(picture.picture_path(self.tmp / "next-pastor").read_bytes(), PICTURE)
+
+    def test_with_no_church_picture_the_zip_names_are_as_before(self):
+        (self.folder / "church-picture").mkdir()  # a folder by that name is not a church picture
+        with zipfile.ZipFile(self.make()) as zf:
+            self.assertEqual(sorted(zf.namelist()), ["church.db", "documents/", f"documents/{self.stored}"])
+
+    PICTURE_TEXT = ("The text of a Private note is also in the church picture, so it would go to the next pastor. "
+                    "Remove the picture in Settings, or choose another one. No handover was made.")
+    PICTURE_TEXT_VI = ("Chữ của một Ghi chú cá nhân cũng có trong Hình Hội Thánh, nên sẽ đến tay mục sư kế nhiệm. "
+                       "Hãy gỡ hình trong Cài đặt, hoặc chọn hình khác. Chưa tạo Bàn giao.")
+
+    def refused_by_picture(self, form):
+        """A church picture holding a Private note's text in Unicode ``form`` (as a photo may keep a
+        caption in its bytes): the Handover must refuse, leave nothing and change nothing."""
+        note = "PRIVATE-NOTE-MARKER tư vấn hôn nhân của chị Tuyết"
+        people.add_private_note(self.conn, self.p, note)
+        data = PICTURE + b"caption: " + unicodedata.normalize(form, note).encode("utf-8") + b"\x00"
+        picture.save_picture(self.folder, data)
+        before = self.files()
+        with self.assertRaises(handover.HandoverError) as ctx:
+            self.make()
+        self.assertEqual(ctx.exception.key, "copies.err_text_in_picture")
+        self.assertEqual(str(ctx.exception), self.PICTURE_TEXT)
+        self.assertEqual(error_text(ctx.exception, "vi"), self.PICTURE_TEXT_VI)
+        self.assertFalse(ctx.exception.private_text_found)  # the Copies page shows this sentence, it says where
+        self.assertNotIn("tư vấn", unicodedata.normalize("NFC", str(ctx.exception)))  # never the note words
+        self.assertEqual(list(self.out.iterdir()), [])  # no zip, no .partial file, no work folder
+        self.assertEqual(self.files(), before)  # the source church copy is not changed
+        self.assertEqual(len(people.list_private_notes(self.conn, self.p)), 5)
+
+    def test_a_church_picture_with_the_note_text_nfc_is_refused(self):
+        self.refused_by_picture("NFC")
+
+    def test_a_church_picture_with_the_note_text_nfd_is_refused(self):
+        self.refused_by_picture("NFD")
+
+    def test_the_zip_check_wants_the_church_picture(self):
+        picture.save_picture(self.folder, PICTURE)
+        write_zip = handover._write_zip
+
+        def without_picture(zip_path, db_file, doc_files, picture_file=None):
+            write_zip(zip_path, db_file, doc_files)
+
+        with mock.patch.object(handover, "_write_zip", without_picture):
+            with self.assertRaises(handover.HandoverError) as ctx:
+                self.make()
+        self.assertEqual(str(ctx.exception), "The handover zip has no church-picture. No handover was made.")
+        self.assertEqual(list(self.out.iterdir()), [])
 
 
 class NewChurchSetupTest(unittest.TestCase):

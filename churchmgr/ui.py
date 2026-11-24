@@ -16,7 +16,7 @@ import html
 import threading
 import urllib.parse
 
-from . import app_color, i18n, money, settings
+from . import app_color, i18n, money, picture, settings
 from .i18n import t
 
 NAV = (  # (key, TEXT key of the label, href)
@@ -275,10 +275,24 @@ def link_button(text, href, kind="secondary"):
 
 # ---------------------------------------------------------------- layout
 
-def _app_color_style():
+def _picture_version():
+    """The ``st_mtime_ns`` of the church picture of the open church copy (``picture.picture_version``), or
+    ``None``: no picture, no church copy open (first run), outside a request, or it cannot be read."""
+    req = current_request()
+    if req is None or req.state.copy_folder is None:
+        return None
+    try:
+        return picture.picture_version(req.state.copy_folder)
+    except Exception:  # the folder cannot be read: the top of the page stays plain
+        return None
+
+
+def _app_color_style(hero=None):
     """``<style>`` that sets the 4 colors of the app color of the open church copy (``app_color.theme`` of
     a checked ``#rrggbb``), right after style.css. No church copy open (first run), or it cannot be read:
-    nothing, and style.css keeps its default colors."""
+    nothing, and style.css keeps its default colors.
+    ``hero``: the :func:`_picture_version` of the church picture (``page`` only). Then one more token,
+    ``--hero-image:url(/church-picture?v=<hero>)``: the wash of ``.has-hero`` paints it (web/style.css)."""
     req = current_request()
     if req is None or req.state.copy_folder is None:
         return ""
@@ -286,10 +300,13 @@ def _app_color_style():
         values = app_color.theme(settings.get_app_color(req.conn))
     except Exception:  # the church copy cannot be read: the error page still needs its head
         return ""
-    return "<style>:root{" + ";".join(f"{name}:{value}" for name, value in values.items()) + "}</style>\n"
+    parts = [f"{name}:{value}" for name, value in values.items()]
+    if hero is not None:
+        parts.append(f"--hero-image:url(/church-picture?v={int(hero)})")
+    return "<style>:root{" + ";".join(parts) + "}</style>\n"
 
 
-def _head(title):
+def _head(title, hero=None):
     lang = current_lang()
     # The title holds pastor data (a name, the church name), and no element can carry its own lang there.
     title_tag = '<title lang="vi">' if lang == "vi" else "<title>"
@@ -298,7 +315,7 @@ def _head(title):
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f'{title_tag}{h(title)}</title>\n'
         '<link rel="stylesheet" href="/static/style.css">\n'
-        + _app_color_style()
+        + _app_color_style(hero)
         + '<link rel="stylesheet" href="/static/print.css">\n'
         '<script src="/static/app.js" defer></script>\n</head>\n'
     )
@@ -385,8 +402,11 @@ def page(title, body_html, active=None, sub=None, actions="", lang=None):
     on the right of the title. ``lang="vi"`` when the h1 holds a Vietnamese name.
     With no church copy open (first run) there is no navigation. The language switch comes first in ``main``;
     a skip link to ``main#main`` is the first thing in ``<body>``.
+    With a church picture (``picture.py``) the head sets ``--hero-image`` and the app is
+    ``<div class="app has-hero">``; with none the page is as it was before the picture.
     """
     req = current_request()
+    hero = _picture_version()
     church = req.church_name if req is not None else None
     msg = req.query.get("msg") if req is not None else None
     flash = f'<p class="flash" role="status">{h(msg)}</p>' if msg else ""
@@ -395,8 +415,9 @@ def page(title, body_html, active=None, sub=None, actions="", lang=None):
         '<aside class="sidebar"><span class="brand"><span class="brand-app">Church Manager</span></span></aside>'
     )
     return (
-        _head(full_title)
-        + f'<body>\n{_skip_link()}<div class="app">{side}<main class="canvas" id="main" tabindex="-1">'
+        _head(full_title, hero)
+        + f'<body>\n{_skip_link()}<div class="{"app" if hero is None else "app has-hero"}">{side}'
+        '<main class="canvas" id="main" tabindex="-1">'
         + lang_switch() + flash + title_row(title, sub, actions, lang) + body_html
         + "</main></div>\n</body>\n</html>\n"
     )

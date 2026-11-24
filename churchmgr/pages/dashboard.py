@@ -1,5 +1,9 @@
 """Dashboard ``/``: what needs the pastor this week? Six panels on one page.
 
+Round 4: between the title row and the panels, the next Calendar item (``<aside class="next-item">``, the
+first row of Next 7 days) and a strip of 3 figures (``<section class="figures">``); both are styled in
+``web/style.css``. Neither is a panel: they have no ``data-panel`` and no ``data-row``.
+
 Each panel is ``<section data-panel="NAME">``; each data line in it has ``data-row``.
 A panel that cannot load keeps its frame and says so (the error goes to the console).
 Words on screen come from the text table (section ``dashboard``), also the words of the live search:
@@ -67,6 +71,7 @@ def services_svg(rows):
     The y scale fits the counts (``fit_scale``), not 0 to a round top, so a change from 91 to 74 shows;
     its two lines, the low and the high one, carry their numbers, so the scale is honest. The low line is
     the darker base line only when it is 0.
+    Each Head count has a dot (``.chart .dot``), the newest a bigger filled one (``.dot.last``).
     With more than 5 Services every second date is labelled, counted back from the last one.
     """
     counts = [r["count"] for r in rows]
@@ -95,6 +100,12 @@ def services_svg(rows):
     points = " ".join(f"{x(i):.2f},{y(c):.1f}" for i, c in enumerate(counts))
     parts.append(f'<svg class="plot" width="100%" height="{height}" viewBox="0 0 100 {height}" '
                  f'preserveAspectRatio="none"><polyline class="line" points="{points}"/></svg>')
+    # round 4: a dot on each Head count, the newest filled; in the outer chart (in the stretched plot a
+    # circle turns into an oval), before the last number so the number stays on top
+    for i, c in enumerate(counts):
+        newest = i == n - 1
+        parts.append(f'<circle class="dot{" last" if newest else ""}" cx="{x(i):.2f}%" cy="{y(c):.1f}" '
+                     f'r="{"4.5" if newest else "3.5"}"/>')
     parts.append(f'<text class="end" x="100%" dx="8" y="{y(counts[-1]) + 4:.1f}">{counts[-1]}</text>')
     label = "; ".join(f"{ui.fmt_date(r['starts_at'])} {r['count']}" for r in rows)
     return (f'<svg class="chart" width="100%" height="{height}" role="img" '
@@ -140,6 +151,40 @@ def _day_label(day, today):
     return f"{ui.fmt_weekday(day)} {day.strftime('%d/%m')}"
 
 
+def _next_item(items, today):
+    """Round 4: the first row of Next 7 days (``items[0]``) as a small dark card: its day, time and kind on
+    one line, its title as a link to it. Nothing when the 7 days did not load or have no Calendar item.
+    The title shows 2 lines at most (``clamp2``, its whole text in the title and on paper): from 1181px the
+    card has a fixed top, so a 3rd line ran over the figures strip under it. A space before the title: on
+    paper the card is plain text, and the kind and the title must not run together."""
+    if items is _FAILED or not items:
+        return ""
+    it = items[0]
+    day = _dt.date.fromisoformat(it["starts_at"][:10])
+    when = " · ".join((_day_label(day, today), ui.fmt_time(it["starts_at"]), ui.calendar_kind(it["kind"])))
+    return (f'<aside class="next-item" aria-label="{h(t("dashboard.next_item"))}">'
+            f'<span class="when">{h(when)}</span> '
+            f'<a class="what" href="/calendar/{it["id"]}" lang="vi">{clamp2(h(it["title"]), it["title"])}</a>'
+            '</aside>')
+
+
+def _figures(week, needs, totals, today):
+    """Round 4: the strip of 3 figures under the title row: the Calendar items of the Next 7 days, the People
+    who need a visit and the Balance of this month, each with its word (no 01 02 03). A value that did not
+    load is a dash; its label stays."""
+    def figure(label, value_html):
+        return (f'<div class="figure"><span class="figure-label">{h(label)}</span>'
+                f'<span class="figure-value num">{value_html}</span></div>')
+
+    items = ui.DASH if week is _FAILED else h(tn("dashboard.figure_items", len(week)))
+    persons = ui.DASH if needs is _FAILED else h(tn("dashboard.persons", len(needs)))
+    balance = ui.DASH if totals is _FAILED else h(ui.fmt_money(totals["balance"]))
+    month = ui.fmt_month(today.year, today.month)
+    return (f'<section class="figures" aria-label="{h(t("dashboard.figures"))}">'
+            + figure(t("dashboard.this_week"), items) + figure(t("dashboard.needs_visit"), persons)
+            + figure(f'{t("dashboard.balance")}, {month}', balance) + "</section>")
+
+
 def _this_week(items, today, span):
     name, title = "this-week", t("dashboard.this_week")
     if items is _FAILED:
@@ -150,7 +195,8 @@ def _this_week(items, today, span):
     for it in items[:WEEK_ROWS]:
         day = _dt.date.fromisoformat(it["starts_at"][:10])
         kind = ui.calendar_kind(it["kind"])
-        sub, words = [h(kind)], [kind]
+        # round 4: the kind is a small tag; the place or the visited name after it stays plain grey text
+        sub, words = [f'<span class="tag">{h(kind)}</span>'], [kind]
         if it["kind"] == "Visit" and it["visit_name"] and it["visit_name"] not in it["title"]:
             sub.append(vi(it["visit_name"]))
             words.append(it["visit_name"])
@@ -311,12 +357,13 @@ def dashboard(req):
     next_number = _load(sent.next_number, conn, today.year)
     recent = _load(_recent_sent, conn, today.year)
 
-    # how many need a visit is the count on the Needs a visit card: not again in this line (CRIT-3)
-    finding = [f"{ui.fmt_weekday(today)} {ui.fmt_date(today)}"]
-    if week is not _FAILED:
-        finding.append(tn("dashboard.finding_week", len(week)))
+    # CRIT-3, a number is said once: the line under the h1 is the day only; how many Calendar items the
+    # Next 7 days have is in the figures strip
+    finding = f"{ui.fmt_weekday(today)} {ui.fmt_date(today)}"
     body = (
-        '<div class="grid dashboard">'
+        _next_item(week, today)
+        + _figures(week, needs, totals, today)
+        + '<div class="grid dashboard">'
         + _this_week(week, today, "span-7")
         + _needs_visit(needs, months, "span-5")
         + _services(counts, ROW2_SPANS[0])
@@ -325,7 +372,7 @@ def dashboard(req):
         + "</div>"
     )
     actions = _search_panel() + ui.link_button(t("dashboard.plan_visit"), "/care", "primary")
-    return Response.html(ui.page(t("dashboard.title"), body, "dashboard", sub=h(" · ".join(finding)),
+    return Response.html(ui.page(t("dashboard.title"), body, "dashboard", sub=h(finding),
                                  actions=actions))
 
 

@@ -62,11 +62,7 @@ Only inside `@media (prefers-reduced-motion: no-preference)`; the `reduce` rule 
 |---|---|---|
 | Line height 1.15 | body is 24px by a guard (the phone language switch sits on the first title line), and 1.15 clips ầ, ế between lines | titles are tight; body stays 24px |
 | Row density 7 | rows stay 44px taps | 8px, as before |
-| Heading letter spacing 2.5 | the Avoid-word test forbids it in `web/` | in the Hermes instructions |
 | Arrow slides 1px | the "›" of a card link must never wrap alone to the next line (final walk) | left out |
-| Dot on every Service | the chart SVG has only the line | in the Hermes instructions; `.chart .dot` is ready |
-| The picture, menu on it, its position, blur and darkening | needs a Settings field and a file in the church copy | in the Hermes instructions; `.has-hero` is ready |
-| The figures strip, the "next Calendar item" card | new HTML | in the Hermes instructions; `.figures`, `.next-item` are ready |
 
 ## Rejected from the generated design system (ui-ux-pro-max), and why
 
@@ -80,11 +76,12 @@ Kept from it: near-black on a light ground, 4.5:1 for text, hover feedback of 15
 
 ## Selectors ready for later pages
 
-No page writes these yet; `docs/redesign-pearl-for-hermes.md` says how to use them, and
-`test_round_4_the_look_ready_for_later_pages_stays_in_style_css` keeps them:
+The pages write them now:
 
-`.has-hero`, `--hero-image`, `.figures`, `.figure`, `.figure-label`, `.figure-value`, `.next-item`,
-`.next-item .when`, `.next-item .what`, `.chart .dot`, `.chart .dot.last`.
+- The Dashboard: `.figures`, `.next-item`, `.chart .dot` and the kind of a Calendar item as a `.tag`.
+- Every page head: `.has-hero` and `--hero-image`, when a church picture is set in Settings.
+- `.title-row h1, .panel h2` have letter spacing 2.5px (the pastor's yes, 2026-11-24).
+- `test_round_4_the_look_ready_for_later_pages_stays_in_style_css` keeps their rules in `web/style.css`.
 
 ## Kept as is
 
