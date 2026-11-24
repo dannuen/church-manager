@@ -641,6 +641,7 @@ def page_paths(db_path):
                ("/money?month=nope", 400, "page"), ("/documents/new", 400, "page"),  # a Document needs one link
                ("/calendar/roster?quarter=nope", 400, "page"), ("/calendar/roster/roles/999999", 404, "page"),
                ("/language", 405, "page"),
+               ("/church-picture", 404, "page"),  # the fake church has no church picture: the 404 page (HTML)
                ("/api/search?q=nguyen", 200, "answer"), (f"/documents/{document}/file", 200, "answer"),
                ("/people/file/empty.xlsx", 200, "answer")]
     return listed
