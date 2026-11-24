@@ -1188,6 +1188,18 @@ TEXT = {
         "copies.title": "Dữ liệu",
         "copies.handover": "Bàn giao",
         # --- settings
+        "settings.panel_picture": "Hình Hội Thánh",
+        "settings.picture": "Hình",
+        "settings.picture_hint": "JPEG, PNG hoặc WebP, tối đa {mb} MB. Hình hiện ở đầu mỗi trang.",
+        "settings.picture_save": "Lưu hình",
+        "settings.picture_remove": "Gỡ hình",
+        "settings.picture_alt": "Hình Hội Thánh",
+        "settings.picture_none": "Chưa có hình: đầu trang để trơn.",
+        "settings.picture_saved": "Đã lưu hình Hội Thánh.",
+        "settings.picture_removed": "Đã gỡ hình Hội Thánh.",
+        "settings.err_picture_kind": "Hãy chọn một hình JPEG, PNG hoặc WebP.",
+        "settings.err_picture_size": "Hình lớn hơn {mb} MB. Hãy chọn hình nhỏ hơn.",
+        "settings.err_picture_none": "Hãy chọn một hình trước.",
         "settings.church_name_hint": "Hiện ở đầu mỗi trang, trên Tổng kết dâng hiến và trong tên tệp Bàn giao.",
         "settings.care_months": "Nhắc thăm viếng (tháng)",
         "settings.care_months_hint": "Một Người cần thăm viếng khi lần Thăm viếng gần nhất đã lâu hơn số tháng "
@@ -2429,6 +2441,18 @@ TEXT = {
         "copies.title": "Copies",
         "copies.handover": "Handover",
         # --- settings
+        "settings.panel_picture": "Church picture",
+        "settings.picture": "Picture",
+        "settings.picture_hint": "JPEG, PNG or WebP, at most {mb} MB. It shows at the top of every page.",
+        "settings.picture_save": "Save the picture",
+        "settings.picture_remove": "Remove the picture",
+        "settings.picture_alt": "The church picture",
+        "settings.picture_none": "No picture yet: the top of the page stays plain.",
+        "settings.picture_saved": "The church picture is saved.",
+        "settings.picture_removed": "The church picture is removed.",
+        "settings.err_picture_kind": "Choose a JPEG, PNG or WebP picture.",
+        "settings.err_picture_size": "The picture is over {mb} MB. Choose a smaller one.",
+        "settings.err_picture_none": "Choose a picture first.",
         "settings.church_name_hint": "Shown at the top of every page, on the Giving statement and in the Handover "
                                      "file name.",
         "settings.care_months": "Care reminder time (months)",
@@ -2582,7 +2606,9 @@ def error_text(exc, lang=None):
 
 # ---------------------------------------------------------------- English left on a page
 
-ALLOW = frozenset({"hermes", "email", "pdf", "ok", "sqlite"})
+# Names that read the same in both languages: Hermes, email, the file kinds (PDF; JPEG, PNG and WebP of the
+# church picture), OK, SQLite.
+ALLOW = frozenset({"hermes", "email", "pdf", "ok", "sqlite", "jpeg", "png", "webp"})
 _WORD = re.compile(r"[^\W\d_]+")
 _PARAM = re.compile(r"\{[^{}]*\}")
 _MARKER = re.compile(r"\[\[[^\[\]]*\]\]")

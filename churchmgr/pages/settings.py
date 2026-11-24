@@ -6,9 +6,14 @@ The care reminder time is a whole number of months from 1 to 24: a Person needs 
 last Visit is older than that. The page shows what the setting gives today (how many People need a
 visit), next to the field that changes it. The Hermes door (Off by default) lets the optional Hermes
 helper use this church copy through ``python -m churchmgr.agent``.
+
+The Church picture panel (round 4, part 1) saves or removes the one church picture (``churchmgr/picture.py``),
+in its own forms: ``POST /settings/church-picture`` (multipart, one file field ``picture``) and
+``POST /settings/church-picture/remove``. ``GET /church-picture`` gives that file to the pages; no part of
+its path or query reaches the file system.
 """
 
-from .. import care, i18n, settings, text, ui
+from .. import care, i18n, picture, settings, text, ui
 from ..db import transaction
 from ..i18n import TextError, t, tn
 from ..server import Response
@@ -16,6 +21,8 @@ from ..ui import h, vi
 from .people import form_error, panel
 
 MIN_MONTHS, MAX_MONTHS = 1, 24
+PICTURE_ACCEPT = "image/jpeg,image/png,image/webp"  # the browser's file chooser; the bytes are checked after
+PREVIEW_WIDTH = 240  # px: the small preview of the church picture fits a 390px screen
 
 
 def parse_months(value):
@@ -44,6 +51,27 @@ def _shown_color(conn, posted):
         return settings.check_app_color(posted)
     except ValueError:
         return settings.get_app_color(conn)
+
+
+def _picture_panel(req, error=None):
+    """The Church picture panel: a small preview of the picture (or the line that there is none), the form
+    that saves a new one and, with a picture, the Remove form. ``error``: the sentence of a refused file,
+    already in the language of the page."""
+    version = picture.picture_version(req.state.copy_folder)
+    mb = picture.MAX_SIZE // picture.MB
+    inner = (
+        ui.field(t("settings.picture"), "picture", "", type="file", accept=PICTURE_ACCEPT, required=True,
+                 error=error, hint=t("settings.picture_hint", mb=mb), data_max_bytes=picture.MAX_SIZE,
+                 data_text_too_large=t("settings.err_picture_size", mb=mb))
+        + ui.button(t("settings.picture_save"))
+    )
+    save = ui.form("/settings/church-picture", inner, multipart=True)
+    if version is None:
+        return panel("settings-picture", t("settings.panel_picture"), save, meta=h(t("settings.picture_none")))
+    preview = (f'<p><img src="{h(ui.url("/church-picture", v=version))}" alt="{h(t("settings.picture_alt"))}"'
+               f' width="{PREVIEW_WIDTH}"></p>')
+    remove = ui.form("/settings/church-picture/remove", ui.button(t("settings.picture_remove"), "secondary"))
+    return panel("settings-picture", t("settings.panel_picture"), preview + save + remove)
 
 
 def _view(req, values=None, errors=None, status=200):
@@ -81,7 +109,8 @@ def _view(req, values=None, errors=None, status=200):
                       copies=f'<a href="/copies">{h(t("core.nav_copies"))}</a>')
     side = panel("settings-effect", t("settings.panel_care"), effect + f'<p class="hint">{links}</p>',
                  meta=h(t("settings.panel_care_meta")))
-    body = (f'<div class="grid settings"><div class="span-7 stack">{form_panel}</div>'
+    body = (f'<div class="grid settings"><div class="span-7 stack">{form_panel}'
+            f'{_picture_panel(req, errors.get("picture"))}</div>'
             f'<div class="span-5 stack">{side}</div></div>')
     sub = f"{vi(req.church_name)} · {h(t('settings.sub', months=tn('core.months', months)))}"
     return Response.html(ui.page(t("settings.title"), body, "settings", sub=sub), status)
@@ -137,6 +166,41 @@ def settings_post(req):
                                                        door=t(f"settings.door_state_{door_now}"))))
 
 
+def picture_post(req):
+    """Save the chosen file as the church picture, then back to Settings. A refused file (none, over 5 MB,
+    not a JPEG, PNG or WebP): the Settings page again, status 400, with the sentence at the field."""
+    chosen = req.files.get("picture")
+    try:
+        picture.save_picture(req.state.copy_folder, chosen[1] if chosen else b"")
+    except ValueError as exc:
+        return _view(req, errors={"picture": i18n.error_text(exc)}, status=400)
+    return Response.redirect(ui.url("/settings", msg=t("settings.picture_saved")))
+
+
+def picture_remove_post(req):
+    """Remove the church picture (only that file), then back to Settings. With none: nothing to do."""
+    picture.remove_picture(req.state.copy_folder)
+    return Response.redirect(ui.url("/settings", msg=t("settings.picture_removed")))
+
+
+def picture_file(req):
+    """``GET /church-picture``: the one church picture file, with the content type of its bytes and
+    ``Cache-Control: no-cache`` (the pages ask for ``?v=<file time>``, which is never read). No picture, or
+    no church copy open: the 404 page. The file name is fixed: nothing of the request is used."""
+    folder = req.state.copy_folder
+    path = None if folder is None else picture.picture_path(folder)
+    try:
+        data = b"" if path is None else path.read_bytes()
+    except FileNotFoundError:  # removed just now
+        data = b""
+    kind = picture.picture_type(data)
+    if kind is None:  # also a file that is not a picture (changed outside the app): never sent
+        body = (f'<p class="lead">{h(t("settings.picture_none"))}</p>'
+                f'<p><a href="/settings">{h(t("core.nav_settings"))}</a></p>')
+        return Response.html(ui.page(t("people.not_found_title", what=t("settings.panel_picture")), body), 404)
+    return Response(200, data, kind, {"Cache-Control": "no-cache"})
+
+
 def language_post(req):
     """The language switch (``lang`` = ``vi`` or ``en``, else 400). Saved in the open church copy; with no
     church copy open (first run) kept in server memory for this run only. Then back to ``next``."""
@@ -152,5 +216,8 @@ def language_post(req):
 ROUTES = [
     ("GET", "/settings", settings_page),
     ("POST", "/settings", settings_post),
+    ("POST", "/settings/church-picture", picture_post),
+    ("POST", "/settings/church-picture/remove", picture_remove_post),
+    ("GET", "/church-picture", picture_file),
     ("POST", "/language", language_post),
 ]

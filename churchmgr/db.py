@@ -9,6 +9,7 @@ from . import i18n, paths, schema, settings, text
 
 DB_NAME = "church.db"
 DOCUMENTS_DIR = "documents"
+PICTURE_NAME = "church-picture"  # the one church picture file, next to documents/ (churchmgr/picture.py)
 
 _savepoints = count(1)
 
