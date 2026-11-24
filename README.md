@@ -188,6 +188,7 @@ Cách mở thư mục đó: bấm phím **Windows + R**, gõ `%LOCALAPPDATA%\Chu
 
 Bàn giao tạo một bản bàn giao để trao cho mục sư kế tiếp của cùng Hội Thánh.
 **Ghi chú cá nhân (Private notes) của bạn bị xoá khỏi bản bàn giao này.** Dữ liệu của bạn không bị thay đổi.
+**Hình Hội Thánh** (chọn trong **Cài đặt**) được giữ trong dữ liệu Hội Thánh, nên cũng đi theo bản bàn giao.
 
 1. Trong phần mềm, bấm **Dữ liệu** ở thanh menu.
 2. Bấm **Tạo Bàn giao**.
