@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mẫu 3 · Đất nung · Trang chủ</title>
+<style>
+/* Mockup only: fake church, Windows fonts, no motion, no outside file. */
+:root {
+  --sand: #eadfd1; --card: #f8f2e9; --ink: #2b2623; --soft: #5e554c; --line: #e0d3c2;
+  --clay: #a8401b; --clay-lit: #e9814a; --clay-wash: #f3dcc8; --coal: #2f2b29; --coal-soft: #cfc6bd; --up: #2c6a3c;
+  --sans: "Segoe UI Variable Display", "Segoe UI", Tahoma, sans-serif;
+  --lift: inset 0 1px 0 #fff, 0 1px 2px rgba(74,48,30,.12), 0 12px 26px rgba(74,48,30,.13);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--sand); color: var(--ink); font: 16px/24px var(--sans); }
+a { color: inherit; }
+.num { font-variant-numeric: tabular-nums; }
+svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.app { display: grid; grid-template-columns: 108px 1fr; gap: 8px; max-width: 1440px; margin: 0 auto; padding: 24px 28px 0 20px; }
+
+/* tile menu */
+.rail { display: flex; flex-direction: column; gap: 10px; }
+.logo { display: grid; place-items: center; height: 84px; border-radius: 22px; background: var(--clay); color: #fff; box-shadow: inset 0 2px 0 rgba(255,255,255,.3), 0 10px 20px rgba(120,50,20,.3); text-decoration: none; }
+.logo svg { width: 38px; height: 38px; fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.rail nav { display: flex; flex-direction: column; gap: 10px; }
+.rail nav a { display: grid; justify-items: center; align-content: center; gap: 2px; min-height: 66px; padding: 6px 2px; border-radius: 18px; background: var(--card); box-shadow: var(--lift); text-decoration: none; font-size: 13px; line-height: 18px; font-weight: 600; text-align: center; }
+.rail nav a svg { color: var(--clay); }
+.rail nav a[aria-current] { background: var(--coal); color: #fff; box-shadow: inset 0 1px 0 rgba(255,255,255,.2), 0 10px 20px rgba(40,30,24,.3); }
+.rail nav a[aria-current] svg { color: var(--clay-lit); }
+
+/* board */
+.board { display: grid; grid-template-columns: repeat(12, 1fr); gap: 20px; align-content: start; min-width: 0; padding-bottom: 28px; }
+.s7 { grid-column: span 7; } .s5 { grid-column: span 5; } .s6 { grid-column: span 6; }
+.card { background: var(--card); border-radius: 26px; padding: 26px; box-shadow: var(--lift); display: flex; flex-direction: column; min-width: 0; }
+.card h2 { font: 700 22px/28px var(--sans); margin: 0; }
+.card header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+.meta { display: block; font-size: 14px; color: var(--soft); }
+.label { font-size: 13px; font-weight: 700; color: var(--clay); }
+
+.hello { padding: 10px 6px 0; }
+.hello h1 { font: 700 46px/52px var(--sans); margin: 0 0 4px; }
+.hello p { margin: 0 0 20px; font-size: 18px; line-height: 28px; color: var(--soft); }
+.find label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+.find div { display: flex; gap: 10px; max-width: 560px; }
+.find input { flex: 1; min-width: 0; height: 52px; border: 1px solid #cbb9a3; border-radius: 18px; padding: 0 18px; font: inherit; color: var(--ink); background: #fffdf9; box-shadow: inset 0 2px 4px rgba(74,48,30,.08); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 52px; padding: 0 22px; border: 0; border-radius: 18px; background: var(--coal); color: #fff; font: 600 15px var(--sans); text-decoration: none; cursor: pointer; box-shadow: inset 0 1px 0 rgba(255,255,255,.2), 0 8px 16px rgba(40,30,24,.25); }
+.btn.clay { background: var(--clay); box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 8px 16px rgba(120,50,20,.28); }
+.btn.soft { background: var(--card); color: var(--ink); box-shadow: var(--lift); }
+
+/* dark tile: Services */
+.dark { background: var(--coal); color: #fff; box-shadow: inset 0 1px 0 rgba(255,255,255,.16), 0 14px 28px rgba(40,30,24,.3); }
+.dark .meta { color: var(--coal-soft); }
+.headline { display: flex; align-items: center; gap: 16px; }
+.headline .big { font: 600 60px/60px var(--sans); }
+.headline small { font-size: 14px; line-height: 20px; color: var(--coal-soft); }
+.headline strong { color: #9fe0ae; }
+.bars { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.16); align-items: end; }
+.bars div { display: grid; justify-items: center; gap: 6px; font-size: 13px; line-height: 18px; }
+.bars i { display: block; width: 100%; max-width: 34px; border-radius: 8px 8px 4px 4px; background: #6d655f; }
+.bars div:last-child i { background: var(--clay-lit); }
+.bars div:last-child b { color: #ffd2b3; }
+.bars span { color: var(--coal-soft); font-size: 12px; }
+.dark .go { margin-top: 14px; color: #ffd2b3; }
+
+/* ticket: the next Calendar item */
+.ticket { display: grid; grid-template-columns: 1fr 168px; border-radius: 20px; background: #fffdf9; box-shadow: 0 1px 2px rgba(74,48,30,.14), 0 8px 18px rgba(74,48,30,.1); margin-bottom: 6px; text-decoration: none; overflow: hidden; }
+.ticket .info { padding: 20px 22px; }
+.ticket h3 { font: 700 28px/34px var(--sans); margin: 4px 0 2px; }
+.ticket .facts { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 14px; font-size: 14px; color: var(--soft); }
+.ticket .facts span { display: flex; align-items: center; gap: 8px; }
+.ticket .facts svg { color: var(--clay); width: 18px; height: 18px; }
+.ticket .stub { position: relative; background: var(--clay); color: #fff; display: grid; place-content: center; text-align: center; border-left: 2px dashed rgba(255,255,255,.6); }
+.ticket .stub::before, .ticket .stub::after { content: ""; position: absolute; left: -11px; width: 20px; height: 20px; border-radius: 50%; background: var(--card); }
+.ticket .stub::before { top: -10px; } .ticket .stub::after { bottom: -10px; }
+.ticket .stub b { font: 600 40px/44px var(--sans); }
+.rows { list-style: none; margin: 0; padding: 0; }
+.rows li { display: grid; gap: 14px; align-items: center; padding: 13px 0; border-top: 1px solid var(--line); }
+.week li { grid-template-columns: 52px 1fr auto; }
+.week li:first-child { border-top: 0; }
+.date { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 14px; background: var(--clay-wash); font-size: 12px; line-height: 14px; font-weight: 700; color: var(--ink); text-align: center; }
+.date b { font-size: 18px; line-height: 20px; }
+.rows a { font-weight: 600; text-decoration: none; } .rows a:hover, .go:hover { text-decoration: underline; }
+.sub { display: block; font-size: 14px; color: var(--soft); font-weight: 400; }
+.chip { font-size: 13px; line-height: 18px; padding: 5px 12px; border-radius: 12px; background: var(--clay-wash); color: var(--ink); white-space: nowrap; font-weight: 600; }
+.go { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-weight: 700; font-size: 15px; text-decoration: none; color: var(--clay); }
+.foot { margin-top: auto; padding-top: 8px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+
+/* scene with Needs a visit */
+.scene { position: relative; padding: 0; overflow: hidden; min-height: 520px; justify-content: flex-end; }
+.scene > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.scene .over { position: relative; margin: 16px; padding: 20px; border-radius: 20px; background: rgba(248,242,233,.96); box-shadow: 0 10px 24px rgba(74,48,30,.25); }
+.visit li { grid-template-columns: 40px 1fr auto; padding: 10px 0; }
+.av { width: 40px; height: 40px; border-radius: 14px; display: grid; place-items: center; font-size: 13px; font-weight: 700; background: var(--clay); color: #fff; }
+.visit .last { font-size: 14px; text-align: right; }
+.count { padding: 6px 14px; border-radius: 14px; background: var(--coal); color: #fff; font-weight: 700; font-size: 14px; white-space: nowrap; }
+
+/* money */
+.amount { display: flex; align-items: baseline; gap: 8px; margin: 2px 0 16px; }
+.amount b { font: 600 64px/64px var(--sans); }
+.amount span { font-size: 26px; color: var(--soft); }
+.split { display: flex; height: 16px; border-radius: 8px; overflow: hidden; background: var(--clay-wash); }
+.split i { width: 64%; background: var(--clay); }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0 16px; }
+.pair div { font-size: 14px; color: var(--soft); }
+.pair b { display: block; font-size: 20px; line-height: 28px; color: var(--ink); }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; background: var(--clay-wash); border: 1px solid #cbb9a3; }
+.dot.c { background: var(--clay); border-color: var(--clay); }
+
+/* sent documents */
+.sentgrid { display: grid; grid-template-columns: 150px 1fr; gap: 22px; align-items: center; }
+.stamp { width: 150px; height: 150px; border-radius: 50%; border: 3px double var(--clay); color: var(--clay); display: grid; place-content: center; text-align: center; font-size: 13px; font-weight: 700; transform: rotate(-6deg); }
+.stamp b { font-size: 30px; line-height: 36px; }
+.sent li { grid-template-columns: 1fr; }
+.sent li:first-child { border-top: 0; }
+
+/* dock */
+.dock { position: sticky; bottom: 16px; z-index: 2; grid-column: 1 / -1; justify-self: center; display: flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 30px; background: var(--card); box-shadow: inset 0 1px 0 #fff, 0 2px 4px rgba(74,48,30,.16), 0 18px 34px rgba(74,48,30,.24); }
+.dock a { display: grid; justify-items: center; gap: 2px; min-width: 104px; min-height: 56px; align-content: center; padding: 4px 10px; border-radius: 20px; text-decoration: none; font-size: 13px; line-height: 18px; font-weight: 600; }
+.dock a svg { color: var(--clay); }
+.dock a.main { background: var(--clay); color: #fff; min-height: 64px; padding: 6px 20px; box-shadow: inset 0 2px 0 rgba(255,255,255,.3), 0 8px 16px rgba(120,50,20,.3); }
+.dock a.main svg { color: #fff; }
+:focus-visible { outline: 3px solid var(--coal); outline-offset: 2px; }
+
+@media (max-width: 1080px) { .s7, .s5, .s6 { grid-column: 1 / -1; } .scene { min-height: 560px; } }
+@media (max-width: 720px) {
+  .app { grid-template-columns: 1fr; padding: 12px; }
+  .rail { flex-direction: row; overflow-x: auto; padding-bottom: 6px; } .rail nav { flex-direction: row; } .logo { min-width: 66px; height: 66px; } .rail nav a { min-width: 86px; }
+  .hello h1 { font-size: 36px; line-height: 42px; } .card { padding: 18px; border-radius: 22px; }
+  .ticket { grid-template-columns: 1fr; } .ticket .stub { border-left: 0; border-top: 2px dashed rgba(255,255,255,.6); padding: 12px; } .ticket .stub::before, .ticket .stub::after { display: none; }
+  .week li { grid-template-columns: 52px 1fr; } .week .chip { grid-column: 2; justify-self: start; }
+  .amount b { font-size: 44px; line-height: 48px; } .sentgrid { grid-template-columns: 1fr; justify-items: center; }
+  .dock { width: 100%; justify-content: space-between; gap: 0; padding: 6px; } .dock a { min-width: 0; flex: 1; font-size: 12px; } .dock a:not(.main) span { display: none; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="home" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="people" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.600 2.900-6 6.500-6s6.500 2.400 6.500 6"/><circle cx="17.500" cy="9" r="2.500"/><path d="M17 14.200c2.600.3 4.500 2.300 4.500 5.300"/></symbol>
+  <symbol id="family" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9H3z"/><path d="M12 17.500s-3-1.800-3-3.800a1.700 1.700 0 0 1 3-1 1.700 1.700 0 0 1 3 1c0 2-3 3.800-3 3.800z"/></symbol>
+  <symbol id="pin" viewBox="0 0 24 24"><path d="M12 21s-6-5.300-6-10a6 6 0 0 1 12 0c0 4.700-6 10-6 10z"/><circle cx="12" cy="11" r="2.200"/></symbol>
+  <symbol id="cal" viewBox="0 0 24 24"><rect x="3.500" y="5" width="17" height="15" rx="2"/><path d="M3.500 10h17M8 3v4M16 3v4"/></symbol>
+  <symbol id="heart" viewBox="0 0 24 24"><path d="M12 20s-7.500-4.600-7.500-10A4.300 4.300 0 0 1 12 7.400 4.300 4.300 0 0 1 19.500 10c0 5.400-7.500 10-7.500 10z"/></symbol>
+  <symbol id="coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.500"/><path d="M12 7v10M14.500 9.800c-.5-.9-1.400-1.300-2.500-1.300-1.500 0-2.600.7-2.600 1.900 0 2.600 5.300 1.100 5.300 3.800 0 1.200-1.200 1.900-2.700 1.900-1.300 0-2.300-.5-2.800-1.500"/></symbol>
+  <symbol id="doc" viewBox="0 0 24 24"><path d="M6.500 3h8l4 4v14h-12zM14.500 3v4h4M9 12h6M9 16h6"/></symbol>
+  <symbol id="send" viewBox="0 0 24 24"><path d="M21 3 10 14M21 3l-6.500 18-4.500-7-7-4.500z"/></symbol>
+  <symbol id="list" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+  <symbol id="data" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7.500" ry="3"/><path d="M4.500 6v12c0 1.700 3.400 3 7.500 3s7.500-1.300 7.500-3V6M4.500 12c0 1.700 3.400 3 7.500 3s7.500-1.300 7.500-3"/></symbol>
+  <symbol id="gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.200"/><path d="M12 2.500v3M12 18.500v3M2.500 12h3M18.500 12h3M5.300 5.300l2.100 2.100M16.600 16.600l2.100 2.100M5.300 18.700l2.100-2.100M16.600 7.400l2.100-2.100"/></symbol>
+  <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.500"/><path d="M12 7v5l3.500 2"/></symbol>
+  <symbol id="arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+</svg>
+
+<div class="app">
+  <aside class="rail">
+    <a class="logo" href="#" aria-label="Hội Thánh Bình An"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 3v10M16 7h8"/><path d="M8 36V22l12-9 12 9v14z"/><path d="M17 36v-8a3 3 0 0 1 6 0v8"/></svg></a>
+    <nav aria-label="Menu chính">
+      <a href="#" aria-current="page"><svg class="i"><use href="#home"/></svg>Trang chủ</a>
+      <a href="#"><svg class="i"><use href="#people"/></svg>Mọi người</a>
+      <a href="#"><svg class="i"><use href="#family"/></svg>Gia đình</a>
+      <a href="#"><svg class="i"><use href="#pin"/></svg>Chi phái</a>
+      <a href="#"><svg class="i"><use href="#cal"/></svg>Lịch</a>
+      <a href="#"><svg class="i"><use href="#heart"/></svg>Thăm viếng</a>
+      <a href="#"><svg class="i"><use href="#coin"/></svg>Tài chính</a>
+      <a href="#"><svg class="i"><use href="#doc"/></svg>Tài liệu</a>
+      <a href="#"><svg class="i"><use href="#send"/></svg>Văn bản đi</a>
+      <a href="#"><svg class="i"><use href="#list"/></svg>Danh mục</a>
+      <a href="#"><svg class="i"><use href="#data"/></svg>Dữ liệu</a>
+      <a href="#"><svg class="i"><use href="#gear"/></svg>Cài đặt</a>
+    </nav>
+  </aside>
+
+  <main class="board">
+    <div class="hello s7">
+      <span class="label">Hội Thánh Bình An · Tiếng Việt · English</span>
+      <h1>Trang chủ</h1>
+      <p>Thứ Ba <span class="num">24/11/2026</span> · 6 Lịch trong 7 ngày tới</p>
+      <form class="find" role="search" onsubmit="return false">
+        <label for="q">Tìm Người</label>
+        <div><input id="q" type="search" placeholder="Có dấu hoặc không dấu"><button class="btn" type="submit">Tìm kiếm</button></div>
+      </form>
+    </div>
+
+    <section class="card dark s5" aria-labelledby="h-serv">
+      <header><div><h2 id="h-serv">Giờ thờ phượng</h2><span class="meta">Số người nhóm của 8 Giờ thờ phượng gần nhất</span></div></header>
+      <div class="headline"><span class="big num">102</span><small><strong>Tăng</strong> · Số người nhóm 102 ngày 22/11/2026, so với trung bình 91 của 7 Giờ thờ phượng trước đó.</small></div>
+      <div class="bars" role="img" aria-label="Số người nhóm của 8 Giờ thờ phượng gần nhất: 04/10 86; 11/10 91; 18/10 88; 25/10 94; 01/11 90; 08/11 97; 15/11 93; 22/11 102">
+        <div><b class="num">86</b><i style="height:36px"></i><span class="num">04/10</span></div>
+        <div><b class="num">91</b><i style="height:47px"></i><span class="num">11/10</span></div>
+        <div><b class="num">88</b><i style="height:40px"></i><span class="num">18/10</span></div>
+        <div><b class="num">94</b><i style="height:54px"></i><span class="num">25/10</span></div>
+        <div><b class="num">90</b><i style="height:45px"></i><span class="num">01/11</span></div>
+        <div><b class="num">97</b><i style="height:61px"></i><span class="num">08/11</span></div>
+        <div><b class="num">93</b><i style="height:52px"></i><span class="num">15/11</span></div>
+        <div><b class="num">102</b><i style="height:72px"></i><span class="num">22/11</span></div>
+      </div>
+      <a class="go" href="#">Lịch <svg class="i"><use href="#arrow"/></svg></a>
+    </section>
+
+    <section class="card s7" aria-labelledby="h-week">
+      <header><div><h2 id="h-week">7 ngày tới</h2><span class="meta num">24/11 – 30/11/2026</span></div><span class="count num">6 Lịch</span></header>
+      <a class="ticket" href="#">
+        <div class="info">
+          <span class="label">Buổi họp</span>
+          <h3>Buổi họp Ban Chấp sự</h3>
+          <div class="facts"><span><svg class="i"><use href="#cal"/></svg>Thứ Ba <span class="num">24/11</span></span><span><svg class="i"><use href="#pin"/></svg>Phòng họp</span></div>
+        </div>
+        <div class="stub"><span>Hôm nay</span><b class="num">19:30</b></div>
+      </a>
+      <ul class="rows week">
+        <li><span class="date">T4<b class="num">25</b></span><span><a href="#">Thăm gia đình ông Trần Văn Hòa</a><span class="sub">Ngày mai · <span class="num">15:00</span> · Trần Văn Hòa</span></span><span class="chip">Thăm viếng</span></li>
+        <li><span class="date">T5<b class="num">26</b></span><span><a href="#">Giờ cầu nguyện</a><span class="sub">Thứ Năm <span class="num">26/11 · 19:30</span> · Nhà thờ</span></span><span class="chip">Giờ thờ phượng</span></li>
+        <li><span class="date">T7<b class="num">28</b></span><span><a href="#">Sinh hoạt Ban Thanh niên</a><span class="sub">Thứ Bảy <span class="num">28/11 · 18:00</span> · Hội trường</span></span><span class="chip">Chương trình</span></li>
+      </ul>
+      <div class="foot"><a class="go" href="#">Xem cả 6 trong Lịch <svg class="i"><use href="#arrow"/></svg></a></div>
+    </section>
+
+    <section class="card scene s5" aria-labelledby="h-visit">
+      <svg viewBox="0 0 520 560" preserveAspectRatio="xMidYMin slice" aria-hidden="true">
+        <defs>
+          <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f7e3cb"/><stop offset="1" stop-color="#f0b98b"/></linearGradient>
+          <linearGradient id="d1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e39a68"/><stop offset="1" stop-color="#cf7a48"/></linearGradient>
+          <linearGradient id="d2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#cf7443"/><stop offset="1" stop-color="#a94f28"/></linearGradient>
+          <linearGradient id="d3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b3542b"/><stop offset="1" stop-color="#7f3718"/></linearGradient>
+        </defs>
+        <rect width="520" height="560" fill="url(#sky)"/>
+        <circle cx="400" cy="64" r="38" fill="#fdf1dc"/>
+        <rect y="440" width="520" height="120" fill="#7f3718"/>
+        <g transform="translate(0,-100)">
+        <path d="M0 210c70-50 130-60 200-20s120 30 180-6 100-30 140-4v380H0z" fill="url(#d1)"/>
+        <path d="M0 270c90-40 170-20 240 12s150 10 280-40v318H0z" fill="url(#d2)"/>
+        <path d="M250 300c-20 40 30 60 10 100s-70 60-60 160" fill="none" stroke="#f3cfa9" stroke-width="16" stroke-linecap="round" opacity=".75"/>
+        <path d="M0 360c80-30 150-10 230 20s190 20 290-20v200H0z" fill="url(#d3)"/>
+        <!-- chapel -->
+        <g>
+          <path d="M218 262v-48l32-26 32 26v48z" fill="#fbf3e6"/>
+          <path d="M250 188l-38 30 6 6 32-26 32 26 6-6z" fill="#7f3718"/>
+          <path d="M282 262v-34h44v34z" fill="#f1e2cc"/><path d="M278 228h52l-8-14h-40z" fill="#7f3718"/>
+          <path d="M242 262v-22a8 8 0 0 1 16 0v22z" fill="#7f3718"/>
+          <rect x="296" y="238" width="8" height="14" rx="4" fill="#a94f28"/><rect x="310" y="238" width="8" height="14" rx="4" fill="#a94f28"/>
+          <path d="M250 160v28M241 169h18" stroke="#7f3718" stroke-width="4" stroke-linecap="round"/>
+        </g>
+        <g fill="#5b2c16"><path d="M168 268c-8-22-4-46 6-62 10 16 14 40 6 62zM352 262c-6-18-3-36 5-48 8 12 11 30 5 48zM96 300c-7-18-3-38 5-50 8 12 12 32 5 50zM440 286c-6-16-3-32 4-44 7 12 10 28 4 44z"/></g>
+        <g fill="#7f3718" opacity=".6"><ellipse cx="120" cy="330" rx="14" ry="5"/><ellipse cx="410" cy="318" rx="18" ry="6"/><ellipse cx="330" cy="352" rx="10" ry="4"/></g>
+        </g>
+      </svg>
+      <div class="over">
+        <header><div><h2 id="h-visit">Cần thăm viếng</h2><span class="meta">Chưa được thăm viếng trong 3 tháng qua</span></div><span class="count num">7 người</span></header>
+        <ul class="rows visit">
+          <li><span class="av" aria-hidden="true">NL</span><span><a href="#">Nguyễn Thị Lan</a><span class="sub">Tín hữu</span></span><span class="last"><span class="sub">Thăm gần nhất</span><span class="num">12/06/2026</span></span></li>
+          <li><span class="av" aria-hidden="true">TH</span><span><a href="#">Trần Văn Hòa</a><span class="sub">Tín hữu</span></span><span class="last"><span class="sub">Thăm gần nhất</span><span class="num">03/07/2026</span></span></li>
+          <li><span class="av" aria-hidden="true">LM</span><span><a href="#">Lê Thị Mai</a><span class="sub">Thân hữu</span></span><span class="last"><span class="sub">Thăm gần nhất</span>chưa bao giờ</span></li>
+        </ul>
+        <div class="foot"><a class="go" href="#">Xem cả 7 trong Thăm viếng <svg class="i"><use href="#arrow"/></svg></a></div>
+      </div>
+    </section>
+
+    <section class="card s6" aria-labelledby="h-money">
+      <header><div><h2 id="h-money">Tài chính tháng này</h2><span class="meta">Tháng 11/2026</span></div><span class="label">Số dư</span></header>
+      <div class="amount"><b class="num">17.450.000</b><span>₫</span></div>
+      <div class="split" role="img" aria-label="Khoản chi bằng 64% Dâng hiến"><i></i></div>
+      <div class="pair">
+        <div><span class="dot"></span>Dâng hiến<b class="num">48.650.000 ₫</b></div>
+        <div><span class="dot c"></span>Khoản chi<b class="num">31.200.000 ₫</b></div>
+      </div>
+      <div class="foot"><a class="btn clay" href="#">Ghi Dâng hiến</a><a class="btn soft" href="#">Mở Tài chính</a></div>
+    </section>
+
+    <section class="card s6" aria-labelledby="h-sent">
+      <header><div><h2 id="h-sent">Văn bản đi</h2><span class="meta">14 Công văn đi trong năm 2026</span></div></header>
+      <div class="sentgrid">
+        <div class="stamp"><span>Số tiếp theo</span><b class="num">15/2026</b></div>
+        <ul class="rows sent">
+          <li><span><a href="#"><span class="num">14/2026</span> Thư mời dự lễ Giáng Sinh</a><span class="sub"><span class="num">18/11/2026</span> · Hội Thánh · Thư mời</span></span></li>
+          <li><span><a href="#"><span class="num">13/2026</span> Báo cáo sinh hoạt quý III</a><span class="sub"><span class="num">05/11/2026</span> · Giáo hội · Báo cáo</span></span></li>
+        </ul>
+      </div>
+      <div class="foot"><a class="go" href="#">Xem tất cả 14 <svg class="i"><use href="#arrow"/></svg></a></div>
+    </section>
+
+    <nav class="dock" aria-label="Việc thường làm">
+      <a href="#"><svg class="i"><use href="#cal"/></svg><span>Mở Lịch</span></a>
+      <a href="#"><svg class="i"><use href="#coin"/></svg><span>Ghi Dâng hiến</span></a>
+      <a class="main" href="#"><svg class="i"><use href="#heart"/></svg><span>Lên lịch Thăm viếng</span></a>
+      <a href="#"><svg class="i"><use href="#send"/></svg><span>Mở Văn bản đi</span></a>
+      <a href="#"><svg class="i"><use href="#people"/></svg><span>Mọi người</span></a>
+    </nav>
+  </main>
+</div>
+</body>
+</html>

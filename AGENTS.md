@@ -36,6 +36,17 @@ run it.
    copy: `python -m churchmgr.fake <folder>`, then `python app.py --copy <folder>`.
 9. `python verify.py` must exit 0 (it prints `ALL ... CHECKS PASS`) before a change is done.
 
+## Chat sessions: send work to the board
+
+This section is for a normal chat with the pastor only. If you are a worker on a kanban card (you
+have the `kanban_*` tools), ignore this section.
+
+When the pastor asks for a change (code, page, fix, report), do not do it in the chat. Create a card
+on board `church-manager`, assigned to `orchestrator`, titled `GOAL: <short title>`, with the
+request in the body: `hermes kanban --board church-manager create "<title>" --assignee orchestrator --body "<request>"`.
+Tell the pastor the card id and stop. Do the work in the chat only if the pastor says so in the same
+message ("do it here"). Questions and status checks are answered in the chat.
+
 ## Church data
 
 To read or add church data, use only `python -m churchmgr.agent`. Follow

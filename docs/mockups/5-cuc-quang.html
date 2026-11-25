@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mẫu 5 · Cực quang · Trang chủ</title>
+<style>
+/* Mockup only: fake church, Windows fonts, no motion, no outside file. */
+:root {
+  --black: #06070a; --glass: rgba(255,255,255,.06); --edge: rgba(255,255,255,.16); --text: #f5f6f8; --soft: #b4b9c4;
+  --orange: #ff8f45; --blue: #7db8ff; --up: #8be0a4;
+  --sans: "Segoe UI Variable Display", "Segoe UI", Tahoma, sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--black); color: var(--text); font: 16px/24px var(--sans); overflow-x: hidden; }
+a { color: inherit; }
+.num { font-variant-numeric: tabular-nums; }
+svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.wrap { position: relative; max-width: 1440px; margin: 0 auto; padding: 0 32px; }
+
+/* the light behind ribbed glass */
+.aurora { position: absolute; inset: 0 0 auto 0; height: 640px; overflow: hidden; }
+.aurora svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.aurora::after { content: ""; position: absolute; inset: 0;
+  background: repeating-linear-gradient(90deg, rgba(255,255,255,.1) 0 1px, rgba(255,255,255,0) 1px 30px, rgba(0,0,0,.28) 30px 32px),
+    linear-gradient(180deg, rgba(6,7,10,.2) 0, rgba(6,7,10,0) 30%, var(--black) 96%); }
+
+.top { position: relative; display: flex; align-items: center; gap: 16px; padding: 20px 0; }
+.brand { font-weight: 700; font-size: 18px; text-decoration: none; white-space: nowrap; display: flex; align-items: center; gap: 10px; }
+.brand svg { width: 28px; height: 28px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.top nav { display: flex; gap: 2px; padding: 4px; margin: 0 auto; border-radius: 26px; background: rgba(6,7,10,.6); border: 1px solid var(--edge); overflow-x: auto; }
+.top nav a { display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 22px; text-decoration: none; font-size: 14px; font-weight: 600; color: var(--soft); white-space: nowrap; }
+.top nav a:hover { color: #fff; }
+.top nav a[aria-current] { background: #fff; color: #0b0c10; }
+
+.hero { position: relative; text-align: center; padding: 40px 0 44px; }
+.badge { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 16px; border-radius: 18px; background: rgba(6,7,10,.55); border: 1px solid var(--edge); font-size: 14px; font-weight: 600; }
+h1 { font: 700 96px/100px var(--sans); margin: 14px 0 0; }
+.hero > p { margin: 8px 0 26px; font-size: 20px; line-height: 30px; }
+.box { max-width: 720px; margin: 0 auto; padding: 26px 28px; border-radius: 28px; background: rgba(10,12,18,.62); border: 1px solid rgba(255,255,255,.26); backdrop-filter: blur(18px); text-align: left; }
+.box label { display: block; font-weight: 600; margin-bottom: 8px; }
+.box .line { display: flex; gap: 10px; }
+.box input { flex: 1; min-width: 0; height: 52px; border-radius: 26px; border: 1px solid rgba(255,255,255,.34); background: rgba(6,7,10,.7); color: #fff; font: inherit; padding: 0 22px; }
+.box input::placeholder { color: var(--soft); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 52px; padding: 0 24px; border-radius: 26px; border: 0; background: #fff; color: #0b0c10; font: 600 15px var(--sans); text-decoration: none; cursor: pointer; white-space: nowrap; }
+.btn.hot { background: var(--orange); }
+.btn.line2 { background: none; color: #fff; border: 1px solid rgba(255,255,255,.4); }
+.box .more { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--edge); }
+
+.grid { position: relative; display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }
+.s4 { grid-column: span 4; } .s8 { grid-column: span 8; } .s12 { grid-column: 1 / -1; } .tall { grid-row: span 2; }
+.panel { background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.035)); border: 1px solid var(--edge); border-radius: 24px; padding: 24px; display: flex; flex-direction: column; min-width: 0; }
+.panel header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+.panel h2 { font: 700 22px/28px var(--sans); margin: 0; }
+.meta { display: block; font-size: 14px; color: var(--soft); }
+.count { padding: 6px 14px; border-radius: 16px; border: 1px solid rgba(255,255,255,.4); font-size: 14px; font-weight: 600; white-space: nowrap; }
+.go { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-weight: 600; font-size: 15px; text-decoration: none; color: var(--orange); }
+.go:hover, .rows a:hover, .line-list a:hover { text-decoration: underline; }
+.foot { margin-top: auto; padding-top: 10px; display: flex; gap: 20px; flex-wrap: wrap; }
+
+/* 7 days on one line of lights */
+.line-list { list-style: none; margin: 0; padding: 0; position: relative; }
+.line-list::before { content: ""; position: absolute; left: 21px; top: 22px; bottom: 30px; border-left: 1px solid rgba(255,255,255,.3); }
+.line-list li { position: relative; display: grid; grid-template-columns: 44px 1fr; gap: 16px; padding: 0 0 22px; }
+.orb { width: 44px; height: 44px; border-radius: 50%; background: radial-gradient(circle at 34% 30%, #dcecff, #5a9cf0 46%, #16335e 100%); }
+.orb.now { background: radial-gradient(circle at 34% 30%, #fff1dc, #ff9a4d 46%, #8a3606 100%); }
+.orb.off { background: #0d0f15; border: 1px solid rgba(255,255,255,.3); }
+.line-list .when { font-size: 14px; color: var(--soft); }
+.line-list .when b { color: var(--text); font-weight: 600; }
+.line-list a { display: block; font-size: 18px; line-height: 24px; font-weight: 600; text-decoration: none; margin: 2px 0; }
+.line-list .k { font-size: 14px; color: var(--soft); }
+
+.rows { list-style: none; margin: 0; padding: 0; }
+.rows li { display: grid; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid var(--edge); }
+.rows a { font-weight: 600; text-decoration: none; }
+.sub { display: block; font-size: 14px; color: var(--soft); font-weight: 400; }
+.visit li { grid-template-columns: 1fr auto; }
+.last { text-align: right; }
+.chart text { font: 12px var(--sans); fill: #b4b9c4; }
+.trend { margin: 10px 0 0; font-size: 15px; color: var(--soft); }
+.trend strong { color: var(--up); }
+.huge { font: 700 54px/56px var(--sans); white-space: nowrap; }
+.huge small { font-size: 26px; font-weight: 600; color: var(--soft); }
+.split { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--blue); margin: 18px 0 12px; }
+.split i { width: 64%; background: var(--orange); }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 14px; color: var(--soft); }
+.pair b { display: block; font-size: 19px; line-height: 26px; color: var(--text); white-space: nowrap; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; background: var(--blue); }
+.dot.o { background: var(--orange); }
+.band { display: grid; grid-template-columns: 300px 1fr 1fr auto; gap: 28px; align-items: center; }
+.band .no { font: 700 60px/60px var(--sans); }
+.band .doc a { font-weight: 600; text-decoration: none; display: block; }
+.band .doc { padding-left: 24px; border-left: 1px solid var(--edge); }
+
+.ghost { position: relative; margin-top: 30px; text-align: center; font: 700 250px/210px var(--sans); color: transparent; -webkit-text-stroke: 1px rgba(255,255,255,.2); white-space: nowrap; height: 190px; overflow: hidden; }
+.end { position: relative; display: flex; justify-content: center; gap: 22px; flex-wrap: wrap; padding: 0 0 22px; margin-top: -40px; font-size: 14px; color: var(--soft); }
+:focus-visible { outline: 3px solid var(--orange); outline-offset: 2px; }
+
+@media (max-width: 1100px) { .s4, .s8 { grid-column: 1 / -1; } .tall { grid-row: auto; } .band { grid-template-columns: 1fr; gap: 16px; } .band .doc { border-left: 0; padding-left: 0; border-top: 1px solid var(--edge); padding-top: 14px; } .brand span { display: none; } }
+@media (max-width: 640px) { .wrap { padding: 0 14px; } h1 { font-size: 56px; line-height: 60px; } .box { padding: 18px; } .box .line { flex-direction: column; } .huge { font-size: 38px; line-height: 44px; } .ghost { font-size: 110px; line-height: 100px; height: 90px; } .end { margin-top: 0; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="home" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="people" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.600 2.900-6 6.500-6s6.500 2.400 6.500 6"/><circle cx="17.500" cy="9" r="2.500"/><path d="M17 14.200c2.600.3 4.500 2.300 4.500 5.300"/></symbol>
+  <symbol id="family" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9H3z"/><path d="M12 17.500s-3-1.800-3-3.800a1.700 1.700 0 0 1 3-1 1.700 1.700 0 0 1 3 1c0 2-3 3.800-3 3.800z"/></symbol>
+  <symbol id="pin" viewBox="0 0 24 24"><path d="M12 21s-6-5.300-6-10a6 6 0 0 1 12 0c0 4.700-6 10-6 10z"/><circle cx="12" cy="11" r="2.200"/></symbol>
+  <symbol id="cal" viewBox="0 0 24 24"><rect x="3.500" y="5" width="17" height="15" rx="2"/><path d="M3.500 10h17M8 3v4M16 3v4"/></symbol>
+  <symbol id="heart" viewBox="0 0 24 24"><path d="M12 20s-7.500-4.600-7.500-10A4.300 4.300 0 0 1 12 7.400 4.300 4.300 0 0 1 19.500 10c0 5.400-7.500 10-7.500 10z"/></symbol>
+  <symbol id="coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.500"/><path d="M12 7v10M14.500 9.800c-.5-.9-1.400-1.300-2.500-1.300-1.500 0-2.600.7-2.600 1.900 0 2.600 5.300 1.100 5.300 3.800 0 1.200-1.200 1.900-2.700 1.900-1.300 0-2.300-.5-2.800-1.500"/></symbol>
+  <symbol id="doc" viewBox="0 0 24 24"><path d="M6.500 3h8l4 4v14h-12zM14.500 3v4h4M9 12h6M9 16h6"/></symbol>
+  <symbol id="send" viewBox="0 0 24 24"><path d="M21 3 10 14M21 3l-6.500 18-4.500-7-7-4.500z"/></symbol>
+  <symbol id="list" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+  <symbol id="data" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7.500" ry="3"/><path d="M4.500 6v12c0 1.700 3.400 3 7.500 3s7.500-1.300 7.500-3V6M4.500 12c0 1.700 3.400 3 7.500 3s7.500-1.300 7.500-3"/></symbol>
+  <symbol id="gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.200"/><path d="M12 2.500v3M12 18.500v3M2.500 12h3M18.500 12h3M5.300 5.300l2.100 2.100M16.600 16.600l2.100 2.100M5.300 18.700l2.100-2.100M16.600 7.400l2.100-2.100"/></symbol>
+  <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.500"/><path d="M12 7v5l3.500 2"/></symbol>
+  <symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
+  <symbol id="arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+</svg>
+<div class="aurora" aria-hidden="true">
+  <svg viewBox="0 0 1440 640" preserveAspectRatio="none">
+    <defs><filter id="blur" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="60"/></filter></defs>
+    <rect width="1440" height="640" fill="#06070a"/>
+    <g filter="url(#blur)">
+      <path d="M240 120c160-70 330-40 420 60s40 210-90 250-330 30-420-70-70-180 90-240z" fill="#1d63c9"/>
+      <path d="M330 210c90-30 190 0 240 60s10 120-70 130-180-10-220-70 0-100 50-120z" fill="#9fd0ff"/>
+      <path d="M640 150c170-80 420-60 560 40s120 250-40 300-420 20-540-80-120-200 20-260z" fill="#ff7a2c"/>
+      <path d="M620 250c80-50 200-40 260 20s20 130-60 150-190-10-230-70-20-70 30-100z" fill="#0a0b10"/>
+      <path d="M1040 130c80-20 150 20 170 80s-20 110-90 110-130-40-140-100 10-80 60-90z" fill="#ffc48a"/>
+    </g>
+  </svg>
+</div>
+
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="#"><svg viewBox="0 0 28 28" aria-hidden="true"><path d="M14 2v8M10.500 5.500h7"/><path d="M5 26V15l9-6 9 6v11z"/></svg><span>Hội Thánh Bình An</span></a>
+    <nav aria-label="Menu chính">
+      <a href="#" aria-current="page">Trang chủ</a><a href="#">Mọi người</a><a href="#">Gia đình</a><a href="#">Chi phái</a><a href="#">Lịch</a><a href="#">Thăm viếng</a><a href="#">Tài chính</a><a href="#">Tài liệu</a><a href="#">Văn bản đi</a><a href="#">Danh mục</a><a href="#">Dữ liệu</a><a href="#">Cài đặt</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <span class="badge">Thứ Ba · <span class="num">24/11/2026</span></span>
+    <h1>Trang chủ</h1>
+    <p>6 Lịch trong 7 ngày tới</p>
+    <form class="box" role="search" onsubmit="return false">
+      <label for="q">Tìm Người</label>
+      <div class="line"><input id="q" type="search" placeholder="Có dấu hoặc không dấu"><button class="btn" type="submit"><svg class="i"><use href="#search"/></svg>Tìm kiếm</button></div>
+      <div class="more"><a class="btn hot" href="#">Lên lịch Thăm viếng <svg class="i"><use href="#arrow"/></svg></a><a class="btn line2" href="#">Ghi Dâng hiến</a></div>
+    </form>
+  </section>
+
+  <main class="grid">
+    <section class="panel s4 tall" aria-labelledby="h-week">
+      <header><div><h2 id="h-week">7 ngày tới</h2><span class="meta num">24/11 – 30/11/2026</span></div><span class="count num">6 Lịch</span></header>
+      <ul class="line-list">
+        <li><span class="orb now" aria-hidden="true"></span><div><span class="when"><b>Hôm nay</b> · <span class="num">19:30</span></span><a href="#">Buổi họp Ban Chấp sự</a><span class="k">Buổi họp · Phòng họp</span></div></li>
+        <li><span class="orb" aria-hidden="true"></span><div><span class="when"><b>Ngày mai</b> · <span class="num">15:00</span></span><a href="#">Thăm gia đình ông Trần Văn Hòa</a><span class="k">Thăm viếng · Trần Văn Hòa</span></div></li>
+        <li><span class="orb" aria-hidden="true"></span><div><span class="when"><b>Thứ Năm <span class="num">26/11</span></b> · <span class="num">19:30</span></span><a href="#">Giờ cầu nguyện</a><span class="k">Giờ thờ phượng · Nhà thờ</span></div></li>
+        <li><span class="orb" aria-hidden="true"></span><div><span class="when"><b>Thứ Bảy <span class="num">28/11</span></b> · <span class="num">18:00</span></span><a href="#">Sinh hoạt Ban Thanh niên</a><span class="k">Chương trình · Hội trường</span></div></li>
+        <li style="padding-bottom:0"><span class="orb off" aria-hidden="true"></span><div><span class="when"><b>Chúa Nhật <span class="num">29/11</span></b></span><span class="k" style="display:block;margin-top:2px">Còn 2 Lịch nữa</span></div></li>
+      </ul>
+      <div class="foot"><a class="go" href="#">Xem cả 6 trong Lịch <svg class="i"><use href="#arrow"/></svg></a></div>
+    </section>
+
+    <section class="panel s8" aria-labelledby="h-serv">
+      <header><div><h2 id="h-serv">Giờ thờ phượng</h2><span class="meta">Số người nhóm của 8 Giờ thờ phượng gần nhất</span></div><a class="go" href="#">Lịch <svg class="i"><use href="#arrow"/></svg></a></header>
+      <svg class="chart" viewBox="0 0 720 210" width="100%" role="img" aria-label="Số người nhóm của 8 Giờ thờ phượng gần nhất: 04/10 86; 11/10 91; 18/10 88; 25/10 94; 01/11 90; 08/11 97; 15/11 93; 22/11 102">
+        <defs><linearGradient id="ln" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#7db8ff"/><stop offset="1" stop-color="#ff8f45"/></linearGradient>
+        <linearGradient id="ar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff8f45" stop-opacity=".3"/><stop offset="1" stop-color="#7db8ff" stop-opacity="0"/></linearGradient></defs>
+        <g stroke="#fff" stroke-opacity=".12"><line x1="44" x2="680" y1="20" y2="20"/><line x1="44" x2="680" y1="75" y2="75"/><line x1="44" x2="680" y1="130" y2="130"/><line x1="44" x2="680" y1="185" y2="185"/></g>
+        <text x="36" y="24" text-anchor="end">110</text><text x="36" y="79" text-anchor="end">100</text><text x="36" y="134" text-anchor="end">90</text><text x="36" y="189" text-anchor="end">80</text>
+        <path d="M44 152C90 152 90 124.500 134.900 124.500S180 141 225.700 141 270 108 316.600 108 362 130 407.400 130 452 91.500 498.300 91.500 544 113.500 589.100 113.500 634 64 680 64V185H44z" fill="url(#ar)"/>
+        <path d="M44 152C90 152 90 124.500 134.900 124.500S180 141 225.700 141 270 108 316.600 108 362 130 407.400 130 452 91.500 498.300 91.500 544 113.500 589.100 113.500 634 64 680 64" fill="none" stroke="url(#ln)" stroke-width="3"/>
+        <circle cx="680" cy="64" r="7" fill="#ff8f45"/><text x="680" y="46" text-anchor="middle" style="font-size:16px;font-weight:700;fill:#f5f6f8">102</text>
+        <text x="44" y="206" text-anchor="middle">04/10</text><text x="134.900" y="206" text-anchor="middle">11/10</text><text x="225.700" y="206" text-anchor="middle">18/10</text><text x="316.600" y="206" text-anchor="middle">25/10</text><text x="407.400" y="206" text-anchor="middle">01/11</text><text x="498.300" y="206" text-anchor="middle">08/11</text><text x="589.100" y="206" text-anchor="middle">15/11</text><text x="680" y="206" text-anchor="middle">22/11</text>
+      </svg>
+      <p class="trend"><strong>Tăng</strong> · Số người nhóm 102 ngày 22/11/2026, so với trung bình 91 của 7 Giờ thờ phượng trước đó.</p>
+    </section>
+
+    <section class="panel s4" aria-labelledby="h-money">
+      <header><div><h2 id="h-money">Tài chính tháng này</h2><span class="meta">Tháng 11/2026 · Số dư</span></div></header>
+      <div class="huge num">17.450.000 <small>₫</small></div>
+      <div class="split" role="img" aria-label="Khoản chi bằng 64% Dâng hiến"><i></i></div>
+      <div class="pair"><div><span class="dot"></span>Dâng hiến<b class="num">48.650.000 ₫</b></div><div><span class="dot o"></span>Khoản chi<b class="num">31.200.000 ₫</b></div></div>
+      <div class="foot"><a class="go" href="#">Ghi Dâng hiến <svg class="i"><use href="#arrow"/></svg></a><a class="go" href="#">Mở Tài chính</a></div>
+    </section>
+
+    <section class="panel s4" aria-labelledby="h-visit">
+      <header><div><h2 id="h-visit">Cần thăm viếng</h2><span class="meta">Chưa được thăm viếng trong 3 tháng qua</span></div><span class="count num">7 người</span></header>
+      <ul class="rows visit">
+        <li><span><a href="#">Nguyễn Thị Lan</a><span class="sub">Tín hữu</span></span><span class="last"><span class="sub">Thăm gần nhất</span><span class="num">12/06/2026</span></span></li>
+        <li><span><a href="#">Trần Văn Hòa</a><span class="sub">Tín hữu</span></span><span class="last"><span class="sub">Thăm gần nhất</span><span class="num">03/07/2026</span></span></li>
+        <li><span><a href="#">Lê Thị Mai</a><span class="sub">Thân hữu</span></span><span class="last"><span class="sub">Thăm gần nhất</span>chưa bao giờ</span></li>
+      </ul>
+      <div class="foot"><a class="go" href="#">Xem cả 7 trong Thăm viếng <svg class="i"><use href="#arrow"/></svg></a></div>
+    </section>
+
+    <section class="panel s12" aria-labelledby="h-sent">
+      <div class="band">
+        <div><h2 id="h-sent">Văn bản đi</h2><span class="meta">14 Công văn đi trong năm 2026</span><span class="meta" style="margin-top:14px">Số tiếp theo</span><span class="no num">15/2026</span></div>
+        <div class="doc"><a href="#"><span class="num">14/2026</span> Thư mời dự lễ Giáng Sinh</a><span class="sub"><span class="num">18/11/2026</span> · Hội Thánh · Thư mời</span></div>
+        <div class="doc"><a href="#"><span class="num">13/2026</span> Báo cáo sinh hoạt quý III</a><span class="sub"><span class="num">05/11/2026</span> · Giáo hội · Báo cáo</span></div>
+        <a class="btn line2" href="#">Xem tất cả 14</a>
+      </div>
+    </section>
+  </main>
+
+  <div class="ghost" aria-hidden="true">Bình An</div>
+  <footer class="end"><span>Hội Thánh Bình An</span><span>Church Manager</span><span>Tiếng Việt · English</span></footer>
+</div>
+</body>
+</html>

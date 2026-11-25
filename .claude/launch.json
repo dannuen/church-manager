@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "redesign",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["C:/Users/danng/OneDrive/Desktop/Church Manager Hermes/.worktrees/redesign/app.py", "--copy", "C:/Users/danng/AppData/Local/Temp/cm-redesign/Fake Church", "--copies-root", "C:/Users/danng/AppData/Local/Temp/cm-redesign", "--port", "8799", "--no-browser"],
+      "port": 8799
+    },
+    {
+      "name": "pearl",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["C:/Users/danng/OneDrive/Desktop/Church Manager Hermes/.worktrees/redesign-pearl/app.py", "--copy", "C:/Users/danng/AppData/Local/Temp/cm-pearl/Fake Church", "--copies-root", "C:/Users/danng/AppData/Local/Temp/cm-pearl", "--port", "8798", "--no-browser"],
+      "port": 8798
+    }
+  ]
+}

@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mẫu 1 · Sương sớm · Trang chủ</title>
+<style>
+/* Mockup only: fake church, Windows fonts, no motion, no outside file. */
+:root {
+  --paper: #f4f4f1; --card: #fbfbf9; --ink: #1f2422; --soft: #4d5551; --line: #d9dbd5;
+  --moss: #4a5a41; --moss-dark: #2f3a2a; --wash: #e8ebe4; --up: #2f6b3f;
+  --serif: "Palatino Linotype", "Book Antiqua", Cambria, Georgia, serif;
+  --sans: "Segoe UI Variable Text", "Segoe UI", Tahoma, sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #e3e6e2; color: var(--ink); font: 16px/24px var(--sans); }
+a { color: inherit; }
+.sheet { max-width: 1400px; margin: 24px auto; background: var(--paper); border-radius: 22px; overflow: hidden; }
+.num { font-variant-numeric: tabular-nums; }
+svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+/* hero */
+.hero { position: relative; min-height: 640px; }
+.hero > svg.land { position: absolute; inset: 0; width: 100%; height: 100%; }
+.top { position: relative; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 22px 44px; }
+.top nav { display: flex; gap: 2px; }
+.top nav a { text-decoration: none; padding: 10px 10px; min-height: 44px; font-size: 14px; white-space: nowrap; font-weight: 600; border-radius: 22px; }
+.top nav a[aria-current] { background: var(--ink); color: #fff; }
+.mark { font: 24px/1 var(--serif); text-decoration: none; text-align: center; }
+.mark small { display: block; font: 12px/18px var(--sans); color: var(--soft); margin-top: 4px; }
+.top .right { display: flex; justify-content: flex-end; align-items: center; gap: 14px; font-size: 13px; line-height: 18px; color: var(--soft); text-align: right; }
+.round { display: inline-grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: var(--ink); color: #fff; text-decoration: none; flex: none; }
+.round.light { background: #fff; color: var(--ink); }
+
+.lede { position: relative; padding: 210px 44px 40px; max-width: 560px; }
+.lede h1 { font: 400 60px/64px var(--serif); margin: 0 0 10px; }
+.lede p { margin: 0 0 22px; color: var(--soft); font-size: 18px; line-height: 28px; }
+.find label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.find div { display: flex; gap: 8px; }
+.find input { flex: 1; min-width: 0; height: 48px; border: 1px solid #b9beb6; border-radius: 24px; padding: 0 20px; font: inherit; background: rgba(255,255,255,.86); color: var(--ink); }
+.pill { display: inline-flex; align-items: center; gap: 12px; height: 48px; padding: 0 8px 0 22px; border-radius: 24px; border: 0; background: var(--ink); color: #fff; font: 600 15px var(--sans); text-decoration: none; cursor: pointer; }
+.pill span { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255,255,255,.5); }
+.pill.plain { padding: 0 22px; background: #fff; color: var(--ink); border: 1px solid #b9beb6; }
+.lede .pill { margin-top: 14px; }
+
+.glass { position: absolute; right: 44px; bottom: 44px; width: 360px; padding: 22px; border-radius: 18px; color: #fff;
+  background: rgba(31,36,34,.62); border: 1px solid rgba(255,255,255,.35); backdrop-filter: blur(10px); }
+.glass .tag { font-size: 13px; line-height: 18px; color: #dfe5da; }
+.glass h2 { font: 400 26px/32px var(--serif); margin: 8px 0 4px; }
+.glass p { margin: 0; color: #e9ede6; font-size: 15px; }
+.glass .round { position: absolute; right: 16px; top: 16px; }
+.glass .tag { padding-right: 60px; min-height: 36px; }
+
+/* figures strip */
+.strip { display: grid; grid-template-columns: repeat(3, 1fr) 150px; padding: 34px 44px; background: var(--card); }
+.strip > div { padding: 0 28px; border-left: 1px solid var(--line); }
+.strip > div:first-child { padding-left: 0; border-left: 0; }
+.strip .no { font-size: 13px; color: var(--soft); }
+.strip h3 { font: 600 15px/24px var(--sans); margin: 10px 0 2px; }
+.strip .big { font: 400 38px/44px var(--serif); }
+.strip .go { display: grid; justify-items: center; gap: 8px; border-left: 0; font-size: 13px; font-weight: 600; text-decoration: none; }
+.strip .go .round { width: 72px; height: 72px; background: var(--wash); color: var(--ink); }
+
+/* sections */
+.body { padding: 48px 44px 20px; display: grid; grid-template-columns: repeat(12, 1fr); gap: 28px; }
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 28px; display: flex; flex-direction: column; }
+.s7 { grid-column: span 7; } .s5 { grid-column: span 5; } .s4 { grid-column: span 4; }
+.panel header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+.panel h2 { font: 400 30px/36px var(--serif); margin: 0; }
+.meta { display: block; font-size: 14px; color: var(--soft); }
+.count { font: 400 22px/28px var(--serif); white-space: nowrap; }
+.rows { list-style: none; margin: 0; padding: 0; }
+.rows li { display: grid; align-items: center; gap: 16px; padding: 14px 0; border-top: 1px solid var(--line); }
+.week li { grid-template-columns: 156px 56px 1fr auto; }
+.week .day { font: 400 20px/24px var(--serif); }
+.week .time { color: var(--soft); }
+.rows a { font-weight: 600; text-decoration: none; }
+.rows a:hover, .foot a:hover { text-decoration: underline; }
+.chip { font-size: 13px; line-height: 18px; padding: 4px 12px; border-radius: 14px; background: var(--wash); white-space: nowrap; }
+.sub { display: block; font-size: 14px; color: var(--soft); font-weight: 400; }
+.visit li { grid-template-columns: 1fr auto 104px; }
+.visit .last { text-align: right; }
+.list-head { display: grid; grid-template-columns: 1fr auto 104px; gap: 16px; font-size: 13px; color: var(--soft); padding-bottom: 8px; }
+.list-head span:nth-child(2) { width: 76px; } .list-head span:last-child { text-align: right; }
+.foot { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--line); display: flex; gap: 22px; flex-wrap: wrap; }
+.foot a { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-weight: 600; font-size: 15px; text-decoration: none; }
+.trend { margin: 12px 0 0; font-size: 15px; color: var(--soft); }
+.trend strong { color: var(--up); }
+.chart text { font: 12px var(--sans); fill: var(--soft); }
+.kpi { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 0; border-top: 1px solid var(--line); }
+.kpi:first-of-type { border-top: 0; padding-top: 0; }
+.kpi span:first-child { color: var(--soft); }
+.kpi .v { font: 400 24px/30px var(--serif); }
+.kpi.strong .v { font-size: 34px; line-height: 40px; }
+.bar { height: 10px; border-radius: 5px; background: var(--wash); overflow: hidden; margin: 6px 0 4px; }
+.bar i { display: block; height: 100%; width: 64%; background: var(--moss); }
+.nextno { display: flex; align-items: center; gap: 18px; padding: 16px 20px; border-radius: 14px; background: var(--moss-dark); color: #fff; margin-bottom: 4px; }
+.nextno .v { font: 400 36px/40px var(--serif); margin-left: auto; }
+
+.end { margin: 28px 44px 0; padding: 22px 0 30px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; font-size: 14px; color: var(--soft); }
+.end nav { display: flex; gap: 6px; flex-wrap: wrap; }
+.end a { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; text-decoration: none; color: var(--ink); font-weight: 600; }
+:focus-visible { outline: 3px solid var(--moss); outline-offset: 2px; }
+
+@media (max-width: 980px) {
+  .sheet { margin: 0; border-radius: 0; }
+  .top { grid-template-columns: 1fr auto; padding: 16px 20px; } .top nav { display: none; } .mark { text-align: left; } .top .right span { display: none; }
+  .lede { padding: 150px 20px 24px; } .lede h1 { font-size: 44px; line-height: 48px; }
+  .glass { position: relative; right: auto; bottom: auto; margin: 0 20px 20px; width: auto; }
+  .strip { grid-template-columns: 1fr; gap: 18px; padding: 24px 20px; } .strip > div { border: 0; padding: 0; } .strip .go { justify-items: start; }
+  .body { padding: 24px 20px; gap: 18px; } .s7, .s5, .s4 { grid-column: 1 / -1; } .panel { padding: 20px; }
+  .week li { grid-template-columns: 96px 1fr; } .week .time { text-align: right; } .week .what, .week .chip { grid-column: 1 / -1; justify-self: start; }
+  .end { margin: 20px 20px 0; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="menu" viewBox="0 0 24 24"><path d="M5 8h14M5 12h14M5 16h14"/></symbol>
+  <symbol id="doc" viewBox="0 0 24 24"><path d="M6.5 3h8l4 4v14h-12zM14.5 3v4h4M9 12h6M9 16h6"/></symbol>
+  <symbol id="send" viewBox="0 0 24 24"><path d="M21 3 10 14M21 3l-6.5 18-4.5-7-7-4.5z"/></symbol>
+  <symbol id="list" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+  <symbol id="data" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7.5" ry="3"/><path d="M4.5 6v12c0 1.7 3.4 3 7.5 3s7.500-1.300 7.500-3V6M4.500 12c0 1.700 3.400 3 7.500 3s7.500-1.300 7.500-3"/></symbol>
+  <symbol id="gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.500v3M12 18.500v3M2.500 12h3M18.500 12h3M5.300 5.300l2.100 2.100M16.600 16.600l2.100 2.100M5.300 18.700l2.100-2.100M16.600 7.400l2.100-2.100"/></symbol>
+</svg>
+
+<div class="sheet">
+  <div class="hero">
+    <svg class="land" viewBox="0 0 1440 640" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <defs>
+        <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eef0ee"/><stop offset="1" stop-color="#dfe3df"/></linearGradient>
+        <linearGradient id="word" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2c322e"/><stop offset=".75" stop-color="#4b534d"/><stop offset="1" stop-color="#9aa29b"/></linearGradient>
+        <linearGradient id="peak" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6f7d5c"/><stop offset=".5" stop-color="#465239"/><stop offset="1" stop-color="#262e22"/></linearGradient>
+        <linearGradient id="face" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#93a07b"/><stop offset="1" stop-color="#5d6b4b" stop-opacity="0"/></linearGradient>
+        <linearGradient id="fade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#f4f4f1"/><stop offset=".42" stop-color="#f4f4f1" stop-opacity=".88"/><stop offset=".7" stop-color="#f4f4f1" stop-opacity="0"/></linearGradient>
+        <filter id="mist" x="-30%" y="-60%" width="160%" height="220%"><feGaussianBlur stdDeviation="34"/></filter>
+        <filter id="soft" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="3"/></filter>
+      </defs>
+      <rect width="1440" height="640" fill="url(#sky)"/>
+      <path d="M0 420 160 350 300 392 470 300 640 380 800 320 980 390 1160 300 1320 360 1440 320V640H0z" fill="#c3cac6" filter="url(#soft)"/>
+      <path d="M0 470 220 400 380 450 560 380 760 440 940 370 1140 430 1300 380 1440 420V640H0z" fill="#a3ada5" opacity=".8" filter="url(#soft)"/>
+      <text x="38" y="262" font-family="Palatino Linotype, Book Antiqua, Cambria, Georgia, serif" font-size="236" fill="url(#word)">Bình An</text>
+      <ellipse cx="560" cy="430" rx="460" ry="70" fill="#fff" opacity=".85" filter="url(#mist)"/>
+      <path d="M560 640 700 520 790 430 850 330 905 236 932 196 960 222 1010 262 1090 300 1180 372 1290 420 1440 500V640z" fill="url(#peak)"/>
+      <path d="M932 196 905 236 850 330 790 430 700 520 800 500 860 420 900 330z" fill="url(#face)"/>
+      <path d="M932 196 960 222 1010 262 1090 300 1180 372 1040 330 980 280z" fill="#1c231a" opacity=".35"/>
+      <path d="M932 166v32M922 176h20" stroke="#262e22" stroke-width="3.500" stroke-linecap="round"/>
+      <ellipse cx="760" cy="520" rx="330" ry="56" fill="#fff" opacity=".92" filter="url(#mist)"/>
+      <ellipse cx="1240" cy="600" rx="300" ry="50" fill="#fff" opacity=".7" filter="url(#mist)"/>
+      <ellipse cx="300" cy="610" rx="420" ry="70" fill="#fff" opacity=".9" filter="url(#mist)"/>
+      <rect y="380" width="1440" height="260" fill="url(#fade)"/>
+    </svg>
+
+    <header class="top">
+      <nav aria-label="Menu chính">
+        <a href="#" aria-current="page">Trang chủ</a><a href="#">Mọi người</a><a href="#">Gia đình</a><a href="#">Chi phái</a><a href="#">Lịch</a><a href="#">Thăm viếng</a><a href="#">Tài chính</a>
+      </nav>
+      <a class="mark" href="#">Hội Thánh Bình An<small>Church Manager</small></a>
+      <div class="right"><span>Thứ Ba<br><span class="num">24/11/2026</span></span>
+        <a class="round" href="#end" aria-label="Mục khác"><svg class="i"><use href="#menu"/></svg></a></div>
+    </header>
+
+
+    <div class="lede">
+      <h1>Trang chủ</h1>
+      <p>Thứ Ba <span class="num">24/11/2026</span> · 6 Lịch trong 7 ngày tới</p>
+      <form class="find" role="search" onsubmit="return false">
+        <label for="q">Tìm Người</label>
+        <div><input id="q" type="search" placeholder="Có dấu hoặc không dấu"><button class="pill plain" type="submit">Tìm kiếm</button></div>
+      </form>
+      <a class="pill" href="#">Lên lịch Thăm viếng <span><svg class="i"><use href="#arrow"/></svg></span></a>
+    </div>
+
+    <aside class="glass" aria-label="Lịch sắp tới">
+      <div class="tag">Hôm nay · <span class="num">19:30</span> · Buổi họp</div>
+      <h2>Buổi họp Ban Chấp sự</h2>
+      <p>Phòng họp</p>
+      <a class="round light" href="#" aria-label="Mở Lịch"><svg class="i"><use href="#arrow"/></svg></a>
+    </aside>
+  </div>
+
+  <div class="strip">
+    <div><span class="no num">01</span><h3>7 ngày tới</h3><span class="big num">6 Lịch</span></div>
+    <div><span class="no num">02</span><h3>Cần thăm viếng</h3><span class="big num">7 người</span></div>
+    <div><span class="no num">03</span><h3>Số dư tháng 11/2026</h3><span class="big num">17.450.000 ₫</span></div>
+    <a class="go" href="#"><span class="round"><svg class="i"><use href="#arrow"/></svg></span>Mở Lịch</a>
+  </div>
+
+  <main class="body">
+    <section class="panel s7" aria-labelledby="h-week">
+      <header><div><h2 id="h-week">7 ngày tới</h2><span class="meta num">24/11 – 30/11/2026</span></div></header>
+      <ul class="rows week">
+        <li><span class="day">Hôm nay</span><span class="time num">19:30</span><span class="what"><a href="#">Buổi họp Ban Chấp sự</a><span class="sub">Phòng họp</span></span><span class="chip">Buổi họp</span></li>
+        <li><span class="day">Ngày mai</span><span class="time num">15:00</span><span class="what"><a href="#">Thăm gia đình ông Trần Văn Hòa</a><span class="sub">Trần Văn Hòa</span></span><span class="chip">Thăm viếng</span></li>
+        <li><span class="day">Thứ Năm <span class="num">26/11</span></span><span class="time num">19:30</span><span class="what"><a href="#">Giờ cầu nguyện</a><span class="sub">Nhà thờ</span></span><span class="chip">Giờ thờ phượng</span></li>
+        <li><span class="day">Thứ Bảy <span class="num">28/11</span></span><span class="time num">18:00</span><span class="what"><a href="#">Sinh hoạt Ban Thanh niên</a><span class="sub">Hội trường</span></span><span class="chip">Chương trình</span></li>
+      </ul>
+      <div class="foot"><a href="#">Xem cả 6 trong Lịch <svg class="i"><use href="#arrow"/></svg></a></div>
+    </section>
+
+    <section class="panel s5" aria-labelledby="h-visit">
+      <header><div><h2 id="h-visit">Cần thăm viếng</h2><span class="meta">Chưa được thăm viếng trong 3 tháng qua</span></div><span class="count num">7 người</span></header>
+      <div class="list-head" aria-hidden="true"><span>Người</span><span>Trạng thái</span><span>Thăm gần nhất</span></div>
+      <ul class="rows visit">
+        <li><a href="#">Nguyễn Thị Lan</a><span class="chip">Tín hữu</span><span class="last num">12/06/2026</span></li>
+        <li><a href="#">Trần Văn Hòa</a><span class="chip">Tín hữu</span><span class="last num">03/07/2026</span></li>
+        <li><a href="#">Lê Thị Mai</a><span class="chip">Thân hữu</span><span class="last" style="color:var(--soft)">chưa bao giờ</span></li>
+      </ul>
+      <div class="foot"><a href="#">Xem cả 7 trong Thăm viếng <svg class="i"><use href="#arrow"/></svg></a></div>
+    </section>
+
+    <section class="panel s4" aria-labelledby="h-serv">
+      <header><div><h2 id="h-serv">Giờ thờ phượng</h2><span class="meta">Số người nhóm của 8 Giờ thờ phượng gần nhất</span></div></header>
+      <svg class="chart" viewBox="0 0 400 180" width="100%" role="img" aria-label="Số người nhóm của 8 Giờ thờ phượng gần nhất: 04/10 86; 11/10 91; 18/10 88; 25/10 94; 01/11 90; 08/11 97; 15/11 93; 22/11 102">
+        <line x1="34" x2="366" y1="140" y2="140" stroke="#d9dbd5"/><line x1="34" x2="366" y1="14" y2="14" stroke="#d9dbd5"/>
+        <text x="28" y="144" text-anchor="end">80</text><text x="28" y="18" text-anchor="end">110</text>
+        <path d="M34 114.800 81.400 93.800 128.900 106.400 176.300 81.200 223.700 98 271.100 68.600 318.600 85.400 366 47.600V140H34z" fill="#4a5a41" opacity=".12"/>
+        <polyline points="34,114.800 81.400,93.800 128.900,106.400 176.300,81.200 223.700,98 271.100,68.600 318.600,85.400 366,47.600" fill="none" stroke="#4a5a41" stroke-width="2.500" stroke-linejoin="round"/>
+        <circle cx="366" cy="47.600" r="5" fill="#2f3a2a"/><text x="374" y="52" style="font-weight:600;fill:#1f2422">102</text>
+        <text x="81.400" y="164" text-anchor="middle">11/10</text><text x="176.300" y="164" text-anchor="middle">25/10</text><text x="271.100" y="164" text-anchor="middle">08/11</text><text x="366" y="164" text-anchor="middle">22/11</text>
+      </svg>
+      <p class="trend"><strong>Tăng</strong> · Số người nhóm 102 ngày 22/11/2026, so với trung bình 91 của 7 Giờ thờ phượng trước đó.</p>
+      <div class="foot"><a href="#">Lịch <svg class="i"><use href="#arrow"/></svg></a></div>
+    </section>
+
+    <section class="panel s4" aria-labelledby="h-money">
+      <header><div><h2 id="h-money">Tài chính tháng này</h2><span class="meta">Tháng 11/2026</span></div></header>
+      <div class="kpi"><span>Dâng hiến</span><span class="v num">48.650.000 ₫</span></div>
+      <div class="kpi"><span>Khoản chi</span><span class="v num">31.200.000 ₫</span></div>
+      <div class="bar" role="img" aria-label="Khoản chi bằng 64% Dâng hiến"><i></i></div>
+      <span class="meta">Khoản chi bằng 64% Dâng hiến</span>
+      <div class="kpi strong" style="margin-top:12px"><span>Số dư</span><span class="v num">17.450.000 ₫</span></div>
+      <div class="foot"><a href="#">Ghi Dâng hiến <svg class="i"><use href="#arrow"/></svg></a><a href="#">Mở Tài chính</a></div>
+    </section>
+
+    <section class="panel s4" aria-labelledby="h-sent">
+      <header><div><h2 id="h-sent">Văn bản đi</h2><span class="meta">14 Công văn đi trong năm 2026</span></div></header>
+      <div class="nextno"><svg class="i"><use href="#send"/></svg><span>Số tiếp theo</span><span class="v num">15/2026</span></div>
+      <ul class="rows">
+        <li style="border-top:0"><span><a href="#"><span class="num">14/2026</span> Thư mời dự lễ Giáng Sinh</a><span class="sub"><span class="num">18/11/2026</span> · Hội Thánh · Thư mời</span></span></li>
+        <li><span><a href="#"><span class="num">13/2026</span> Báo cáo sinh hoạt quý III</a><span class="sub"><span class="num">05/11/2026</span> · Giáo hội · Báo cáo</span></span></li>
+      </ul>
+      <div class="foot"><a href="#">Xem tất cả 14 <svg class="i"><use href="#arrow"/></svg></a></div>
+    </section>
+  </main>
+
+  <footer class="end" id="end">
+    <nav aria-label="Mục khác">
+      <a href="#"><svg class="i"><use href="#doc"/></svg>Tài liệu</a>
+      <a href="#"><svg class="i"><use href="#send"/></svg>Văn bản đi</a>
+      <a href="#"><svg class="i"><use href="#list"/></svg>Danh mục</a>
+      <a href="#"><svg class="i"><use href="#data"/></svg>Dữ liệu</a>
+      <a href="#"><svg class="i"><use href="#gear"/></svg>Cài đặt</a>
+    </nav>
+    <span style="align-self:center">Tiếng Việt · English</span>
+  </footer>
+</div>
+</body>
+</html>
